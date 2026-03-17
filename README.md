@@ -1,16 +1,49 @@
-# React + Vite
+# Trady Mobile App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mobile app built with Vite + React + Tailwind + Konsta + Capacitor.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Install dependencies:
 
-## React Compiler
+```bash
+npm install
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. Create env file:
 
-## Expanding the ESLint configuration
+```bash
+cp .env.example .env
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+3. Run dev server:
+
+```bash
+npm run dev
+```
+
+4. Build web bundle:
+
+```bash
+npm run build
+```
+
+## Capacitor
+
+```bash
+npm run cap:sync
+npm run cap:open:ios
+npm run cap:open:android
+```
+
+## Backend Integration
+
+- Auth: Supabase Auth (`src/stores/authStore.ts`, `src/services/AuthService.ts`)
+- Symbols: Supabase table `symbols` (`src/services/DataService.ts`)
+- Candles: historic tables `hd_{market}_{timeframe}` + realtime tables `symbol_minute_candles` and `market_status` (`src/services/StockDataService.ts`)
+- User profile: Supabase table `user_profiles` (`src/services/UserService.ts`)
+
+## Notes
+
+- UI was migrated from `references/trady/mobile-app`.
+- Drawing and chart template persistence is currently localStorage-based to keep full UI behavior while backend tables for these preferences are defined.

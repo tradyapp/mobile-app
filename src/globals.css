@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "konsta/react/theme.css";
+
+@theme {
+  --color-brand-primary: #00ff99;
+  --color-brand-red: #ff4444;
+}
+
+.dark {
+  --k-ios-primary: #00ff99;
+  --k-ios-on-primary: #000000;
+  --k-md-primary: #00ff99;
+  --k-md-on-primary: #000000;
+}
+
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html {
+  touch-action: pan-x pan-y;
+}
