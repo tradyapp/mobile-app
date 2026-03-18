@@ -38,9 +38,14 @@ export default function StrokeScreen({
         <div className="flex items-center gap-3">
           {THICKNESS_OPTIONS.map((px) => (
             <button
+              type="button"
               key={px}
-              onClick={() => setThickness(px)}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              onPointerDown={(e) => {
+                e.preventDefault();
+                setThickness(px);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all [touch-action:manipulation] ${
                 thickness === px
                   ? "bg-zinc-700 text-white border-2 border-white"
                   : "bg-zinc-800 text-zinc-400 border-2 border-transparent"
@@ -57,9 +62,14 @@ export default function StrokeScreen({
         <div className="flex items-center gap-3">
           {DASH_OPTIONS.map((opt) => (
             <button
+              type="button"
               key={opt.value}
-              onClick={() => setDashStyle(opt.value)}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              onPointerDown={(e) => {
+                e.preventDefault();
+                setDashStyle(opt.value);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all [touch-action:manipulation] ${
                 dashStyle === opt.value
                   ? "bg-zinc-700 text-white border-2 border-white"
                   : "bg-zinc-800 text-zinc-400 border-2 border-transparent"
@@ -90,8 +100,13 @@ export default function StrokeScreen({
       </div>
 
       <button
-        onClick={() => onApply(thickness, dashStyle)}
-        className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors"
+        type="button"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          onApply(thickness, dashStyle);
+        }}
+        onClick={(e) => e.preventDefault()}
+        className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors [touch-action:manipulation]"
       >
         Apply
       </button>

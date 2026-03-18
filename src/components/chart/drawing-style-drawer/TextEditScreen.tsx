@@ -95,12 +95,15 @@ export default function TextEditScreen({
         <div className="flex items-center gap-3">
           {H_ALIGN_OPTIONS.map((opt) => (
             <button
+              type="button"
               key={opt.value}
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.preventDefault();
                 setTextHAlign(opt.value);
                 onApplyProp({ textHAlign: opt.value });
               }}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 [touch-action:manipulation] ${
                 textHAlign === opt.value
                   ? "bg-zinc-700 text-white border-2 border-white"
                   : "bg-zinc-800 text-zinc-400 border-2 border-transparent"
@@ -125,12 +128,15 @@ export default function TextEditScreen({
         <div className="flex items-center gap-3">
           {V_ALIGN_OPTIONS.map((opt) => (
             <button
+              type="button"
               key={opt.value}
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.preventDefault();
                 setTextVAlign(opt.value);
                 onApplyProp({ textVAlign: opt.value });
               }}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all [touch-action:manipulation] ${
                 textVAlign === opt.value
                   ? "bg-zinc-700 text-white border-2 border-white"
                   : "bg-zinc-800 text-zinc-400 border-2 border-transparent"

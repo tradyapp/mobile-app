@@ -28,8 +28,13 @@ export default function StyleMainScreen({
       <div className="space-y-2 pb-6">
         {/* Style Templates row */}
         <button
-          onClick={onOpenTemplates}
-          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onOpenTemplates();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -61,8 +66,13 @@ export default function StyleMainScreen({
         {/* Stroke row — hidden for text */}
         {!isText && (
           <button
-            onClick={onOpenStroke}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onOpenStroke();
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -97,8 +107,13 @@ export default function StyleMainScreen({
         {/* Fill row — only for fillable shapes */}
         {isFillable && (
           <button
-            onClick={onOpenFill}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onOpenFill();
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -143,8 +158,13 @@ export default function StyleMainScreen({
         {/* Text row — only for text drawings */}
         {isText && (
           <button
-            onClick={onOpenTextEdit}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onOpenTextEdit();
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -187,8 +207,13 @@ export default function StyleMainScreen({
 
         {/* Delete row */}
         <button
-          onClick={onDelete}
-          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-red-400 hover:bg-zinc-700"
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onDelete();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-red-400 hover:bg-zinc-700 [touch-action:manipulation]"
         >
           <div className="flex items-center gap-3">
             <svg

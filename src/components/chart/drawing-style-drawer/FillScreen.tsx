@@ -47,9 +47,14 @@ export default function FillScreen({
         <div className="flex items-center gap-3">
           {FILL_TYPE_OPTIONS.map((opt) => (
             <button
+              type="button"
               key={opt.value}
-              onClick={() => onFillTypeChange(opt.value)}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onFillTypeChange(opt.value);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all [touch-action:manipulation] ${
                 fillType === opt.value
                   ? "bg-zinc-700 text-white border-2 border-white"
                   : "bg-zinc-800 text-zinc-400 border-2 border-transparent"
@@ -67,9 +72,14 @@ export default function FillScreen({
           <div className="flex items-center gap-3">
             {GRADIENT_DIR_OPTIONS.map((opt) => (
               <button
+                type="button"
                 key={opt.value}
-                onClick={() => onGradientDirectionChange(opt.value)}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onGradientDirectionChange(opt.value);
+                }}
+                onClick={(e) => e.preventDefault()}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all [touch-action:manipulation] ${
                   fillGradientDirection === opt.value
                     ? "bg-zinc-700 text-white border-2 border-white"
                     : "bg-zinc-800 text-zinc-400 border-2 border-transparent"
@@ -85,8 +95,13 @@ export default function FillScreen({
       {fillType === "solid" && (
         <div className="space-y-2">
           <button
-            onClick={() => onPickColor("solid")}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onPickColor("solid");
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -120,8 +135,13 @@ export default function FillScreen({
       {fillType === "gradient" && (
         <div className="space-y-2">
           <button
-            onClick={() => onPickColor("gradient1")}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onPickColor("gradient1");
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -150,8 +170,13 @@ export default function FillScreen({
             </div>
           </button>
           <button
-            onClick={() => onPickColor("gradient2")}
-            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onPickColor("gradient2");
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
