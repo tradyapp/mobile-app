@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import { Drawer } from 'vaul';
-import TouchableButton from './TouchableButton';
 
 // ── Public types ──
 
@@ -177,30 +176,45 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
           <Drawer.Title className="text-white mx-auto">
             <span className="ml-6">{resolvedTitle}</span>
           </Drawer.Title>
-          <TouchableButton
-            onClick={close}
-            className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              close();
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center [touch-action:manipulation]"
           >
             ✕
-          </TouchableButton>
+          </button>
         </div>
       ) : (
         <>
           <Drawer.Title className="sr-only">{resolvedTitle}</Drawer.Title>
           <div className="flex items-center justify-between mb-6">
-            <TouchableButton
-              onClick={goBack}
-              className="text-zinc-400 text-xl w-10 h-10 flex items-center justify-center"
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                goBack();
+              }}
+              onClick={(e) => e.preventDefault()}
+              className="text-zinc-400 text-xl w-10 h-10 flex items-center justify-center [touch-action:manipulation]"
             >
               ←
-            </TouchableButton>
+            </button>
             <span className="text-white font-medium">{resolvedTitle}</span>
-            <TouchableButton
-              onClick={close}
-              className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                close();
+              }}
+              onClick={(e) => e.preventDefault()}
+              className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center [touch-action:manipulation]"
             >
               ✕
-            </TouchableButton>
+            </button>
           </div>
         </>
       )}
