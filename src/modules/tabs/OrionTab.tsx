@@ -47,12 +47,6 @@ const createEmptyDraft = (): StrategyDraft => ({
   photoUrl: null,
 });
 
-const strategyToDraft = (strategy: StrategyRecord): StrategyDraft => ({
-  name: strategy.name,
-  description: strategy.description ?? '',
-  photoUrl: strategy.photo_url,
-});
-
 const generateMockNotifications = (): Notification[] => {
   const tickers = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META', 'NVDA', 'AMD', 'NFLX', 'DIS', 'BAC', 'JPM', 'GS', 'WMT', 'TGT', 'COST', 'NKE', 'SBUX', 'MCD', 'KO'];
   const notifications: Notification[] = [];
@@ -401,6 +395,7 @@ interface MarketplaceScreenProps {
   onChangeTab: (tab: MarketplaceTab) => void;
   onChangeMyStrategiesScreen: (screen: MyStrategiesScreen) => void;
   strategies: StrategyRecord[];
+  selectedStrategy: StrategyRecord | null;
   isLoadingStrategies: boolean;
   strategiesError: string | null;
   onOpenStrategy: (strategy: StrategyRecord) => void;
@@ -409,12 +404,85 @@ interface MarketplaceScreenProps {
   isCreatingStrategy: boolean;
   createError: string | null;
   onCreate: () => void;
-  detailDraft: StrategyDraft;
-  onChangeDetailDraft: (updater: (prev: StrategyDraft) => StrategyDraft) => void;
-  isSavingDetail: boolean;
+  isDeletingStrategy: boolean;
   detailError: string | null;
-  onSaveDetail: () => void;
+  onCloseDetail: () => void;
   onDeleteDetail: () => void;
+}
+
+interface StrategyWorkspaceScreenProps {
+  strategy: StrategyRecord;
+  isDeleting: boolean;
+  error: string | null;
+  onClose: () => void;
+  onDelete: () => void;
+}
+
+function StrategyWorkspaceScreen({
+  strategy,
+  isDeleting,
+  error,
+  onClose,
+  onDelete,
+}: StrategyWorkspaceScreenProps) {
+  return (
+    <div className="mt-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="line-clamp-1 text-lg font-semibold text-white">{strategy.name}</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200"
+          aria-label="Close strategy workspace"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div className="min-h-[56vh] space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-5">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Strategy Workspace</p>
+          <p className="mt-2 text-sm text-zinc-300">
+            Esta pantalla queda dedicada a la configuracion completa de la estrategia. Aqui podemos agregar reglas, condiciones, riesgo y automatizaciones sin las limitaciones del formulario anterior.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <h4 className="text-sm font-semibold text-white">Setup</h4>
+            <p className="mt-1 text-xs text-zinc-400">Espacio para parametros base de la estrategia.</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <h4 className="text-sm font-semibold text-white">Signals</h4>
+            <p className="mt-1 text-xs text-zinc-400">Entradas, salidas y filtros operativos.</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <h4 className="text-sm font-semibold text-white">Risk</h4>
+            <p className="mt-1 text-xs text-zinc-400">Controles de riesgo y posicionamiento.</p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <h4 className="text-sm font-semibold text-white">Automation</h4>
+            <p className="mt-1 text-xs text-zinc-400">Ejecucion y comportamiento automatico.</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={isDeleting}
+          className="w-full rounded-lg border border-red-900 bg-red-950/40 px-4 py-2.5 text-sm font-semibold text-red-300 disabled:opacity-50"
+        >
+          {isDeleting ? 'Deleting...' : 'Delete Strategy'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function MarketplaceScreen({
@@ -423,6 +491,7 @@ function MarketplaceScreen({
   onChangeTab,
   onChangeMyStrategiesScreen,
   strategies,
+  selectedStrategy,
   isLoadingStrategies,
   strategiesError,
   onOpenStrategy,
@@ -431,11 +500,9 @@ function MarketplaceScreen({
   isCreatingStrategy,
   createError,
   onCreate,
-  detailDraft,
-  onChangeDetailDraft,
-  isSavingDetail,
+  isDeletingStrategy,
   detailError,
-  onSaveDetail,
+  onCloseDetail,
   onDeleteDetail,
 }: MarketplaceScreenProps) {
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
@@ -567,17 +634,26 @@ function MarketplaceScreen({
           )}
 
           {myStrategiesScreen === 'detail' && (
-            <StrategyFormScreen
-              title="Strategy Config"
-              draft={detailDraft}
-              onChangeDraft={onChangeDetailDraft}
-              isSubmitting={isSavingDetail}
-              error={detailError}
-              submitLabel="Save Changes"
-              onBack={() => onChangeMyStrategiesScreen('list')}
-              onSubmit={onSaveDetail}
-              onDelete={onDeleteDetail}
-            />
+            selectedStrategy ? (
+              <StrategyWorkspaceScreen
+                strategy={selectedStrategy}
+                isDeleting={isDeletingStrategy}
+                error={detailError}
+                onClose={onCloseDetail}
+                onDelete={onDeleteDetail}
+              />
+            ) : (
+              <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
+                Strategy not found.
+                <button
+                  type="button"
+                  onClick={onCloseDetail}
+                  className="ml-2 rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-200"
+                >
+                  Back to list
+                </button>
+              </div>
+            )
           )}
         </>
       )}
@@ -603,8 +679,7 @@ export default function OrionTab() {
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [detailDraft, setDetailDraft] = useState<StrategyDraft>(createEmptyDraft);
-  const [isSavingDetail, setIsSavingDetail] = useState(false);
+  const [isDeletingStrategy, setIsDeletingStrategy] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
@@ -646,7 +721,6 @@ export default function OrionTab() {
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
     setSelectedStrategyId(strategy.id);
-    setDetailDraft(strategyToDraft(strategy));
     setDetailError(null);
     setMyStrategiesScreen('detail');
   };
@@ -672,35 +746,12 @@ export default function OrionTab() {
     }
   };
 
-  const handleSaveStrategy = async () => {
-    if (!selectedStrategy || !detailDraft.name.trim() || isSavingDetail) return;
-    setIsSavingDetail(true);
-    setDetailError(null);
-
-    try {
-      const updated = await strategiesService.updateStrategy(selectedStrategy.id, {
-        name: detailDraft.name.trim(),
-        description: detailDraft.description.trim() ? detailDraft.description.trim() : null,
-        photo_url: detailDraft.photoUrl,
-      });
-      if (!updated) throw new Error('Failed to update strategy');
-
-      setStrategies((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setSelectedStrategyId(null);
-      setMyStrategiesScreen('list');
-    } catch (err) {
-      setDetailError(err instanceof Error ? err.message : 'Failed to update strategy');
-    } finally {
-      setIsSavingDetail(false);
-    }
-  };
-
   const handleDeleteStrategy = async () => {
-    if (!selectedStrategy || isSavingDetail) return;
+    if (!selectedStrategy || isDeletingStrategy) return;
     const confirmed = window.confirm(`Delete strategy "${selectedStrategy.name}"?`);
     if (!confirmed) return;
 
-    setIsSavingDetail(true);
+    setIsDeletingStrategy(true);
     setDetailError(null);
     try {
       await strategiesService.deleteStrategy(selectedStrategy.id);
@@ -710,7 +761,7 @@ export default function OrionTab() {
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : 'Failed to delete strategy');
     } finally {
-      setIsSavingDetail(false);
+      setIsDeletingStrategy(false);
     }
   };
 
@@ -769,6 +820,7 @@ export default function OrionTab() {
             }
           }}
           strategies={strategies}
+          selectedStrategy={selectedStrategy}
           isLoadingStrategies={isStrategiesLoading}
           strategiesError={strategiesError}
           onOpenStrategy={handleOpenStrategy}
@@ -777,11 +829,13 @@ export default function OrionTab() {
           isCreatingStrategy={isCreatingStrategy}
           createError={createError}
           onCreate={handleCreateStrategy}
-          detailDraft={detailDraft}
-          onChangeDetailDraft={(updater) => setDetailDraft((prev) => updater(prev))}
-          isSavingDetail={isSavingDetail}
+          isDeletingStrategy={isDeletingStrategy}
           detailError={detailError}
-          onSaveDetail={handleSaveStrategy}
+          onCloseDetail={() => {
+            setSelectedStrategyId(null);
+            setDetailError(null);
+            setMyStrategiesScreen('list');
+          }}
           onDeleteDetail={handleDeleteStrategy}
         />
       ) : (
