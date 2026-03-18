@@ -412,6 +412,7 @@ interface StrategyDetailViewProps {
 function StrategyDetailView({
   strategy,
 }: StrategyDetailViewProps) {
+  const [isLive, setIsLive] = useState(false);
   const initials = strategy.name
     .split(' ')
     .map((word) => word[0] ?? '')
@@ -421,18 +422,49 @@ function StrategyDetailView({
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-24">
-      <div className="mt-6 flex flex-col items-center">
-        <div className="h-28 w-28 overflow-hidden rounded-3xl border border-zinc-700 bg-zinc-900">
-          {strategy.photo_url ? (
-            <img src={strategy.photo_url} alt={strategy.name} className="h-full w-full object-contain" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-zinc-300">
-              {initials || 'ST'}
+      <List strong className="mt-6 overflow-hidden rounded-xl">
+        <ListItem
+          title={(
+            <div className="flex flex-col">
+              <span className="text-base font-medium text-zinc-200">{strategy.name}</span>
+              <span className="text-sm text-zinc-500">Strategy workspace</span>
             </div>
           )}
-        </div>
-        <h2 className="mt-4 text-center text-xl font-semibold text-white">{strategy.name}</h2>
-      </div>
+          media={(
+            <div className="h-14 w-14 overflow-hidden rounded-full border border-zinc-700 bg-zinc-900">
+              {strategy.photo_url ? (
+                <img src={strategy.photo_url} alt={strategy.name} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-base font-semibold text-zinc-300">
+                  {initials || 'ST'}
+                </div>
+              )}
+            </div>
+          )}
+        />
+      </List>
+
+      <List strong className="mt-4 overflow-hidden rounded-xl">
+        <ListItem link title="Nodes" />
+        <ListItem link title="Back Testing" />
+        <ListItem
+          title="Live"
+          after={(
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isLive}
+              onClick={() => setIsLive((prev) => !prev)}
+              className={`relative h-7 w-12 rounded-full transition-colors ${isLive ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+              aria-label="Toggle live mode"
+            >
+              <span
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${isLive ? 'translate-x-6' : 'translate-x-1'}`}
+              />
+            </button>
+          )}
+        />
+      </List>
 
       <div className="mt-6 min-h-[58vh] rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="flex h-full min-h-[50vh] items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70">
