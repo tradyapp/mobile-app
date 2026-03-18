@@ -1,88 +1,242 @@
+import { supabase } from "@/lib/supabase";
 import type { ChartTemplate, ChartPreferences } from "@/stores/chartSettingsStore";
 
 export type Unsubscribe = () => void;
 
-type TemplatesListener = (templates: ChartTemplate[]) => void;
-type ActiveListener = (id: string | null) => void;
-type PrefsListener = (prefs: ChartPreferences | null) => void;
-
-const KEY_TEMPLATES = "trady:chart:templates";
-const KEY_ACTIVE = "trady:chart:active-template";
-const KEY_PREFS = "trady:chart:preferences";
-
-const templateListeners = new Set<TemplatesListener>();
-const activeListeners = new Set<ActiveListener>();
-const prefsListeners = new Set<PrefsListener>();
-
-function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+interface ChartTemplateRow {
+  id: string;
+  template: ChartTemplate;
 }
 
-function writeJson(key: string, value: unknown): void {
-  localStorage.setItem(key, JSON.stringify(value));
+interface ChartPreferencesRow {
+  active_template_id: string | null;
+  preferences: ChartPreferences | null;
 }
 
-function emitTemplates() {
-  const templates = readJson<ChartTemplate[]>(KEY_TEMPLATES, []);
-  templateListeners.forEach((fn) => fn(templates));
-}
-
-function emitActive() {
-  const active = readJson<string | null>(KEY_ACTIVE, null);
-  activeListeners.forEach((fn) => fn(active));
-}
-
-function emitPrefs() {
-  const prefs = readJson<ChartPreferences | null>(KEY_PREFS, null);
-  prefsListeners.forEach((fn) => fn(prefs));
+async function getCurrentUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
 }
 
 export class ChartTemplateStorageService {
-  static subscribeTemplates(onTemplates: TemplatesListener): Unsubscribe {
-    templateListeners.add(onTemplates);
-    onTemplates(readJson<ChartTemplate[]>(KEY_TEMPLATES, []));
-    return () => templateListeners.delete(onTemplates);
+  static subscribeTemplates(onTemplates: (templates: ChartTemplate[]) => void): Unsubscribe {
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    void (async () => {
+      const userId = await getCurrentUserId();
+      if (!userId || !active) {
+        onTemplates([]);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_chart_templates")
+          .select("id, template")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: true });
+
+        if (!active) return;
+
+        if (error) {
+          console.error("ChartTemplateStorageService.subscribeTemplates error:", error);
+          onTemplates([]);
+          return;
+        }
+
+        const templates = (data ?? []).map((row) => (row as ChartTemplateRow).template);
+        onTemplates(templates);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-chart-templates-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_chart_templates", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
   }
 
-  static subscribeActiveTemplate(onActiveId: ActiveListener): Unsubscribe {
-    activeListeners.add(onActiveId);
-    onActiveId(readJson<string | null>(KEY_ACTIVE, null));
-    return () => activeListeners.delete(onActiveId);
+  static subscribeActiveTemplate(onActiveId: (id: string | null) => void): Unsubscribe {
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    void (async () => {
+      const userId = await getCurrentUserId();
+      if (!userId || !active) {
+        onActiveId(null);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_chart_preferences")
+          .select("active_template_id, preferences")
+          .eq("user_id", userId)
+          .single();
+
+        if (!active) return;
+
+        if (error && error.code !== "PGRST116") {
+          console.error("ChartTemplateStorageService.subscribeActiveTemplate error:", error);
+          onActiveId(null);
+          return;
+        }
+
+        onActiveId((data as ChartPreferencesRow | null)?.active_template_id ?? null);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-chart-preferences-active-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_chart_preferences", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
   }
 
   static async save(template: ChartTemplate): Promise<void> {
-    const templates = readJson<ChartTemplate[]>(KEY_TEMPLATES, []);
-    const idx = templates.findIndex((t) => t.id === template.id);
-    if (idx >= 0) templates[idx] = template;
-    else templates.push(template);
-    writeJson(KEY_TEMPLATES, templates);
-    emitTemplates();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_chart_templates")
+      .upsert(
+        {
+          user_id: userId,
+          id: template.id,
+          template,
+        },
+        { onConflict: "user_id,id" }
+      );
+
+    if (error) {
+      console.error("ChartTemplateStorageService.save error:", error);
+    }
   }
 
   static async remove(id: string): Promise<void> {
-    const templates = readJson<ChartTemplate[]>(KEY_TEMPLATES, []).filter((t) => t.id !== id);
-    writeJson(KEY_TEMPLATES, templates);
-    emitTemplates();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_chart_templates")
+      .delete()
+      .eq("user_id", userId)
+      .eq("id", id);
+
+    if (error) {
+      console.error("ChartTemplateStorageService.remove error:", error);
+    }
   }
 
   static async setActiveTemplate(id: string): Promise<void> {
-    writeJson(KEY_ACTIVE, id);
-    emitActive();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_chart_preferences")
+      .upsert(
+        {
+          user_id: userId,
+          active_template_id: id,
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (error) {
+      console.error("ChartTemplateStorageService.setActiveTemplate error:", error);
+    }
   }
 
-  static subscribePreferences(onPrefs: PrefsListener): Unsubscribe {
-    prefsListeners.add(onPrefs);
-    onPrefs(readJson<ChartPreferences | null>(KEY_PREFS, null));
-    return () => prefsListeners.delete(onPrefs);
+  static subscribePreferences(onPrefs: (prefs: ChartPreferences | null) => void): Unsubscribe {
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    void (async () => {
+      const userId = await getCurrentUserId();
+      if (!userId || !active) {
+        onPrefs(null);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_chart_preferences")
+          .select("active_template_id, preferences")
+          .eq("user_id", userId)
+          .single();
+
+        if (!active) return;
+
+        if (error && error.code !== "PGRST116") {
+          console.error("ChartTemplateStorageService.subscribePreferences error:", error);
+          onPrefs(null);
+          return;
+        }
+
+        onPrefs((data as ChartPreferencesRow | null)?.preferences ?? null);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-chart-preferences-prefs-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_chart_preferences", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
   }
 
   static async setPreferences(prefs: ChartPreferences): Promise<void> {
-    writeJson(KEY_PREFS, prefs);
-    emitPrefs();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_chart_preferences")
+      .upsert(
+        {
+          user_id: userId,
+          preferences: prefs,
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (error) {
+      console.error("ChartTemplateStorageService.setPreferences error:", error);
+    }
   }
 }

@@ -1,71 +1,190 @@
+import { supabase } from "@/lib/supabase";
 import type { DrawingTemplate, DefaultDrawingTemplateIds } from "@/stores/drawingTemplateStore";
 
 export type Unsubscribe = () => void;
 
-const KEY_TEMPLATES = "trady:drawing:templates";
-const KEY_DEFAULTS = "trady:drawing:defaults";
+interface DrawingTemplateRow {
+  template: DrawingTemplate;
+}
 
-type TemplateListener = (templates: DrawingTemplate[]) => void;
-type DefaultsListener = (defaults: DefaultDrawingTemplateIds | null) => void;
+interface DrawingDefaultsRow {
+  defaults: DefaultDrawingTemplateIds | null;
+}
 
-const templateListeners = new Set<TemplateListener>();
-const defaultListeners = new Set<DefaultsListener>();
+async function getCurrentUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
+}
 
-function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
+async function upsertDefaultsPatch(userId: string, patch: Partial<DefaultDrawingTemplateIds>): Promise<void> {
+  const { data, error } = await supabase
+    .from("user_drawing_defaults")
+    .select("defaults")
+    .eq("user_id", userId)
+    .single();
+
+  const current = (!error && data?.defaults ? (data.defaults as DefaultDrawingTemplateIds) : {} as DefaultDrawingTemplateIds);
+  const next = { ...current, ...patch };
+
+  const { error: upsertError } = await supabase
+    .from("user_drawing_defaults")
+    .upsert(
+      {
+        user_id: userId,
+        defaults: next,
+      },
+      { onConflict: "user_id" }
+    );
+
+  if (upsertError) {
+    console.error("DrawingTemplateStorageService.setDefaultTemplate error:", upsertError);
   }
-}
-
-function writeJson(key: string, value: unknown): void {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function emitTemplates() {
-  const templates = readJson<DrawingTemplate[]>(KEY_TEMPLATES, []);
-  templateListeners.forEach((fn) => fn(templates));
-}
-
-function emitDefaults() {
-  const defaults = readJson<DefaultDrawingTemplateIds | null>(KEY_DEFAULTS, null);
-  defaultListeners.forEach((fn) => fn(defaults));
 }
 
 export class DrawingTemplateStorageService {
-  static subscribeTemplates(onTemplates: TemplateListener): Unsubscribe {
-    templateListeners.add(onTemplates);
-    onTemplates(readJson<DrawingTemplate[]>(KEY_TEMPLATES, []));
-    return () => templateListeners.delete(onTemplates);
+  static subscribeTemplates(onTemplates: (templates: DrawingTemplate[]) => void): Unsubscribe {
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    void (async () => {
+      const userId = await getCurrentUserId();
+      if (!userId || !active) {
+        onTemplates([]);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_drawing_templates")
+          .select("template")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: true });
+
+        if (!active) return;
+
+        if (error) {
+          console.error("DrawingTemplateStorageService.subscribeTemplates error:", error);
+          onTemplates([]);
+          return;
+        }
+
+        const templates = (data ?? []).map((row) => (row as DrawingTemplateRow).template);
+        onTemplates(templates);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-drawing-templates-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_drawing_templates", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
   }
 
-  static subscribeDefaultTemplates(onDefaults: DefaultsListener): Unsubscribe {
-    defaultListeners.add(onDefaults);
-    onDefaults(readJson<DefaultDrawingTemplateIds | null>(KEY_DEFAULTS, null));
-    return () => defaultListeners.delete(onDefaults);
+  static subscribeDefaultTemplates(onDefaults: (defaults: DefaultDrawingTemplateIds | null) => void): Unsubscribe {
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    void (async () => {
+      const userId = await getCurrentUserId();
+      if (!userId || !active) {
+        onDefaults(null);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_drawing_defaults")
+          .select("defaults")
+          .eq("user_id", userId)
+          .single();
+
+        if (!active) return;
+
+        if (error && error.code !== "PGRST116") {
+          console.error("DrawingTemplateStorageService.subscribeDefaultTemplates error:", error);
+          onDefaults(null);
+          return;
+        }
+
+        onDefaults((data as DrawingDefaultsRow | null)?.defaults ?? null);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-drawing-defaults-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_drawing_defaults", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
   }
 
   static async save(template: DrawingTemplate): Promise<void> {
-    const templates = readJson<DrawingTemplate[]>(KEY_TEMPLATES, []);
-    const idx = templates.findIndex((t) => t.id === template.id);
-    if (idx >= 0) templates[idx] = template;
-    else templates.push(template);
-    writeJson(KEY_TEMPLATES, templates);
-    emitTemplates();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_drawing_templates")
+      .upsert(
+        {
+          user_id: userId,
+          id: template.id,
+          category: template.category,
+          template,
+        },
+        { onConflict: "user_id,id" }
+      );
+
+    if (error) {
+      console.error("DrawingTemplateStorageService.save error:", error);
+    }
   }
 
   static async remove(id: string): Promise<void> {
-    const templates = readJson<DrawingTemplate[]>(KEY_TEMPLATES, []).filter((t) => t.id !== id);
-    writeJson(KEY_TEMPLATES, templates);
-    emitTemplates();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from("user_drawing_templates")
+      .delete()
+      .eq("user_id", userId)
+      .eq("id", id);
+
+    if (error) {
+      console.error("DrawingTemplateStorageService.remove error:", error);
+    }
   }
 
   static async setDefaultTemplate(category: string, id: string): Promise<void> {
-    const current = readJson<Record<string, string>>(KEY_DEFAULTS, {});
-    const next = { ...current, [category]: id };
-    writeJson(KEY_DEFAULTS, next);
-    emitDefaults();
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    if (category !== "line" && category !== "shape" && category !== "text") {
+      return;
+    }
+
+    await upsertDefaultsPatch(userId, { [category]: id } as Partial<DefaultDrawingTemplateIds>);
   }
 }

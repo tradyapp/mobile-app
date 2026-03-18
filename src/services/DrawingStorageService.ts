@@ -1,32 +1,22 @@
+import { supabase } from "@/lib/supabase";
 import type { Drawing } from "@/stores/drawingStore";
 
 export type Unsubscribe = () => void;
 
-const listeners = new Map<string, Set<(drawings: Drawing[]) => void>>();
-
-function keyFor(symbol: string): string {
-  return `trady:drawings:${symbol.toUpperCase()}`;
+interface UserDrawingRow {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  drawing: Drawing;
 }
 
-function readSymbol(symbol: string): Record<string, Record<string, Drawing>> {
-  try {
-    const raw = localStorage.getItem(keyFor(symbol));
-    return raw ? (JSON.parse(raw) as Record<string, Record<string, Drawing>>) : {};
-  } catch {
-    return {};
-  }
+async function getCurrentUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
 }
 
-function writeSymbol(symbol: string, value: Record<string, Record<string, Drawing>>) {
-  localStorage.setItem(keyFor(symbol), JSON.stringify(value));
-}
-
-function emit(symbol: string) {
-  const set = listeners.get(symbol.toUpperCase());
-  if (!set) return;
-  const all = readSymbol(symbol);
-  const flattened: Drawing[] = Object.values(all).flatMap((tf) => Object.values(tf));
-  set.forEach((fn) => fn(flattened));
+function normalizeSymbol(symbol: string): string {
+  return symbol.toUpperCase();
 }
 
 export class DrawingStorageService {
@@ -37,30 +27,92 @@ export class DrawingStorageService {
   }
 
   static subscribeAll(symbol: string, onDrawings: (drawings: Drawing[]) => void): Unsubscribe {
-    const normalized = symbol.toUpperCase();
-    const current = listeners.get(normalized) ?? new Set();
-    current.add(onDrawings);
-    listeners.set(normalized, current);
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const initial = readSymbol(symbol);
-    const flattened: Drawing[] = Object.values(initial).flatMap((tf) => Object.values(tf));
-    onDrawings(flattened);
+    void (async () => {
+      const userId = await getCurrentUserId();
+      const normalizedSymbol = normalizeSymbol(symbol);
+
+      if (!userId || !active) {
+        onDrawings([]);
+        return;
+      }
+
+      const load = async () => {
+        const { data, error } = await supabase
+          .from("user_drawings")
+          .select("id, symbol, timeframe, drawing")
+          .eq("user_id", userId)
+          .eq("symbol", normalizedSymbol)
+          .order("updated_at", { ascending: true });
+
+        if (!active) return;
+
+        if (error) {
+          console.error("DrawingStorageService.subscribeAll error:", error);
+          onDrawings([]);
+          return;
+        }
+
+        const drawings = (data ?? []).map((row) => {
+          const typed = row as UserDrawingRow;
+          return {
+            ...typed.drawing,
+            id: typed.id,
+            symbol: typed.symbol,
+            timeframe: typed.timeframe,
+          } as Drawing;
+        });
+
+        onDrawings(drawings);
+      };
+
+      await load();
+
+      channel = supabase
+        .channel(`user-drawings-${userId}-${normalizedSymbol}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_drawings", filter: `user_id=eq.${userId}` },
+          () => {
+            void load();
+          }
+        )
+        .subscribe();
+    })();
 
     return () => {
-      const set = listeners.get(normalized);
-      if (!set) return;
-      set.delete(onDrawings);
-      if (set.size === 0) listeners.delete(normalized);
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
     };
   }
 
   static async save(drawing: Drawing): Promise<void> {
-    const data = readSymbol(drawing.symbol);
-    const timeframeMap = data[drawing.timeframe] ?? {};
-    timeframeMap[drawing.id] = drawing;
-    data[drawing.timeframe] = timeframeMap;
-    writeSymbol(drawing.symbol, data);
-    emit(drawing.symbol);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const normalizedSymbol = normalizeSymbol(drawing.symbol);
+
+    const { error } = await supabase
+      .from("user_drawings")
+      .upsert(
+        {
+          user_id: userId,
+          id: drawing.id,
+          symbol: normalizedSymbol,
+          timeframe: drawing.timeframe,
+          drawing: {
+            ...drawing,
+            symbol: normalizedSymbol,
+          },
+        },
+        { onConflict: "user_id,id" }
+      );
+
+    if (error) {
+      console.error("DrawingStorageService.save error:", error);
+    }
   }
 
   static async update(drawing: Drawing): Promise<void> {
@@ -68,16 +120,38 @@ export class DrawingStorageService {
   }
 
   static async remove(id: string, symbol: string, timeframe: string): Promise<void> {
-    const data = readSymbol(symbol);
-    const timeframeMap = data[timeframe] ?? {};
-    delete timeframeMap[id];
-    data[timeframe] = timeframeMap;
-    writeSymbol(symbol, data);
-    emit(symbol);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const normalizedSymbol = normalizeSymbol(symbol);
+
+    const { error } = await supabase
+      .from("user_drawings")
+      .delete()
+      .eq("user_id", userId)
+      .eq("id", id)
+      .eq("symbol", normalizedSymbol)
+      .eq("timeframe", timeframe);
+
+    if (error) {
+      console.error("DrawingStorageService.remove error:", error);
+    }
   }
 
   static async clear(symbol: string): Promise<void> {
-    localStorage.removeItem(keyFor(symbol));
-    emit(symbol);
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const normalizedSymbol = normalizeSymbol(symbol);
+
+    const { error } = await supabase
+      .from("user_drawings")
+      .delete()
+      .eq("user_id", userId)
+      .eq("symbol", normalizedSymbol);
+
+    if (error) {
+      console.error("DrawingStorageService.clear error:", error);
+    }
   }
 }
