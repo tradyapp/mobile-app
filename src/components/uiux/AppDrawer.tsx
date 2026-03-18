@@ -41,6 +41,11 @@ export default function AppDrawer({
   contentClassName,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
+  const safeAreaPaddingStyle: React.CSSProperties = {
+    paddingLeft: "max(16px, env(safe-area-inset-left))",
+    paddingRight: "max(16px, env(safe-area-inset-right))",
+    paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+  };
 
   return (
     <Drawer.Root open={isOpen} onOpenChange={onOpenChange}>
@@ -54,9 +59,12 @@ export default function AppDrawer({
               {description}
             </Drawer.Description>
           )}
-          <div className="p-4 bg-zinc-950 rounded-t-[10px] flex-1 flex flex-col overflow-hidden border-t border-zinc-800">
+          <div
+            className="pt-4 bg-zinc-950 rounded-t-[10px] flex-1 flex flex-col overflow-hidden border-t border-zinc-800"
+            style={safeAreaPaddingStyle}
+          >
             <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
-            <div className="max-w-md mx-auto w-full flex-1 flex flex-col overflow-hidden">
+            <div className="w-full flex-1 flex flex-col overflow-hidden">
               {useScreenNav ? (
                 <AnimatedDrawerNav
                   screens={screens}
