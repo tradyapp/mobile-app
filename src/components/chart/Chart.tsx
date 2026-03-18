@@ -649,17 +649,17 @@ const Chart = ({ width, height }: ChartProps) => {
     if (shouldShow && !volumeSeriesRef.current) {
       const volumePaneIndex = activeSecondaryPanelsRef.current.includes("rsi") ? 2 : 1;
       const volSeries = chart.addSeries(HistogramSeries, {
-        priceFormat: {
-          type: 'custom',
-          minMove: 1,
-          formatter: (price: number) => Math.round(price).toLocaleString('en-US'),
-        },
-        priceScaleId: 'volume',
+        priceFormat: { type: 'volume' },
+        priceLineVisible: false,
       }, volumePaneIndex);
       volSeries.priceScale().applyOptions({
         visible: true,
         borderVisible: true,
         borderColor: activeColorsRef.current.scaleBorder,
+        ticksVisible: true,
+        ensureEdgeTickMarksVisible: true,
+        minimumWidth: 56,
+        entireTextOnly: false,
       });
       volumeSeriesRef.current = volSeries;
 
