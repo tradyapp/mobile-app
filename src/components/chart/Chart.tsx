@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
-import { useChartSettingsStore, type MovingAverageIndicator } from "@/stores/chartSettingsStore";
+import { useChartSettingsStore, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
 import ChartSkeleton from "./ChartSkeleton";
 import DrawingManager from "./DrawingManager";
 
@@ -85,6 +85,47 @@ function calculateSmaData(candles: ChartCandle[], period: number) {
   return data;
 }
 
+function calculateRsiData(candles: ChartCandle[], period: number) {
+  const data: { time: ChartCandle["time"]; value: number }[] = [];
+  if (period <= 0 || candles.length <= period) return data;
+
+  let gainSum = 0;
+  let lossSum = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const delta = candles[i].close - candles[i - 1].close;
+    if (delta >= 0) gainSum += delta;
+    else lossSum += Math.abs(delta);
+  }
+
+  let avgGain = gainSum / period;
+  let avgLoss = lossSum / period;
+
+  const firstRs = avgLoss === 0 ? Number.POSITIVE_INFINITY : avgGain / avgLoss;
+  const firstRsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + firstRs));
+  data.push({ time: candles[period].time, value: firstRsi });
+
+  for (let i = period + 1; i < candles.length; i++) {
+    const delta = candles[i].close - candles[i - 1].close;
+    const gain = delta > 0 ? delta : 0;
+    const loss = delta < 0 ? Math.abs(delta) : 0;
+
+    avgGain = ((avgGain * (period - 1)) + gain) / period;
+    avgLoss = ((avgLoss * (period - 1)) + loss) / period;
+
+    if (avgLoss === 0) {
+      data.push({ time: candles[i].time, value: 100 });
+      continue;
+    }
+
+    const rs = avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    data.push({ time: candles[i].time, value: rsi });
+  }
+
+  return data;
+}
+
 const Chart = ({ width, height }: ChartProps) => {
   const { symbol, symbolType, timeframe } = useChartStore();
   const activeColors = useChartSettingsStore((s) => s.activeColors);
@@ -95,11 +136,15 @@ const Chart = ({ width, height }: ChartProps) => {
   const showMaPriceLabels = useChartSettingsStore((s) => s.preferences.showMaPriceLabels);
   const showLastPriceLine = useChartSettingsStore((s) => s.preferences.showLastPriceLine);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
+  const hasRsiPanel = activeIndicators.some((indicator) => indicator.type === 'rsi' && indicator.visible);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
-  const indicatorSeriesRef = useRef<Map<string, any>>(new Map());
+  const movingAverageSeriesRef = useRef<Map<string, any>>(new Map());
+  const rsiSeriesRef = useRef<Map<string, any>>(new Map());
+  const rsiLevel70SeriesRef = useRef<any>(null);
+  const rsiLevel30SeriesRef = useRef<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [chartVersion, setChartVersion] = useState(0);
   const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null);
@@ -115,6 +160,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const symbolRef = useRef(symbol);
   const symbolTypeRef = useRef(symbolType);
   const timeframeRef = useRef(timeframe);
+  const showVolumeRef = useRef(showVolume);
 
   // Refs for latest colors/fill (read during chart creation without adding to deps)
   const activeColorsRef = useRef(activeColors);
@@ -124,12 +170,14 @@ const Chart = ({ width, height }: ChartProps) => {
   const showMaNameLabelsRef = useRef(showMaNameLabels);
   const showMaPriceLabelsRef = useRef(showMaPriceLabels);
   const showLastPriceLineRef = useRef(showLastPriceLine);
+  const hasRsiPanelRef = useRef(hasRsiPanel);
 
   // Keep refs in sync with current values
   useEffect(() => {
     symbolRef.current = symbol;
     symbolTypeRef.current = symbolType;
     timeframeRef.current = timeframe;
+    showVolumeRef.current = showVolume;
     activeColorsRef.current = activeColors;
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
@@ -137,14 +185,38 @@ const Chart = ({ width, height }: ChartProps) => {
     showMaNameLabelsRef.current = showMaNameLabels;
     showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
-  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
+    hasRsiPanelRef.current = hasRsiPanel;
+  }, [symbol, symbolType, timeframe, showVolume, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine, hasRsiPanel]);
 
-  const syncIndicatorSeries = useCallback(() => {
+  const applyPanelLayout = useCallback(() => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+
+    const hasVolume = showVolumeRef.current && symbolTypeRef.current === 'STOCK';
+    const bottomMargin = hasRsiPanelRef.current ? 0.32 : hasVolume ? 0.2 : 0.02;
+
+    chart.applyOptions({
+      rightPriceScale: {
+        borderColor: activeColorsRef.current.scaleBorder,
+        scaleMargins: { top: 0.02, bottom: bottomMargin },
+      },
+    });
+
+    if (volumeSeriesRef.current) {
+      volumeSeriesRef.current.priceScale().applyOptions({
+        scaleMargins: hasRsiPanelRef.current
+          ? { top: 0.72, bottom: 0.2 }
+          : { top: 0.8, bottom: 0 },
+      });
+    }
+  }, []);
+
+  const syncMovingAverageSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const seriesMap = indicatorSeriesRef.current;
-    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible);
+    const seriesMap = movingAverageSeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible && indicator.type === 'sma');
     const activeIds = new Set(indicators.map((indicator) => indicator.id));
 
     for (const [id, series] of seriesMap) {
@@ -155,8 +227,6 @@ const Chart = ({ width, height }: ChartProps) => {
     }
 
     indicators.forEach((indicator) => {
-      if (indicator.type !== 'sma') return;
-
       const movingAverage = indicator as MovingAverageIndicator;
       let lineSeries = seriesMap.get(movingAverage.id);
       if (!lineSeries) {
@@ -178,6 +248,84 @@ const Chart = ({ width, height }: ChartProps) => {
       }
 
       lineSeries.setData(calculateSmaData(allCandlesRef.current, movingAverage.period));
+    });
+  }, []);
+
+  const syncRsiSeries = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const seriesMap = rsiSeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible && indicator.type === 'rsi') as RsiIndicator[];
+    const activeIds = new Set(indicators.map((indicator) => indicator.id));
+
+    for (const [id, series] of seriesMap) {
+      if (!activeIds.has(id)) {
+        chart.removeSeries(series);
+        seriesMap.delete(id);
+      }
+    }
+
+    if (indicators.length === 0) {
+      if (rsiLevel70SeriesRef.current) {
+        chart.removeSeries(rsiLevel70SeriesRef.current);
+        rsiLevel70SeriesRef.current = null;
+      }
+      if (rsiLevel30SeriesRef.current) {
+        chart.removeSeries(rsiLevel30SeriesRef.current);
+        rsiLevel30SeriesRef.current = null;
+      }
+      return;
+    }
+
+    const levelData70 = allCandlesRef.current.map((candle) => ({ time: candle.time, value: 70 }));
+    const levelData30 = allCandlesRef.current.map((candle) => ({ time: candle.time, value: 30 }));
+
+    if (!rsiLevel70SeriesRef.current) {
+      rsiLevel70SeriesRef.current = chart.addSeries(LineSeries, {
+        priceScaleId: 'rsi',
+        color: '#6b7280',
+        lineStyle: LineStyle.Dashed,
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+    }
+    rsiLevel70SeriesRef.current.setData(levelData70);
+
+    if (!rsiLevel30SeriesRef.current) {
+      rsiLevel30SeriesRef.current = chart.addSeries(LineSeries, {
+        priceScaleId: 'rsi',
+        color: '#6b7280',
+        lineStyle: LineStyle.Dashed,
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+    }
+    rsiLevel30SeriesRef.current.setData(levelData30);
+
+    indicators.forEach((indicator) => {
+      let lineSeries = seriesMap.get(indicator.id);
+      if (!lineSeries) {
+        lineSeries = chart.addSeries(LineSeries, {
+          priceScaleId: 'rsi',
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: `RSI ${indicator.period}`,
+          lastValueVisible: true,
+          priceLineVisible: false,
+        });
+        seriesMap.set(indicator.id, lineSeries);
+      } else {
+        lineSeries.applyOptions({
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: `RSI ${indicator.period}`,
+        });
+      }
+
+      lineSeries.setData(calculateRsiData(allCandlesRef.current, indicator.period));
     });
   }, []);
 
@@ -225,7 +373,8 @@ const Chart = ({ width, height }: ChartProps) => {
               .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? activeColorsRef.current.candleUp + '40' : activeColorsRef.current.candleDown + '40' }))
           );
         }
-        syncIndicatorSeries();
+        syncMovingAverageSeries();
+        syncRsiSeries();
       })
       .catch((error) => {
         console.error("Error loading older candles:", error);
@@ -233,7 +382,7 @@ const Chart = ({ width, height }: ChartProps) => {
       .finally(() => {
         isLoadingMoreRef.current = false;
       });
-  }, []);
+  }, [syncMovingAverageSeries, syncRsiSeries]);
 
   // Effect 1: Crear el chart (solo cuando cambian width/height)
   useEffect(() => {
@@ -338,10 +487,15 @@ const Chart = ({ width, height }: ChartProps) => {
     });
 
     candleSeriesRef.current = candlestickSeries;
-    syncIndicatorSeries();
+    applyPanelLayout();
+    syncMovingAverageSeries();
+    syncRsiSeries();
 
     return () => {
-      indicatorSeriesRef.current.clear();
+      movingAverageSeriesRef.current.clear();
+      rsiSeriesRef.current.clear();
+      rsiLevel70SeriesRef.current = null;
+      rsiLevel30SeriesRef.current = null;
       volumeSeriesRef.current = null;
       if (candleSeriesRef.current) {
         candleSeriesRef.current = null;
@@ -351,7 +505,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe]);
+  }, [timeframe, syncMovingAverageSeries, syncRsiSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
@@ -380,6 +534,7 @@ const Chart = ({ width, height }: ChartProps) => {
       rightPriceScale: { borderColor: activeColors.scaleBorder },
       timeScale: { borderColor: activeColors.scaleBorder },
     });
+    applyPanelLayout();
 
     candleSeriesRef.current.applyOptions({
       upColor: activeFilledUpCandle ? activeColors.candleUp : 'transparent',
@@ -405,13 +560,16 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
     }
 
-    syncIndicatorSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels]);
+    syncMovingAverageSeries();
+    syncRsiSeries();
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, hasRsiPanel, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
-    syncIndicatorSeries();
-  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, syncIndicatorSeries]);
+    syncMovingAverageSeries();
+    syncRsiSeries();
+    applyPanelLayout();
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, hasRsiPanel, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
@@ -425,7 +583,9 @@ const Chart = ({ width, height }: ChartProps) => {
         priceScaleId: 'volume',
       });
       volSeries.priceScale().applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
+        scaleMargins: hasRsiPanelRef.current
+          ? { top: 0.72, bottom: 0.2 }
+          : { top: 0.8, bottom: 0 },
       });
       volumeSeriesRef.current = volSeries;
 
@@ -438,7 +598,8 @@ const Chart = ({ width, height }: ChartProps) => {
       chart.removeSeries(volumeSeriesRef.current);
       volumeSeriesRef.current = null;
     }
-  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion]);
+    applyPanelLayout();
+  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion, applyPanelLayout]);
 
   // Effect 2: Actualizar localization cuando cambia el timeframe
   useEffect(() => {
@@ -557,7 +718,8 @@ const Chart = ({ width, height }: ChartProps) => {
                 .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? colors.candleUp + '40' : colors.candleDown + '40' }))
             );
           }
-          syncIndicatorSeries();
+          syncMovingAverageSeries();
+          syncRsiSeries();
 
           setLoading(false);
         }
@@ -595,7 +757,7 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
       setLoading(true);
     };
-  }, [symbol, symbolType, timeframe, syncIndicatorSeries]);
+  }, [symbol, symbolType, timeframe, syncMovingAverageSeries, syncRsiSeries]);
 
   return (
     <div className="absolute inset-0 ">

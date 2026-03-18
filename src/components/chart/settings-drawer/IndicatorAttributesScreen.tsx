@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Dialog, DialogButton, List, ListItem, Toggle } from "konsta/react";
-import type { MovingAverageIndicator } from "@/stores/chartSettingsStore";
+import type { ChartIndicator } from "@/stores/chartSettingsStore";
 import { ScreenHeader, ChevronRight } from "./shared";
 
 interface IndicatorAttributesScreenProps {
   onBack: () => void;
   onClose: () => void;
-  indicator: MovingAverageIndicator;
+  indicator: ChartIndicator;
   onOpenColorPicker: () => void;
-  onUpdate: (partial: Partial<MovingAverageIndicator>) => void;
+  onUpdate: (partial: Partial<ChartIndicator>) => void;
   onRemove: () => void;
 }
 

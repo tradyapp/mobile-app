@@ -6,6 +6,7 @@ interface AddIndicatorScreenProps {
   onClose: () => void;
   activeIndicators: ChartIndicator[];
   onAddMovingAverage: () => void;
+  onAddRsi: () => void;
 }
 
 export default function AddIndicatorScreen({
@@ -13,6 +14,7 @@ export default function AddIndicatorScreen({
   onClose,
   activeIndicators: _activeIndicators,
   onAddMovingAverage,
+  onAddRsi,
 }: AddIndicatorScreenProps) {
   return (
     <>
@@ -32,6 +34,24 @@ export default function AddIndicatorScreen({
             <div>
               <div className="text-base text-white">Moving Average</div>
               <div className="text-xs text-zinc-400">Simple Moving Average (SMA)</div>
+            </div>
+            <ChevronRight />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onAddRsi();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors [touch-action:manipulation] bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-base text-white">RSI</div>
+              <div className="text-xs text-zinc-400">Relative Strength Index</div>
             </div>
             <ChevronRight />
           </div>

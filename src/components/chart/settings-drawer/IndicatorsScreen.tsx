@@ -13,7 +13,16 @@ function getIndicatorLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'sma') {
     return `Moving Average (${indicator.period})`;
   }
+  if (indicator.type === 'rsi') {
+    return `RSI (${indicator.period})`;
+  }
   return indicator.name;
+}
+
+function getIndicatorSubLabel(indicator: ChartIndicator): string {
+  if (indicator.type === 'sma') return indicator.source.toUpperCase();
+  if (indicator.type === 'rsi') return 'Oscillator';
+  return '';
 }
 
 export default function IndicatorsScreen({
@@ -72,7 +81,7 @@ export default function IndicatorsScreen({
                     />
                     <div>
                       <div className="text-base text-white">{getIndicatorLabel(indicator)}</div>
-                      <div className="text-xs text-zinc-400">{indicator.source.toUpperCase()}</div>
+                      <div className="text-xs text-zinc-400">{getIndicatorSubLabel(indicator)}</div>
                     </div>
                   </div>
                   <ChevronRight />

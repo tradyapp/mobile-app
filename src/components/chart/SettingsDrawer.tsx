@@ -9,6 +9,7 @@ import {
   type ChartColors,
   type ChartTemplate,
   type MovingAverageIndicator,
+  type RsiIndicator,
 } from "@/stores/chartSettingsStore";
 import { useDrawingStore } from "@/stores/drawingStore";
 import { useChartStore } from "@/stores/chartStore";
@@ -288,6 +289,22 @@ function AddIndicatorScreenWrapper() {
         });
         goBack();
       }}
+      onAddRsi={() => {
+        const rsi: RsiIndicator = {
+          id: crypto.randomUUID(),
+          type: 'rsi',
+          name: 'Relative Strength Index',
+          period: 14,
+          color: '#60a5fa',
+          lineWidth: 2,
+          visible: true,
+        };
+
+        setPreferences({
+          indicators: [...preferences.indicators, rsi],
+        });
+        goBack();
+      }}
     />
   );
 }
@@ -299,7 +316,7 @@ function IndicatorAttributesScreenWrapper() {
   const setPreferences = useChartSettingsStore((s) => s.setPreferences);
 
   const indicatorId = typeof params.id === 'string' ? params.id : '';
-  const indicator = preferences.indicators.find((item) => item.id === indicatorId && item.type === 'sma');
+  const indicator = preferences.indicators.find((item) => item.id === indicatorId);
 
   if (!indicator) {
     return (
@@ -322,7 +339,7 @@ function IndicatorAttributesScreenWrapper() {
       onUpdate={(partial) => {
         setPreferences({
           indicators: preferences.indicators.map((item) => {
-            if (item.id !== indicator.id || item.type !== 'sma') return item;
+            if (item.id !== indicator.id) return item;
             return { ...item, ...partial };
           }),
         });
@@ -355,7 +372,7 @@ function IndicatorColorPickerScreenWrapper() {
       onApply={() => {
         setPreferences({
           indicators: preferences.indicators.map((item) =>
-            item.id === indicatorId && item.type === 'sma'
+            item.id === indicatorId
               ? { ...item, color: ctx.indicatorSelectedColor }
               : item
           ),

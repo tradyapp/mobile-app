@@ -41,7 +41,17 @@ export interface MovingAverageIndicator {
   visible: boolean;
 }
 
-export type ChartIndicator = MovingAverageIndicator;
+export interface RsiIndicator {
+  id: string;
+  type: 'rsi';
+  name: 'Relative Strength Index';
+  period: number;
+  color: string;
+  lineWidth: number;
+  visible: boolean;
+}
+
+export type ChartIndicator = MovingAverageIndicator | RsiIndicator;
 
 // ── Built-in templates ──
 export const BUILT_IN_TEMPLATES: ChartTemplate[] = [
