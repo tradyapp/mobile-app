@@ -593,6 +593,24 @@ const Chart = ({ width, height }: ChartProps) => {
   const syncRsiSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
+
+    const hasRsiPanel = activeSecondaryPanelsRef.current.includes('rsi');
+    if (!hasRsiPanel) {
+      for (const series of rsiSeriesRef.current.values()) {
+        chart.removeSeries(series);
+      }
+      rsiSeriesRef.current.clear();
+      if (rsiLevel70SeriesRef.current) {
+        chart.removeSeries(rsiLevel70SeriesRef.current);
+        rsiLevel70SeriesRef.current = null;
+      }
+      if (rsiLevel30SeriesRef.current) {
+        chart.removeSeries(rsiLevel30SeriesRef.current);
+        rsiLevel30SeriesRef.current = null;
+      }
+      return;
+    }
+
     const rsiPaneIndex = getPaneIndex('rsi');
     ensurePaneExists(rsiPaneIndex);
 
@@ -673,6 +691,18 @@ const Chart = ({ width, height }: ChartProps) => {
   const syncMacdSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
+
+    const hasMacdPanel = activeSecondaryPanelsRef.current.includes('macd');
+    if (!hasMacdPanel) {
+      for (const seriesBundle of macdSeriesRef.current.values()) {
+        chart.removeSeries(seriesBundle.macdLine);
+        chart.removeSeries(seriesBundle.signalLine);
+        chart.removeSeries(seriesBundle.histogram);
+      }
+      macdSeriesRef.current.clear();
+      return;
+    }
+
     const macdPaneIndex = getPaneIndex('macd');
     ensurePaneExists(macdPaneIndex);
 
