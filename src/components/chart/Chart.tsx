@@ -1164,7 +1164,10 @@ const Chart = ({ width, height }: ChartProps) => {
           aria-label="Resize panels"
           role="separator"
         >
-          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-zinc-500/60" />
+          <div
+            className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px"
+            style={{ backgroundColor: activeColors.grid }}
+          />
         </div>
       )}
       <DrawingManager
