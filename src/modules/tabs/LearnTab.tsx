@@ -150,9 +150,51 @@ export default function LearnTab() {
     });
   };
 
+  const renderCatalogSkeleton = () => (
+    <div className="space-y-3">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
+        >
+          <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 animate-pulse" />
+          <div className="p-3 space-y-2 flex-1">
+            <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
+            <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
+            <div className="h-3 w-1/2 bg-zinc-800/60 rounded animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderCourseSkeleton = () => (
+    <div className="space-y-3">
+      {[0, 1].map((i) => (
+        <div key={i} className="bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-3 py-3 space-y-2">
+            <div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />
+            <div className="h-3 w-1/4 bg-zinc-800/60 rounded animate-pulse" />
+          </div>
+          <div className="border-t border-zinc-800">
+            {[0, 1, 2].map((j) => (
+              <div key={j} className="px-3 py-3 border-b border-zinc-800 last:border-b-0 flex items-center gap-3">
+                <div className="w-16 h-10 shrink-0 rounded-md bg-zinc-800 animate-pulse" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse" />
+                  <div className="h-2.5 w-1/3 bg-zinc-800/60 rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   const renderCatalog = () => (
     <Block className="pt-2 pb-24">
-      {loading && <p className="text-zinc-400 text-sm">Loading courses...</p>}
+      {loading && renderCatalogSkeleton()}
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
       {!loading && !error && courses.length === 0 && (
         <p className="text-zinc-400 text-sm">No published courses yet.</p>
@@ -195,7 +237,7 @@ export default function LearnTab() {
         </div>
       )}
 
-      {loading && <p className="text-zinc-400 text-sm">Loading course content...</p>}
+      {loading && renderCourseSkeleton()}
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
       {!loading && modules.length === 0 && (
