@@ -55,9 +55,6 @@ export default function ChartTab() {
       className="fixed top-0 left-0 right-0 bottom-0 mb-24 flex"
       style={{
         paddingTop: "env(safe-area-inset-top)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-        paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
       {/* ChartBar a la izquierda en landscape */}
@@ -76,7 +73,15 @@ export default function ChartTab() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1" style={{ paddingTop: `${TOOLBAR_HEIGHT}px` }}>
+        <div
+          className="min-h-0 flex-1"
+          style={{
+            paddingTop: `${TOOLBAR_HEIGHT}px`,
+            paddingLeft: "env(safe-area-inset-left)",
+            paddingRight: "env(safe-area-inset-right)",
+            paddingBottom: "env(safe-area-inset-bottom)",
+          }}
+        >
           <div ref={chartHostRef} className="relative w-full h-full">
             {chartSize.width > 0 && chartSize.height > 0 && (
               <Chart width={chartSize.width} height={chartSize.height} />
