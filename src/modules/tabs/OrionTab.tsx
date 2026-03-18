@@ -2,6 +2,18 @@
 'use client';
 import { BlockTitle, List, ListItem } from 'konsta/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  addEdge,
+  Background,
+  Controls,
+  ReactFlow,
+  type Connection,
+  type Edge as RFEdge,
+  type Node as RFNode,
+  useEdgesState,
+  useNodesState,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import AppNavbar from '@/components/AppNavbar';
 import CogIcon from '@/components/icons/CogIcon';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
@@ -477,6 +489,33 @@ interface NodesViewProps {
 }
 
 function NodesView({ strategyName, onClose }: NodesViewProps) {
+  const nodeCounterRef = useRef(1);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
+
+  const onConnect = useCallback((connection: Connection) => {
+    setEdges((prev) => addEdge(connection, prev));
+  }, [setEdges]);
+
+  const handleAddNode = useCallback(() => {
+    setNodes((prev) => {
+      const index = prev.length;
+      const nextLabel = nodeCounterRef.current;
+      nodeCounterRef.current += 1;
+
+      const nextNode: RFNode = {
+        id: `node-${nextLabel}`,
+        position: {
+          x: 80 + (index % 4) * 180,
+          y: 80 + Math.floor(index / 4) * 120,
+        },
+        data: { label: `Node ${nextLabel}` },
+      };
+
+      return [...prev, nextNode];
+    });
+  }, [setNodes]);
+
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
       <div className="flex h-full flex-col overflow-hidden">
@@ -493,11 +532,31 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
             <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
             <p className="text-xs text-zinc-500">Nodes Editor</p>
           </div>
+          <div className="ml-auto">
+            <button
+              type="button"
+              onClick={handleAddNode}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xl text-zinc-100"
+              aria-label="Add node"
+            >
+              +
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-hidden p-4">
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900">
-            <p className="text-sm text-zinc-400">Node WIP!</p>
+          <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              fitView
+            >
+              <Background color="#3f3f46" gap={16} />
+              <Controls />
+            </ReactFlow>
           </div>
         </div>
       </div>
