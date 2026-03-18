@@ -3,8 +3,10 @@
 import { List, ListItem, ListButton, Dialog, DialogButton } from "konsta/react";
 import AppDrawer from "../components/uiux/AppDrawer";
 import { authService } from "@/services/AuthService";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAuthStore } from "@/stores/authStore";
+import { userService } from "@/services/UserService";
 
 interface ProfileDrawerProps {
   isOpen: boolean;
@@ -16,6 +18,52 @@ export default function ProfileDrawer({
   onOpenChange,
 }: ProfileDrawerProps) {
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isLanguageDialogOpen, setIsLanguageDialogOpen] = useState(false);
+  const [locale, setLocale] = useState<"en" | "es">("en");
+  const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isOpen || !user?.uid) return;
+
+    const run = async () => {
+      try {
+        const profile = await userService.getUserProfile(user.uid);
+        if (!active) return;
+        const nextLocale = profile.userData.locale === "es" ? "es" : "en";
+        setLocale(nextLocale);
+      } catch (error) {
+        console.error("Error loading language:", error);
+      }
+    };
+
+    void run();
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, user?.uid]);
+
+  const handleLanguageChange = async (nextLocale: "en" | "es") => {
+    if (!user?.uid || nextLocale === locale || isUpdatingLocale) {
+      setIsLanguageDialogOpen(false);
+      return;
+    }
+
+    setLocale(nextLocale);
+    setIsUpdatingLocale(true);
+    try {
+      await userService.updateUserProfile(user.uid, { locale: nextLocale });
+    } catch (error) {
+      console.error("Error updating language:", error);
+    } finally {
+      setIsUpdatingLocale(false);
+      setIsLanguageDialogOpen(false);
+    }
+  };
+
   return (
     <>
       <AppDrawer
@@ -61,7 +109,12 @@ export default function ProfileDrawer({
           <List strong className="mb-6 rounded-xl overflow-hidden">
             <ListItem link title="Trading Accounts" />
             <ListItem link title="Subscriptions" />
-            <ListItem link title="Language" />
+            <ListItem
+              link
+              title="Language"
+              after={isUpdatingLocale ? "Saving..." : locale === "es" ? "Español" : "English"}
+              onClick={() => setIsLanguageDialogOpen(true)}
+            />
             <ListItem link title="Contact" />
           </List>
 
@@ -114,6 +167,45 @@ export default function ProfileDrawer({
                       }}
                     >
                       Sign Out
+                    </DialogButton>
+                  </>
+                }
+              />
+
+              <Dialog
+                backdrop
+                opened={isLanguageDialogOpen}
+                onBackdropClick={(e) => {
+                  e?.stopPropagation?.();
+                  setIsLanguageDialogOpen(false);
+                }}
+                title="Language"
+                content="Choose your app language"
+                buttons={
+                  <>
+                    <DialogButton
+                      onClick={(e) => {
+                        e?.stopPropagation?.();
+                        void handleLanguageChange("en");
+                      }}
+                    >
+                      English {locale === "en" ? "✓" : ""}
+                    </DialogButton>
+                    <DialogButton
+                      onClick={(e) => {
+                        e?.stopPropagation?.();
+                        void handleLanguageChange("es");
+                      }}
+                    >
+                      Español {locale === "es" ? "✓" : ""}
+                    </DialogButton>
+                    <DialogButton
+                      onClick={(e) => {
+                        e?.stopPropagation?.();
+                        setIsLanguageDialogOpen(false);
+                      }}
+                    >
+                      Cancel
                     </DialogButton>
                   </>
                 }
