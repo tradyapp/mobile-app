@@ -244,30 +244,33 @@ const Chart = ({ width, height }: ChartProps) => {
     if (!chartRef.current) return;
     const chart = chartRef.current;
     const layout = buildChartPanelLayout(activeSecondaryPanelsRef.current, secondaryPanelHeightRef.current);
+    chart.applyOptions({ rightPriceScale: { borderColor: activeColorsRef.current.scaleBorder } });
 
-    chart.applyOptions({
-      rightPriceScale: {
-        borderColor: activeColorsRef.current.scaleBorder,
-        scaleMargins: layout.main,
-      },
-    });
+    const hasRsi = activeSecondaryPanelsRef.current.includes("rsi");
+    const hasVolume = activeSecondaryPanelsRef.current.includes("volume");
+    const panes = chart.panes();
+    const mainPane = panes[0];
+    if (!mainPane) return;
 
-    if (volumeSeriesRef.current && layout.panels.volume) {
-      volumeSeriesRef.current.priceScale().applyOptions({
-        scaleMargins: layout.panels.volume,
-      });
+    const mainFactor = Math.max(0.05, 1 - secondaryPanelHeightRef.current);
+    const secondarySpace = Math.max(0.05, 1 - mainFactor);
+    const rsiWeight = hasRsi ? 0.28 : 0;
+    const volumeWeight = hasVolume ? 0.16 : 0;
+    const totalWeight = Math.max(0.0001, rsiWeight + volumeWeight);
+
+    mainPane.setStretchFactor(mainFactor);
+
+    if (hasRsi) {
+      const rsiPane = panes[1];
+      if (rsiPane) {
+        rsiPane.setStretchFactor(secondarySpace * (rsiWeight / totalWeight));
+      }
     }
 
-    const rsiMargins = layout.panels.rsi;
-    if (rsiMargins) {
-      for (const series of rsiSeriesRef.current.values()) {
-        series.priceScale().applyOptions({ scaleMargins: rsiMargins });
-      }
-      if (rsiLevel70SeriesRef.current) {
-        rsiLevel70SeriesRef.current.priceScale().applyOptions({ scaleMargins: rsiMargins });
-      }
-      if (rsiLevel30SeriesRef.current) {
-        rsiLevel30SeriesRef.current.priceScale().applyOptions({ scaleMargins: rsiMargins });
+    if (hasVolume) {
+      const volumePane = panes[hasRsi ? 2 : 1];
+      if (volumePane) {
+        volumePane.setStretchFactor(secondarySpace * (volumeWeight / totalWeight));
       }
     }
   }, []);
@@ -350,7 +353,7 @@ const Chart = ({ width, height }: ChartProps) => {
         lineWidth: 1,
         lastValueVisible: false,
         priceLineVisible: false,
-      });
+      }, 1);
     }
     rsiLevel70SeriesRef.current.setData(levelData70);
 
@@ -362,7 +365,7 @@ const Chart = ({ width, height }: ChartProps) => {
         lineWidth: 1,
         lastValueVisible: false,
         priceLineVisible: false,
-      });
+      }, 1);
     }
     rsiLevel30SeriesRef.current.setData(levelData30);
 
@@ -376,7 +379,7 @@ const Chart = ({ width, height }: ChartProps) => {
           title: `RSI ${indicator.period}`,
           lastValueVisible: true,
           priceLineVisible: false,
-        });
+        }, 1);
         seriesMap.set(indicator.id, lineSeries);
       } else {
         lineSeries.applyOptions({
@@ -644,13 +647,11 @@ const Chart = ({ width, height }: ChartProps) => {
     const shouldShow = showVolume && symbolType === 'STOCK';
 
     if (shouldShow && !volumeSeriesRef.current) {
+      const volumePaneIndex = activeSecondaryPanelsRef.current.includes("rsi") ? 2 : 1;
       const volSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume',
-      });
-      volSeries.priceScale().applyOptions({
-        scaleMargins: buildChartPanelLayout(activeSecondaryPanelsRef.current, secondaryPanelHeightRef.current).panels.volume ?? { top: 0.8, bottom: 0 },
-      });
+      }, volumePaneIndex);
       volumeSeriesRef.current = volSeries;
 
       // Feed existing candle data into volume series
