@@ -371,6 +371,11 @@ const Chart = ({ width, height }: ChartProps) => {
     const mainPane = panes[0];
     if (!mainPane) return;
 
+    if (activeSecondaryPanelsRef.current.length === 0) {
+      mainPane.setStretchFactor(1);
+      return;
+    }
+
     const mainFactor = Math.max(0.05, 1 - secondaryPanelHeightRef.current);
     const secondarySpace = Math.max(0.05, 1 - mainFactor);
     const rsiWeight = hasRsi ? 0.28 : 0;
@@ -991,6 +996,18 @@ const Chart = ({ width, height }: ChartProps) => {
     syncMacdSeries();
     applyPanelLayout();
   }, [panelSignature, chartVersion, clearSecondarySeries, syncRsiSeries, syncMacdSeries, applyPanelLayout]);
+
+  // Defensive enforcement: no secondary panels means only main pane.
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (activeSecondaryPanels.length !== 0) return;
+    const chart = chartRef.current;
+    while (chart.panes().length > 1) {
+      chart.removePane(chart.panes().length - 1);
+    }
+    const mainPane = chart.panes()[0];
+    if (mainPane) mainPane.setStretchFactor(1);
+  }, [activeSecondaryPanels.length, chartVersion]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
