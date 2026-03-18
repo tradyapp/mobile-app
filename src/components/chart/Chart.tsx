@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
-import { useChartSettingsStore, type ChartIndicator, type MacdIndicator, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
+import { useChartSettingsStore, type BollingerBandsIndicator, type ChartIndicator, type MacdIndicator, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
 import {
   buildChartPanelLayout,
   getRequiredSecondaryPanels,
@@ -226,6 +226,28 @@ function calculateMacdData(candles: ChartCandle[], fastPeriod: number, slowPerio
   return { macdLine, signalLine, histogram };
 }
 
+function calculateBollingerData(candles: ChartCandle[], period: number, stdDev: number) {
+  const upper: { time: ChartCandle["time"]; value: number }[] = [];
+  const middle: { time: ChartCandle["time"]; value: number }[] = [];
+  const lower: { time: ChartCandle["time"]; value: number }[] = [];
+
+  if (period <= 1 || candles.length < period) return { upper, middle, lower };
+
+  for (let i = period - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((sum, candle) => sum + candle.close, 0) / period;
+    const variance = slice.reduce((sum, candle) => sum + ((candle.close - mean) ** 2), 0) / period;
+    const standardDeviation = Math.sqrt(variance);
+    const time = candles[i].time;
+
+    middle.push({ time, value: mean });
+    upper.push({ time, value: mean + (stdDev * standardDeviation) });
+    lower.push({ time, value: mean - (stdDev * standardDeviation) });
+  }
+
+  return { upper, middle, lower };
+}
+
 const Chart = ({ width, height }: ChartProps) => {
   const { symbol, symbolType, timeframe } = useChartStore();
   const activeColors = useChartSettingsStore((s) => s.activeColors);
@@ -244,6 +266,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const candleSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
   const priceOverlaySeriesRef = useRef<Map<string, any>>(new Map());
+  const bollingerSeriesRef = useRef<Map<string, { upper: any; middle: any; lower: any }>>(new Map());
   const rsiSeriesRef = useRef<Map<string, any>>(new Map());
   const macdSeriesRef = useRef<Map<string, { macdLine: any; signalLine: any; histogram: any }>>(new Map());
   const rsiLevel70SeriesRef = useRef<any>(null);
@@ -451,6 +474,76 @@ const Chart = ({ width, height }: ChartProps) => {
     });
   }, []);
 
+  const syncBollingerSeries = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const seriesMap = bollingerSeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter(
+      (indicator) => indicator.visible && indicator.type === 'bollinger'
+    ) as BollingerBandsIndicator[];
+    const activeIds = new Set(indicators.map((indicator) => indicator.id));
+
+    for (const [id, bundle] of seriesMap) {
+      if (activeIds.has(id)) continue;
+      chart.removeSeries(bundle.upper);
+      chart.removeSeries(bundle.middle);
+      chart.removeSeries(bundle.lower);
+      seriesMap.delete(id);
+    }
+
+    indicators.forEach((indicator) => {
+      let bundle = seriesMap.get(indicator.id);
+      if (!bundle) {
+        const upper = chart.addSeries(LineSeries, {
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current ? `BB Upper ${indicator.period}` : '',
+          lastValueVisible: showMaPriceLabelsRef.current,
+          priceLineVisible: false,
+        });
+        const middle = chart.addSeries(LineSeries, {
+          color: indicator.color,
+          lineWidth: indicator.lineWidth + 1,
+          title: showMaNameLabelsRef.current ? `BB Basis ${indicator.period}` : '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        const lower = chart.addSeries(LineSeries, {
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current ? `BB Lower ${indicator.period}` : '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        bundle = { upper, middle, lower };
+        seriesMap.set(indicator.id, bundle);
+      } else {
+        bundle.upper.applyOptions({
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current ? `BB Upper ${indicator.period}` : '',
+          lastValueVisible: showMaPriceLabelsRef.current,
+        });
+        bundle.middle.applyOptions({
+          color: indicator.color,
+          lineWidth: indicator.lineWidth + 1,
+          title: showMaNameLabelsRef.current ? `BB Basis ${indicator.period}` : '',
+        });
+        bundle.lower.applyOptions({
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current ? `BB Lower ${indicator.period}` : '',
+        });
+      }
+
+      const bbData = calculateBollingerData(allCandlesRef.current, indicator.period, indicator.stdDev);
+      bundle.upper.setData(bbData.upper);
+      bundle.middle.setData(bbData.middle);
+      bundle.lower.setData(bbData.lower);
+    });
+  }, []);
+
   const syncRsiSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -639,6 +732,7 @@ const Chart = ({ width, height }: ChartProps) => {
           );
         }
         syncPriceOverlaySeries();
+        syncBollingerSeries();
         syncRsiSeries();
         syncMacdSeries();
       })
@@ -648,7 +742,7 @@ const Chart = ({ width, height }: ChartProps) => {
       .finally(() => {
         isLoadingMoreRef.current = false;
       });
-  }, [syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
+  }, [syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect 1: Crear el chart (solo cuando cambian width/height)
   useEffect(() => {
@@ -755,11 +849,13 @@ const Chart = ({ width, height }: ChartProps) => {
     candleSeriesRef.current = candlestickSeries;
     applyPanelLayout();
     syncPriceOverlaySeries();
+    syncBollingerSeries();
     syncRsiSeries();
     syncMacdSeries();
 
     return () => {
       priceOverlaySeriesRef.current.clear();
+      bollingerSeriesRef.current.clear();
       rsiSeriesRef.current.clear();
       macdSeriesRef.current.clear();
       rsiLevel70SeriesRef.current = null;
@@ -773,7 +869,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
+  }, [timeframe, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
@@ -829,17 +925,19 @@ const Chart = ({ width, height }: ChartProps) => {
     }
 
     syncPriceOverlaySeries();
+    syncBollingerSeries();
     syncRsiSeries();
     syncMacdSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
     syncPriceOverlaySeries();
+    syncBollingerSeries();
     syncRsiSeries();
     syncMacdSeries();
     applyPanelLayout();
-  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: react to panel height resize changes
   useEffect(() => {
@@ -1000,6 +1098,7 @@ const Chart = ({ width, height }: ChartProps) => {
             );
           }
           syncPriceOverlaySeries();
+          syncBollingerSeries();
           syncRsiSeries();
           syncMacdSeries();
 
@@ -1039,7 +1138,7 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
       setLoading(true);
     };
-  }, [symbol, symbolType, timeframe, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
+  }, [symbol, symbolType, timeframe, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   const effectiveSecondaryPanelHeight = panelHeightDraft ?? secondaryPanelHeight;
   const currentPanelLayout = buildChartPanelLayout(activeSecondaryPanels, effectiveSecondaryPanelHeight);

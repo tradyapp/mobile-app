@@ -9,6 +9,7 @@ interface AddIndicatorScreenProps {
   onAddExponentialMovingAverage: () => void;
   onAddRsi: () => void;
   onAddMacd: () => void;
+  onAddBollingerBands: () => void;
 }
 
 export default function AddIndicatorScreen({
@@ -19,6 +20,7 @@ export default function AddIndicatorScreen({
   onAddExponentialMovingAverage,
   onAddRsi,
   onAddMacd,
+  onAddBollingerBands,
 }: AddIndicatorScreenProps) {
   return (
     <>
@@ -92,6 +94,24 @@ export default function AddIndicatorScreen({
             <div>
               <div className="text-base text-white">MACD</div>
               <div className="text-xs text-zinc-400">Moving Average Convergence Divergence</div>
+            </div>
+            <ChevronRight />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onAddBollingerBands();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors [touch-action:manipulation] bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-base text-white">Bollinger Bands</div>
+              <div className="text-xs text-zinc-400">Volatility bands around SMA</div>
             </div>
             <ChevronRight />
           </div>

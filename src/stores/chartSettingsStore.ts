@@ -75,7 +75,23 @@ export interface MacdIndicator {
   visible: boolean;
 }
 
-export type ChartIndicator = MovingAverageIndicator | ExponentialMovingAverageIndicator | RsiIndicator | MacdIndicator;
+export interface BollingerBandsIndicator {
+  id: string;
+  type: 'bollinger';
+  name: 'Bollinger Bands';
+  period: number;
+  stdDev: number;
+  color: string;
+  lineWidth: number;
+  visible: boolean;
+}
+
+export type ChartIndicator =
+  | MovingAverageIndicator
+  | ExponentialMovingAverageIndicator
+  | RsiIndicator
+  | MacdIndicator
+  | BollingerBandsIndicator;
 
 // ── Built-in templates ──
 export const BUILT_IN_TEMPLATES: ChartTemplate[] = [

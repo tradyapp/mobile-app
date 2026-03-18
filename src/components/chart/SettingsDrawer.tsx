@@ -9,6 +9,7 @@ import {
   type ChartColors,
   type ChartTemplate,
   type ExponentialMovingAverageIndicator,
+  type BollingerBandsIndicator,
   type MacdIndicator,
   type MovingAverageIndicator,
   type RsiIndicator,
@@ -339,6 +340,23 @@ function AddIndicatorScreenWrapper() {
 
         setPreferences({
           indicators: [...preferences.indicators, macd],
+        });
+        goBack();
+      }}
+      onAddBollingerBands={() => {
+        const bollinger: BollingerBandsIndicator = {
+          id: crypto.randomUUID(),
+          type: 'bollinger',
+          name: 'Bollinger Bands',
+          period: 20,
+          stdDev: 2,
+          color: '#a78bfa',
+          lineWidth: 1,
+          visible: true,
+        };
+
+        setPreferences({
+          indicators: [...preferences.indicators, bollinger],
         });
         goBack();
       }}

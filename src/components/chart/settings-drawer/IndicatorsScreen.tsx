@@ -22,6 +22,9 @@ function getIndicatorLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'macd') {
     return `MACD (${indicator.fastPeriod}, ${indicator.slowPeriod}, ${indicator.signalPeriod})`;
   }
+  if (indicator.type === 'bollinger') {
+    return `Bollinger Bands (${indicator.period}, ${indicator.stdDev})`;
+  }
   return indicator.name;
 }
 
@@ -30,6 +33,7 @@ function getIndicatorSubLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'ema') return indicator.source.toUpperCase();
   if (indicator.type === 'rsi') return 'Oscillator';
   if (indicator.type === 'macd') return 'Oscillator';
+  if (indicator.type === 'bollinger') return 'Price Overlay';
   return '';
 }
 

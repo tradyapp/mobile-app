@@ -131,6 +131,36 @@ export default function IndicatorAttributesScreen({
           </div>
         )}
 
+        {indicator.type === 'bollinger' && (
+          <div className="rounded-lg bg-zinc-800 p-4">
+            <div className="text-zinc-400 text-sm mb-2">Std Dev</div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={4}
+                step={0.1}
+                value={indicator.stdDev}
+                onChange={(e) => onUpdate({ stdDev: Number(e.target.value) })}
+                className="w-full h-2 bg-zinc-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow"
+              />
+              <input
+                type="number"
+                min={1}
+                max={4}
+                step={0.1}
+                value={indicator.stdDev}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (Number.isNaN(value)) return;
+                  onUpdate({ stdDev: Math.min(4, Math.max(1, value)) });
+                }}
+                className="w-18 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
+          </div>
+        )}
+
         <div className="rounded-lg bg-zinc-800 p-4">
           <div className="text-zinc-400 text-sm mb-2">Line width</div>
           <div className="flex items-center gap-2">
