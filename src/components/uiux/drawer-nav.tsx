@@ -70,24 +70,45 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
   const [stack, setStack] = useState<NavStackEntry[]>([{ screenName: rootScreen.name }]);
   const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
   const animatingRef = useRef(false);
+  const phaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearAnimationTimers = useCallback(() => {
+    if (phaseTimeoutRef.current) {
+      clearTimeout(phaseTimeoutRef.current);
+      phaseTimeoutRef.current = null;
+    }
+    if (unlockTimeoutRef.current) {
+      clearTimeout(unlockTimeoutRef.current);
+      unlockTimeoutRef.current = null;
+    }
+    animatingRef.current = false;
+  }, []);
 
   // Reset to root when drawer opens
   const prevIsOpen = useRef(isOpen);
   useEffect(() => {
     if (isOpen && !prevIsOpen.current) {
+      clearAnimationTimers();
       setStack([{ screenName: rootScreen.name }]);
       setContentStyle({});
-      animatingRef.current = false;
     }
     prevIsOpen.current = isOpen;
-  }, [isOpen, rootScreen.name]);
+  }, [clearAnimationTimers, isOpen, rootScreen.name]);
+
+  useEffect(() => {
+    return () => {
+      clearAnimationTimers();
+    };
+  }, [clearAnimationTimers]);
 
   const animate = useCallback((direction: 'forward' | 'backward', stackUpdater: (prev: NavStackEntry[]) => NavStackEntry[]) => {
-    if (animatingRef.current) return;
+    // Never drop taps: interrupt any in-flight transition and honor the latest intent.
+    clearAnimationTimers();
     animatingRef.current = true;
 
     setContentStyle({ opacity: 0, transition: 'opacity 120ms ease-out' });
-    setTimeout(() => {
+    phaseTimeoutRef.current = setTimeout(() => {
       setStack(stackUpdater);
       setContentStyle({
         opacity: 0,
@@ -101,11 +122,15 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
             transform: 'translateX(0)',
             transition: 'opacity 180ms ease-out, transform 180ms ease-out',
           });
-          setTimeout(() => { animatingRef.current = false; }, 180);
+          unlockTimeoutRef.current = setTimeout(() => {
+            animatingRef.current = false;
+            unlockTimeoutRef.current = null;
+          }, 180);
         });
       });
+      phaseTimeoutRef.current = null;
     }, 120);
-  }, []);
+  }, [clearAnimationTimers]);
 
   const navigateTo = useCallback((screenName: string, params?: Record<string, unknown>) => {
     animate('forward', prev => [...prev, { screenName, params }]);
