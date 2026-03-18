@@ -81,18 +81,11 @@ class UserService {
   async updateUserProfile(uid: string, data: Partial<UserType>): Promise<void> {
     const payload: Record<string, unknown> = {
       id: uid,
+      display_name: typeof data.displayName === "string" ? data.displayName : "",
+      locale: typeof data.locale === "string" && data.locale ? data.locale : "es",
+      timezone: typeof data.timezone === "string" && data.timezone ? data.timezone : "America/Bogota",
       updated_at: new Date().toISOString(),
     };
-
-    if (typeof data.displayName === "string") {
-      payload.display_name = data.displayName;
-    }
-    if (typeof data.locale === "string" && data.locale) {
-      payload.locale = data.locale;
-    }
-    if (typeof data.timezone === "string" && data.timezone) {
-      payload.timezone = data.timezone;
-    }
 
     const { error } = await supabase
       .from("user_profiles")
