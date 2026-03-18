@@ -15,6 +15,7 @@ import {
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
 import { useChartSettingsStore, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
+import { buildChartPanelLayout, getRequiredSecondaryPanels, type SecondaryPanelId } from "./panels/layout";
 import ChartSkeleton from "./ChartSkeleton";
 import DrawingManager from "./DrawingManager";
 
@@ -136,7 +137,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const showMaPriceLabels = useChartSettingsStore((s) => s.preferences.showMaPriceLabels);
   const showLastPriceLine = useChartSettingsStore((s) => s.preferences.showLastPriceLine);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
-  const hasRsiPanel = activeIndicators.some((indicator) => indicator.type === 'rsi' && indicator.visible);
+  const activeSecondaryPanels = getRequiredSecondaryPanels(activeIndicators, showVolume, symbolType);
+  const hasRsiPanel = activeSecondaryPanels.includes("rsi");
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
@@ -160,7 +162,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const symbolRef = useRef(symbol);
   const symbolTypeRef = useRef(symbolType);
   const timeframeRef = useRef(timeframe);
-  const showVolumeRef = useRef(showVolume);
+  const activeSecondaryPanelsRef = useRef<SecondaryPanelId[]>(activeSecondaryPanels);
 
   // Refs for latest colors/fill (read during chart creation without adding to deps)
   const activeColorsRef = useRef(activeColors);
@@ -170,14 +172,13 @@ const Chart = ({ width, height }: ChartProps) => {
   const showMaNameLabelsRef = useRef(showMaNameLabels);
   const showMaPriceLabelsRef = useRef(showMaPriceLabels);
   const showLastPriceLineRef = useRef(showLastPriceLine);
-  const hasRsiPanelRef = useRef(hasRsiPanel);
 
   // Keep refs in sync with current values
   useEffect(() => {
     symbolRef.current = symbol;
     symbolTypeRef.current = symbolType;
     timeframeRef.current = timeframe;
-    showVolumeRef.current = showVolume;
+    activeSecondaryPanelsRef.current = activeSecondaryPanels;
     activeColorsRef.current = activeColors;
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
@@ -185,29 +186,37 @@ const Chart = ({ width, height }: ChartProps) => {
     showMaNameLabelsRef.current = showMaNameLabels;
     showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
-    hasRsiPanelRef.current = hasRsiPanel;
-  }, [symbol, symbolType, timeframe, showVolume, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine, hasRsiPanel]);
+  }, [symbol, symbolType, timeframe, activeSecondaryPanels, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
 
   const applyPanelLayout = useCallback(() => {
     if (!chartRef.current) return;
     const chart = chartRef.current;
-
-    const hasVolume = showVolumeRef.current && symbolTypeRef.current === 'STOCK';
-    const bottomMargin = hasRsiPanelRef.current ? 0.32 : hasVolume ? 0.2 : 0.02;
+    const layout = buildChartPanelLayout(activeSecondaryPanelsRef.current);
 
     chart.applyOptions({
       rightPriceScale: {
         borderColor: activeColorsRef.current.scaleBorder,
-        scaleMargins: { top: 0.02, bottom: bottomMargin },
+        scaleMargins: layout.main,
       },
     });
 
-    if (volumeSeriesRef.current) {
+    if (volumeSeriesRef.current && layout.panels.volume) {
       volumeSeriesRef.current.priceScale().applyOptions({
-        scaleMargins: hasRsiPanelRef.current
-          ? { top: 0.72, bottom: 0.2 }
-          : { top: 0.8, bottom: 0 },
+        scaleMargins: layout.panels.volume,
       });
+    }
+
+    const rsiMargins = layout.panels.rsi;
+    if (rsiMargins) {
+      for (const series of rsiSeriesRef.current.values()) {
+        series.priceScale().applyOptions({ scaleMargins: rsiMargins });
+      }
+      if (rsiLevel70SeriesRef.current) {
+        rsiLevel70SeriesRef.current.priceScale().applyOptions({ scaleMargins: rsiMargins });
+      }
+      if (rsiLevel30SeriesRef.current) {
+        rsiLevel30SeriesRef.current.priceScale().applyOptions({ scaleMargins: rsiMargins });
+      }
     }
   }, []);
 
@@ -583,9 +592,7 @@ const Chart = ({ width, height }: ChartProps) => {
         priceScaleId: 'volume',
       });
       volSeries.priceScale().applyOptions({
-        scaleMargins: hasRsiPanelRef.current
-          ? { top: 0.72, bottom: 0.2 }
-          : { top: 0.8, bottom: 0 },
+        scaleMargins: buildChartPanelLayout(activeSecondaryPanelsRef.current).panels.volume ?? { top: 0.8, bottom: 0 },
       });
       volumeSeriesRef.current = volSeries;
 
