@@ -257,11 +257,6 @@ function IndicatorsScreenWrapper() {
       indicators={preferences.indicators}
       onAddIndicator={() => navigateTo('add-indicator')}
       onOpenAttributes={(id: string) => navigateTo('indicator-attributes', { id })}
-      onRemoveIndicator={(id: string) => {
-        setPreferences({
-          indicators: preferences.indicators.filter((indicator) => indicator.id !== id),
-        });
-      }}
     />
   );
 }

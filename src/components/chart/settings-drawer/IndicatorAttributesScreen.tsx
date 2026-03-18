@@ -1,4 +1,6 @@
-import { List, ListItem, Toggle } from "konsta/react";
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { Dialog, DialogButton, List, ListItem, Toggle } from "konsta/react";
 import type { MovingAverageIndicator } from "@/stores/chartSettingsStore";
 import { ScreenHeader, ChevronRight } from "./shared";
 
@@ -19,6 +21,8 @@ export default function IndicatorAttributesScreen({
   onUpdate,
   onRemove,
 }: IndicatorAttributesScreenProps) {
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+
   return (
     <>
       <ScreenHeader onBack={onBack} onClose={onClose} title="Indicator attributes" />
@@ -115,7 +119,7 @@ export default function IndicatorAttributesScreen({
           type="button"
           onPointerDown={(e) => {
             e.preventDefault();
-            onRemove();
+            setIsRemoveDialogOpen(true);
           }}
           onClick={(e) => e.preventDefault()}
           className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-red-950/50 text-red-300 hover:bg-red-950 [touch-action:manipulation]"
@@ -123,6 +127,47 @@ export default function IndicatorAttributesScreen({
           Remove indicator
         </button>
       </div>
+
+      {typeof window !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-9999 pointer-events-none">
+          <div className="pointer-events-auto">
+            <Dialog
+              backdrop
+              opened={isRemoveDialogOpen}
+              onBackdropClick={(e) => {
+                e?.stopPropagation?.();
+                setIsRemoveDialogOpen(false);
+              }}
+              title="Remove Indicator"
+              content="Are you sure you want to remove this indicator?"
+              buttons={
+                <>
+                  <DialogButton
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      setIsRemoveDialogOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </DialogButton>
+                  <DialogButton
+                    strong
+                    className="text-red-500"
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      setIsRemoveDialogOpen(false);
+                      onRemove();
+                    }}
+                  >
+                    Remove
+                  </DialogButton>
+                </>
+              }
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }
