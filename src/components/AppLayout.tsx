@@ -66,7 +66,7 @@ const AppLayout = () => {
 
         <div
           className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101"
-          style={isLandscape ? { transform: "translateX(68px)" } : undefined}
+          style={isLandscape ? { transform: "translate(56px, -8px)" } : undefined}
         >
           <TouchableButton className="rounded-full ">
             <div className="w-16 h-16 flex items-center justify-center">
