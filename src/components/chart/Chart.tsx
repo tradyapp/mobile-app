@@ -62,6 +62,9 @@ interface HoveredCandle {
   volume?: number;
 }
 
+const INITIAL_CANDLE_LIMIT = 600;
+const PAGINATION_BATCH_LIMIT = 200;
+
 function calculateSmaData(candles: ChartCandle[], period: number) {
   const data: { time: ChartCandle["time"]; value: number }[] = [];
   if (period <= 0 || candles.length < period) return data;
@@ -183,7 +186,7 @@ const Chart = ({ width, height }: ChartProps) => {
       symbolRef.current,
       timeframeRef.current,
       earliestDatetimeRef.current,
-      200,
+      PAGINATION_BATCH_LIMIT,
       symbolTypeRef.current
     )
       .then((olderCandles) => {
@@ -561,7 +564,7 @@ const Chart = ({ width, height }: ChartProps) => {
           priceLineRef.current = null;
         }
       },
-      200,
+      INITIAL_CANDLE_LIMIT,
       symbolType
     );
 
