@@ -60,12 +60,11 @@ interface AnimatedDrawerNavProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   wrapperClassName?: string;
-  scrollAreaStyle?: React.CSSProperties;
   /** Extra children rendered alongside the nav system (e.g. dialogs) */
   children?: ReactNode;
 }
 
-export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrapperClassName, scrollAreaStyle, children }: AnimatedDrawerNavProps) {
+export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrapperClassName, children }: AnimatedDrawerNavProps) {
   const rootScreen = screens.find(s => s.isRoot) ?? screens[0];
 
   const [stack, setStack] = useState<NavStackEntry[]>([{ screenName: rootScreen.name }]);
@@ -155,13 +154,30 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
 
   return (
     <NavCtx.Provider value={navValue}>
-      <div className="min-h-0 flex flex-1 flex-col">
-        {/* Header — managed automatically */}
-        {isRootScreen ? (
-          <div className="flex items-center justify-between mb-4 shrink-0">
-            <Drawer.Title className="text-white mx-auto">
-              <span className="ml-6">{resolvedTitle}</span>
-            </Drawer.Title>
+      {/* Header — managed automatically */}
+      {isRootScreen ? (
+        <div className="flex items-center justify-between mb-4 shrink-0">
+          <Drawer.Title className="text-white mx-auto">
+            <span className="ml-6">{resolvedTitle}</span>
+          </Drawer.Title>
+          <TouchableButton
+            onClick={close}
+            className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+          >
+            ✕
+          </TouchableButton>
+        </div>
+      ) : (
+        <>
+          <Drawer.Title className="sr-only">{resolvedTitle}</Drawer.Title>
+          <div className="flex items-center justify-between mb-6">
+            <TouchableButton
+              onClick={goBack}
+              className="text-zinc-400 text-xl w-10 h-10 flex items-center justify-center"
+            >
+              ←
+            </TouchableButton>
+            <span className="text-white font-medium">{resolvedTitle}</span>
             <TouchableButton
               onClick={close}
               className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
@@ -169,33 +185,12 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
               ✕
             </TouchableButton>
           </div>
-        ) : (
-          <>
-            <Drawer.Title className="sr-only">{resolvedTitle}</Drawer.Title>
-            <div className="flex items-center justify-between mb-6 shrink-0">
-              <TouchableButton
-                onClick={goBack}
-                className="text-zinc-400 text-xl w-10 h-10 flex items-center justify-center"
-              >
-                ←
-              </TouchableButton>
-              <span className="text-white font-medium">{resolvedTitle}</span>
-              <TouchableButton
-                onClick={close}
-                className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
-              >
-                ✕
-              </TouchableButton>
-            </div>
-          </>
-        )}
+        </>
+      )}
 
-        {/* Animated content */}
-        <div className="min-h-0 flex-1 overflow-y-auto" style={scrollAreaStyle}>
-          <div className={wrapperClassName} style={contentStyle}>
-            {ScreenComponent && <ScreenComponent />}
-          </div>
-        </div>
+      {/* Animated content */}
+      <div className={wrapperClassName} style={contentStyle}>
+        {ScreenComponent && <ScreenComponent />}
       </div>
 
       {children}

@@ -41,11 +41,9 @@ export default function AppDrawer({
   contentClassName,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
-  const safeAreaInlinePaddingStyle: React.CSSProperties = {
+  const safeAreaPaddingStyle: React.CSSProperties = {
     paddingLeft: "max(16px, env(safe-area-inset-left))",
     paddingRight: "max(16px, env(safe-area-inset-right))",
-  };
-  const safeAreaBottomPaddingStyle: React.CSSProperties = {
     paddingBottom: "max(16px, env(safe-area-inset-bottom))",
   };
 
@@ -54,7 +52,7 @@ export default function AppDrawer({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/40 z-1002" />
         <Drawer.Content
-          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 overflow-hidden ${heightClasses[height]}`}
+          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 overflow-y-auto ${heightClasses[height]}`}
         >
           {description && (
             <Drawer.Description className="sr-only">
@@ -62,13 +60,11 @@ export default function AppDrawer({
             </Drawer.Description>
           )}
           <div
-            className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-0 flex flex-1 flex-col"
-            style={safeAreaInlinePaddingStyle}
+            className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-full"
+            style={safeAreaPaddingStyle}
           >
             <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
-            <div
-              className="w-full min-h-0 flex-1 flex flex-col"
-            >
+            <div className="w-full pb-2">
               {useScreenNav ? (
                 <AnimatedDrawerNav
                   screens={screens}
@@ -76,10 +72,9 @@ export default function AppDrawer({
                   isOpen={isOpen}
                   onOpenChange={onOpenChange}
                   wrapperClassName={contentClassName ?? "pb-6"}
-                  scrollAreaStyle={safeAreaBottomPaddingStyle}
                 />
               ) : (
-                <div className="min-h-0 flex flex-1 flex-col">
+                <>
                   {showHeader ? (
                     <div className="flex items-center justify-between mb-4 shrink-0">
                       <Drawer.Title className="text-white mx-auto">
@@ -95,13 +90,8 @@ export default function AppDrawer({
                   ) : (
                     <Drawer.Title className="sr-only">{title}</Drawer.Title>
                   )}
-                  <div
-                    className="min-h-0 flex-1 overflow-y-auto pb-2"
-                    style={safeAreaBottomPaddingStyle}
-                  >
-                    {children}
-                  </div>
-                </div>
+                  {children}
+                </>
               )}
             </div>
           </div>
