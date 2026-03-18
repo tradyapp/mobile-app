@@ -274,12 +274,6 @@ function AddIndicatorScreenWrapper() {
       onClose={close}
       activeIndicators={preferences.indicators}
       onAddMovingAverage={() => {
-        const alreadyAdded = preferences.indicators.some((indicator) => indicator.type === 'sma');
-        if (alreadyAdded) {
-          goBack();
-          return;
-        }
-
         const movingAverage: MovingAverageIndicator = {
           id: crypto.randomUUID(),
           type: 'sma',
