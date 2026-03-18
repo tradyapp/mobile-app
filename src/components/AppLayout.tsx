@@ -47,7 +47,7 @@ const AppLayout = () => {
         className="fixed left-0 right-0 z-100"
         style={{
           bottom: "0px",
-          transform: isLandscape ? "translateY(18px)" : "none",
+          transform: isLandscape ? "translateY(82px)" : "none",
         }}
       >
         <Tabbar labels={true} icons={true} className="pr-24">
@@ -66,7 +66,7 @@ const AppLayout = () => {
 
         <div
           className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101"
-          style={isLandscape ? { transform: "translateX(52px)" } : undefined}
+          style={isLandscape ? { transform: "translateX(84px)" } : undefined}
         >
           <TouchableButton className="rounded-full ">
             <div className="w-16 h-16 flex items-center justify-center">
