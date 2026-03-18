@@ -42,7 +42,7 @@ const AppLayout = () => {
 
       <div
         className="fixed bottom-0 left-0 right-0 z-100"
-        style={{ transform: "translateY(calc(env(safe-area-inset-bottom) / 1.5))" }}
+        style={{ transform: "translateY(0)" }}
       >
         <Tabbar labels={true} icons={true} className="pr-24">
           <ToolbarPane>
