@@ -20,6 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import AppNavbar from '@/components/AppNavbar';
 import CogIcon from '@/components/icons/CogIcon';
+import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -48,6 +49,9 @@ interface StrategyDraft {
 
 interface EditorNodeData {
   label: string;
+  nodeTypeKey?: string;
+  category?: string;
+  iconUrl?: string | null;
 }
 
 const MARKETPLACE_APPS: StrategyApp[] = [
@@ -506,7 +510,23 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           position={Position.Left}
           className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
         />
-        <span>{data?.label ?? 'Node'}</span>
+        <div className="flex items-center gap-2 pr-2">
+          <div className="h-6 w-6 overflow-hidden rounded-md border border-zinc-600 bg-zinc-800">
+            {data?.iconUrl ? (
+              <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-zinc-300">
+                {(data?.label ?? 'N').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-zinc-100">{data?.label ?? 'Node'}</p>
+            {data?.category && (
+              <p className="truncate text-[10px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
+            )}
+          </div>
+        </div>
         <Handle
           id="right"
           type="source"
@@ -520,12 +540,33 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   const nodeCounterRef = useRef(1);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
+  const [availableNodeTypes, setAvailableNodeTypes] = useState<StrategyNodeTypeRecord[]>([]);
+  const [isNodeTypesLoading, setIsNodeTypesLoading] = useState(false);
+  const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
+  const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
   }, [setEdges]);
 
-  const handleAddNode = useCallback(() => {
+  const loadNodeTypes = useCallback(async () => {
+    setIsNodeTypesLoading(true);
+    setNodeTypesError(null);
+    try {
+      const items = await strategyNodeTypesService.listActiveNodeTypes();
+      setAvailableNodeTypes(items);
+    } catch (error) {
+      setNodeTypesError(error instanceof Error ? error.message : 'Failed to load node types');
+    } finally {
+      setIsNodeTypesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNodeTypes();
+  }, [loadNodeTypes]);
+
+  const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
     setNodes((prev) => {
       const index = prev.length;
       const nextLabel = nodeCounterRef.current;
@@ -538,11 +579,17 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           x: 80 + (index % 4) * 180,
           y: 80 + Math.floor(index / 4) * 120,
         },
-        data: { label: `Node ${nextLabel}` },
+        data: {
+          label: nodeType.name,
+          nodeTypeKey: nodeType.key,
+          category: nodeType.category,
+          iconUrl: nodeType.icon_url,
+        } satisfies EditorNodeData,
       };
 
       return [...prev, nextNode];
     });
+    setIsNodeTypesDrawerOpen(false);
   }, [setNodes]);
 
   return (
@@ -564,7 +611,7 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           <div className="ml-auto">
             <button
               type="button"
-              onClick={handleAddNode}
+              onClick={() => setIsNodeTypesDrawerOpen(true)}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xl text-zinc-100"
               aria-label="Add node"
             >
@@ -607,6 +654,81 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           </div>
         </div>
       </div>
+
+      {isNodeTypesDrawerOpen && (
+        <div className="absolute inset-0 z-[240]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setIsNodeTypesDrawerOpen(false)}
+            aria-label="Close node types drawer"
+          />
+
+          <div className="absolute bottom-0 left-0 right-0 max-h-[72vh] rounded-t-2xl border-t border-zinc-700 bg-zinc-950">
+            <div className="px-4 pb-4 pt-3">
+              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-700" />
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Add Node</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsNodeTypesDrawerOpen(false)}
+                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
+                >
+                  Close
+                </button>
+              </div>
+
+              {isNodeTypesLoading ? (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+                  Loading node types...
+                </div>
+              ) : nodeTypesError ? (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                    {nodeTypesError}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadNodeTypes()}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : availableNodeTypes.length === 0 ? (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+                  No node types available.
+                </div>
+              ) : (
+                <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+                  {availableNodeTypes.map((item) => (
+                    <button
+                      key={`${item.key}-${item.id}`}
+                      type="button"
+                      onClick={() => handleAddNodeFromType(item)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-left"
+                    >
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                        {item.icon_url ? (
+                          <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+                            {item.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
+                        <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
