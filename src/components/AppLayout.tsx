@@ -5,7 +5,6 @@ import { useNavigationStore } from "@/stores/navigationStore";
 import OrionTab from "@/modules/tabs/OrionTab";
 import ChartTab from "@/modules/tabs/ChartTab";
 import LearnTab from "@/modules/tabs/LearnTab";
-import { useWindowSize } from "@/hooks/useWindowSize";
 
 import TouchableButton from "./uiux/TouchableButton";
 import SearchIcon from "./icons/SearchIcon";
@@ -15,11 +14,6 @@ import OrionIcon from "./icons/OrionIcon";
 
 const AppLayout = () => {
   const { currentTab, setCurrentTab } = useNavigationStore();
-  const { width, height } = useWindowSize();
-  const isLandscape = width > height;
-  const SEARCH_BUTTON_SIZE = 64;
-  const SEARCH_BUTTON_GAP = 12;
-  const SEARCH_BUTTON_SIDE_OFFSET = 16;
 
   const tabs = [
     { id: "orion" as const, label: "Orion", icon: <OrionIcon/>, component: OrionTab },
@@ -29,15 +23,6 @@ const AppLayout = () => {
 
   const CurrentTabComponent =
     tabs.find((tab) => tab.id === currentTab)?.component || OrionTab;
-  const tabbarStyle: React.CSSProperties | undefined = isLandscape
-    ? { paddingRight: `calc(${SEARCH_BUTTON_SIZE + SEARCH_BUTTON_GAP + SEARCH_BUTTON_SIDE_OFFSET}px + env(safe-area-inset-right))` }
-    : undefined;
-  const searchButtonStyle: React.CSSProperties | undefined = isLandscape
-    ? {
-        right: `max(${SEARCH_BUTTON_SIDE_OFFSET}px, env(safe-area-inset-right))`,
-        bottom: `max(12px, env(safe-area-inset-bottom))`,
-      }
-    : undefined;
 
   return (
     <Page>
@@ -55,14 +40,8 @@ const AppLayout = () => {
         </AnimatePresence>
       </div>
 
-      <div
-        className="fixed left-0 right-0 z-100"
-        style={{
-          bottom: "0px",
-          transform: "none",
-        }}
-      >
-        <Tabbar labels={true} icons={true} className="pr-24" style={tabbarStyle}>
+      <div className="fixed bottom-0 left-0 right-0 z-100">
+        <Tabbar labels={true} icons={true} className="pr-24">
           <ToolbarPane>
             {tabs.map((tab) => (
               <TabbarLink
@@ -76,7 +55,7 @@ const AppLayout = () => {
           </ToolbarPane>
         </Tabbar>
 
-        <div className="absolute right-4 bottom-4 z-101" style={searchButtonStyle}>
+        <div className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101">
           <TouchableButton className="rounded-full ">
             <div className="w-16 h-16 flex items-center justify-center">
               <SearchIcon />
