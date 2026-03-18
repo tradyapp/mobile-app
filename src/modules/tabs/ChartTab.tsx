@@ -12,7 +12,7 @@ import { useDrawingTemplateStore } from "@/stores/drawingTemplateStore";
 const FOOTER_HEIGHT = 144;
 const CHARTBAR_WIDTH = 64; // w-16 = 64px
 const TOOLBAR_HEIGHT = 82;
-const CHART_SAFE_GUTTER = 16;
+const CHART_SAFE_GUTTER = 12;
 
 export default function ChartTab() {
   const { width, height } = useWindowSize();
