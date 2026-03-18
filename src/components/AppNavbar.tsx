@@ -35,7 +35,7 @@ function MarqueeTitle({ text }: { text: string }) {
   return (
     <div
       ref={containerRef}
-      className="relative overflow-hidden flex-1 min-w-0"
+      className="relative overflow-hidden w-full"
     >
       {overflows && (
         <>
@@ -59,7 +59,8 @@ export default function AppNavbar({ title, left, titlePosition = 'center' }: App
   return (
     <>
       <Navbar
-        titleClassName={titlePosition === 'left' ? 'text-left flex-none ml-0' : ''}
+        title={title ? <MarqueeTitle text={title} /> : undefined}
+        titleClassName={`overflow-hidden ${titlePosition === 'left' ? 'text-left flex-none ml-0' : ''}`}
         left={left}
         right={
           <button onClick={() => setIsProfileOpen(true)}>
@@ -70,9 +71,7 @@ export default function AppNavbar({ title, left, titlePosition = 'center' }: App
             />
           </button>
         }
-      >
-        {title && <MarqueeTitle text={title} />}
-      </Navbar>
+      />
 
       <ProfileDrawer
         isOpen={isProfileOpen}
