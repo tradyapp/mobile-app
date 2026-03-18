@@ -10,7 +10,7 @@ interface AppNavbarProps {
   titlePosition?: 'center' | 'left';
 }
 
-function MarqueeTitle({ text }: { text: string }) {
+function FloatingTitle({ text }: { text: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const [overflows, setOverflows] = useState(false);
@@ -33,35 +33,34 @@ function MarqueeTitle({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative overflow-hidden w-full"
-    >
-      {overflows && (
-        <>
-          <div className="absolute left-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-r from-zinc-950 to-transparent" />
-          <div className="absolute right-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-l from-zinc-950 to-transparent" />
-        </>
-      )}
-      <span
-        ref={textRef}
-        className={`inline-block whitespace-nowrap font-semibold text-[17px] ${overflows ? 'animate-marquee' : ''}`}
+    <div className="fixed top-0 left-0 right-0 z-30 pointer-events-none flex items-center justify-center pt-[max(16px,env(safe-area-inset-top))] h-[calc(max(16px,env(safe-area-inset-top))_+_44px)]">
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden mx-16"
       >
-        {text}
-      </span>
+        {overflows && (
+          <>
+            <div className="absolute left-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-r from-zinc-950 to-transparent" />
+            <div className="absolute right-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-l from-zinc-950 to-transparent" />
+          </>
+        )}
+        <span
+          ref={textRef}
+          className={`inline-block whitespace-nowrap font-semibold text-[17px] text-white ${overflows ? 'animate-marquee' : ''}`}
+        >
+          {text}
+        </span>
+      </div>
     </div>
   );
 }
 
-export default function AppNavbar({ title, left, titlePosition = 'center' }: AppNavbarProps) {
+export default function AppNavbar({ title, left }: AppNavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   return (
     <>
       <Navbar
-        title={title ? <MarqueeTitle text={title} /> : undefined}
-        centerTitle={false}
-        titleClassName={`!whitespace-normal overflow-hidden flex-1 min-w-0 ${titlePosition === 'left' ? 'text-left' : 'text-center'}`}
         left={left}
         right={
           <button onClick={() => setIsProfileOpen(true)}>
@@ -73,6 +72,8 @@ export default function AppNavbar({ title, left, titlePosition = 'center' }: App
           </button>
         }
       />
+
+      {title && <FloatingTitle text={title} />}
 
       <ProfileDrawer
         isOpen={isProfileOpen}
