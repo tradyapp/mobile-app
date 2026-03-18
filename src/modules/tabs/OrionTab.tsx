@@ -519,39 +519,49 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   } as const;
 
   const nodeTypes = useMemo<NodeTypes>(() => ({
-    editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => (
-      <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-        <Handle
-          id="left"
-          type="target"
-          position={Position.Left}
-          className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
-        />
-        <div className="flex items-center gap-2 pr-2">
-          <div className="h-6 w-6 overflow-hidden rounded-md border border-zinc-600 bg-zinc-800">
-            {data?.iconUrl ? (
-              <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-zinc-300">
-                {(data?.label ?? 'N').slice(0, 1).toUpperCase()}
-              </div>
-            )}
+    editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => {
+      const category = (data?.category ?? 'logic').toLowerCase();
+      const showLeftHandle = category !== 'trigger';
+      const showRightHandle = category !== 'output';
+
+      return (
+        <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+          {showLeftHandle && (
+            <Handle
+              id="left"
+              type="target"
+              position={Position.Left}
+              className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+            />
+          )}
+          <div className="flex items-center gap-2 pr-2">
+            <div className="h-6 w-6 overflow-hidden rounded-md border border-zinc-600 bg-zinc-800">
+              {data?.iconUrl ? (
+                <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-zinc-300">
+                  {(data?.label ?? 'N').slice(0, 1).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-zinc-100">{data?.label ?? 'Node'}</p>
+              {data?.category && (
+                <p className="truncate text-[10px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-zinc-100">{data?.label ?? 'Node'}</p>
-            {data?.category && (
-              <p className="truncate text-[10px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
-            )}
-          </div>
+          {showRightHandle && (
+            <Handle
+              id="right"
+              type="source"
+              position={Position.Right}
+              className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+            />
+          )}
         </div>
-        <Handle
-          id="right"
-          type="source"
-          position={Position.Right}
-          className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
-        />
-      </div>
-    ),
+      );
+    },
   }), []);
 
   const nodeCounterRef = useRef(1);
