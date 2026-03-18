@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from "react";
+import { ReactNode, useRef } from "react";
 import { Drawer } from "vaul";
 import TouchableButton from "./TouchableButton";
 import { AnimatedDrawerNav, type DrawerScreen } from "./drawer-nav";
@@ -41,10 +41,42 @@ export default function AppDrawer({
   contentClassName,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
+  const CLOSE_PULL_THRESHOLD = 52;
   const safeAreaPaddingStyle: React.CSSProperties = {
     paddingLeft: "max(16px, env(safe-area-inset-left))",
     paddingRight: "max(16px, env(safe-area-inset-right))",
     paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+  };
+
+  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    pullDistanceRef.current = 0;
+  };
+
+  const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const startY = touchStartYRef.current;
+    const container = scrollContainerRef.current;
+    if (startY === null || !container) return;
+
+    const currentY = event.touches[0]?.clientY;
+    if (currentY === undefined) return;
+
+    const deltaY = currentY - startY;
+    if (container.scrollTop <= 0 && deltaY > 0) {
+      pullDistanceRef.current = deltaY;
+    } else {
+      pullDistanceRef.current = 0;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    const shouldClose = pullDistanceRef.current > CLOSE_PULL_THRESHOLD;
+    touchStartYRef.current = null;
+    pullDistanceRef.current = 0;
+    if (shouldClose) onOpenChange(false);
   };
 
   return (
@@ -59,7 +91,14 @@ export default function AppDrawer({
               {description}
             </Drawer.Description>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y]">
+          <div
+            ref={scrollContainerRef}
+            className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y]"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+          >
             <div
               className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-full"
               style={safeAreaPaddingStyle}
