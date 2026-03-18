@@ -65,22 +65,16 @@ interface AnimatedDrawerNavProps {
 }
 
 export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrapperClassName, children }: AnimatedDrawerNavProps) {
-  const FADE_OUT_MS = 70;
   const TRANSITION_MS = 120;
-  const SLIDE_PX = 24;
+  const SLIDE_PX = 16;
   const rootScreen = screens.find(s => s.isRoot) ?? screens[0];
 
   const [stack, setStack] = useState<NavStackEntry[]>([{ screenName: rootScreen.name }]);
   const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
   const animatingRef = useRef(false);
-  const phaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearAnimationTimers = useCallback(() => {
-    if (phaseTimeoutRef.current) {
-      clearTimeout(phaseTimeoutRef.current);
-      phaseTimeoutRef.current = null;
-    }
     if (unlockTimeoutRef.current) {
       clearTimeout(unlockTimeoutRef.current);
       unlockTimeoutRef.current = null;
@@ -109,31 +103,26 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
     // Never drop taps: interrupt any in-flight transition and honor the latest intent.
     clearAnimationTimers();
     animatingRef.current = true;
-
-    setContentStyle({ opacity: 0, transition: `opacity ${FADE_OUT_MS}ms ease-out` });
-    phaseTimeoutRef.current = setTimeout(() => {
-      setStack(stackUpdater);
-      setContentStyle({
-        opacity: 0,
-        transform: direction === 'forward' ? `translateX(${SLIDE_PX}px)` : `translateX(-${SLIDE_PX}px)`,
-        transition: 'none',
-      });
+    setStack(stackUpdater);
+    setContentStyle({
+      opacity: 0,
+      transform: direction === 'forward' ? `translateX(${SLIDE_PX}px)` : `translateX(-${SLIDE_PX}px)`,
+      transition: 'none',
+    });
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setContentStyle({
-            opacity: 1,
-            transform: 'translateX(0)',
-            transition: `opacity ${TRANSITION_MS}ms ease-out, transform ${TRANSITION_MS}ms ease-out`,
-          });
-          unlockTimeoutRef.current = setTimeout(() => {
-            animatingRef.current = false;
-            unlockTimeoutRef.current = null;
-          }, TRANSITION_MS);
+        setContentStyle({
+          opacity: 1,
+          transform: 'translateX(0)',
+          transition: `opacity ${TRANSITION_MS}ms ease-out, transform ${TRANSITION_MS}ms ease-out`,
         });
+        unlockTimeoutRef.current = setTimeout(() => {
+          animatingRef.current = false;
+          unlockTimeoutRef.current = null;
+        }, TRANSITION_MS);
       });
-      phaseTimeoutRef.current = null;
-    }, FADE_OUT_MS);
-  }, [FADE_OUT_MS, TRANSITION_MS, SLIDE_PX, clearAnimationTimers]);
+    });
+  }, [TRANSITION_MS, SLIDE_PX, clearAnimationTimers]);
 
   const navigateTo = useCallback((screenName: string, params?: Record<string, unknown>) => {
     animate('forward', prev => [...prev, { screenName, params }]);
