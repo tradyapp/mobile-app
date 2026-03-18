@@ -65,6 +65,9 @@ interface AnimatedDrawerNavProps {
 }
 
 export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrapperClassName, children }: AnimatedDrawerNavProps) {
+  const FADE_OUT_MS = 70;
+  const TRANSITION_MS = 120;
+  const SLIDE_PX = 24;
   const rootScreen = screens.find(s => s.isRoot) ?? screens[0];
 
   const [stack, setStack] = useState<NavStackEntry[]>([{ screenName: rootScreen.name }]);
@@ -107,12 +110,12 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
     clearAnimationTimers();
     animatingRef.current = true;
 
-    setContentStyle({ opacity: 0, transition: 'opacity 120ms ease-out' });
+    setContentStyle({ opacity: 0, transition: `opacity ${FADE_OUT_MS}ms ease-out` });
     phaseTimeoutRef.current = setTimeout(() => {
       setStack(stackUpdater);
       setContentStyle({
         opacity: 0,
-        transform: direction === 'forward' ? 'translateX(40px)' : 'translateX(-40px)',
+        transform: direction === 'forward' ? `translateX(${SLIDE_PX}px)` : `translateX(-${SLIDE_PX}px)`,
         transition: 'none',
       });
       requestAnimationFrame(() => {
@@ -120,17 +123,17 @@ export function AnimatedDrawerNav({ screens, title, isOpen, onOpenChange, wrappe
           setContentStyle({
             opacity: 1,
             transform: 'translateX(0)',
-            transition: 'opacity 180ms ease-out, transform 180ms ease-out',
+            transition: `opacity ${TRANSITION_MS}ms ease-out, transform ${TRANSITION_MS}ms ease-out`,
           });
           unlockTimeoutRef.current = setTimeout(() => {
             animatingRef.current = false;
             unlockTimeoutRef.current = null;
-          }, 180);
+          }, TRANSITION_MS);
         });
       });
       phaseTimeoutRef.current = null;
-    }, 120);
-  }, [clearAnimationTimers]);
+    }, FADE_OUT_MS);
+  }, [FADE_OUT_MS, TRANSITION_MS, SLIDE_PX, clearAnimationTimers]);
 
   const navigateTo = useCallback((screenName: string, params?: Record<string, unknown>) => {
     animate('forward', prev => [...prev, { screenName, params }]);
