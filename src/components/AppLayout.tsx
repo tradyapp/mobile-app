@@ -5,8 +5,7 @@ import { useNavigationStore } from "@/stores/navigationStore";
 import OrionTab from "@/modules/tabs/OrionTab";
 import ChartTab from "@/modules/tabs/ChartTab";
 import LearnTab from "@/modules/tabs/LearnTab";
-
-import TouchableButton from "./uiux/TouchableButton";
+import SearchTab from "@/modules/tabs/SearchTab";
 import SearchIcon from "./icons/SearchIcon";
 import LearnIcon from "./icons/LearnIcon";
 import ChartIcon from "./icons/ChartIcon";
@@ -19,6 +18,7 @@ const AppLayout = () => {
     { id: "orion" as const, label: "Orion", icon: <OrionIcon/>, component: OrionTab },
     { id: "chart" as const, label: "Chart", icon: <ChartIcon/>, component: ChartTab },
     { id: "learn" as const, label: "Learn", icon: <LearnIcon />, component: LearnTab },
+    { id: "search" as const, label: "Search", icon: <SearchIcon />, component: SearchTab },
   ];
 
   const CurrentTabComponent =
@@ -44,7 +44,7 @@ const AppLayout = () => {
         className="fixed bottom-0 left-0 right-0 z-100"
         style={{ transform: "translateY(calc(env(safe-area-inset-bottom) / 2))" }}
       >
-        <Tabbar labels={true} icons={true} className="pr-24">
+        <Tabbar labels={true} icons={true}>
           <ToolbarPane>
             {tabs.map((tab) => (
               <TabbarLink
@@ -57,14 +57,6 @@ const AppLayout = () => {
             ))}
           </ToolbarPane>
         </Tabbar>
-
-        <div className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101">
-          <TouchableButton className="rounded-full ">
-            <div className="w-16 h-16 flex items-center justify-center">
-              <SearchIcon />
-            </div>
-          </TouchableButton>
-        </div>
       </div>
     </Page>
   );
