@@ -24,7 +24,21 @@ export interface ChartTemplate {
 
 export interface ChartPreferences {
   showVolume: boolean;
+  indicators: ChartIndicator[];
 }
+
+export interface MovingAverageIndicator {
+  id: string;
+  type: 'sma';
+  name: 'Moving Average';
+  period: number;
+  source: 'close';
+  color: string;
+  lineWidth: number;
+  visible: boolean;
+}
+
+export type ChartIndicator = MovingAverageIndicator;
 
 // ── Built-in templates ──
 export const BUILT_IN_TEMPLATES: ChartTemplate[] = [
@@ -102,7 +116,15 @@ export const DEFAULT_COLORS: ChartColors = BUILT_IN_TEMPLATES[0].colors;
 
 const DEFAULT_PREFERENCES: ChartPreferences = {
   showVolume: false,
+  indicators: [],
 };
+
+function normalizePreferences(prefs: Partial<ChartPreferences> | null | undefined): ChartPreferences {
+  return {
+    showVolume: prefs?.showVolume ?? DEFAULT_PREFERENCES.showVolume,
+    indicators: prefs?.indicators ?? DEFAULT_PREFERENCES.indicators,
+  };
+}
 
 // ── localStorage helpers ──
 const LS_ACTIVE_TEMPLATE_ID = 'trady:chart-active-template-id';
@@ -169,7 +191,7 @@ function findTemplate(customTemplates: ChartTemplate[], id: string): ChartTempla
 // ── Hydrate initial state from localStorage synchronously ──
 const cachedActiveId = lsGet<string>(LS_ACTIVE_TEMPLATE_ID, BUILT_IN_TEMPLATES[0].id);
 const cachedCustomTemplates = lsGet<ChartTemplate[]>(LS_CUSTOM_TEMPLATES, []);
-const cachedPreferences = lsGet<ChartPreferences>(LS_PREFERENCES, DEFAULT_PREFERENCES);
+const cachedPreferences = normalizePreferences(lsGet<ChartPreferences>(LS_PREFERENCES, DEFAULT_PREFERENCES));
 const cachedTemplate = findTemplate(cachedCustomTemplates, cachedActiveId);
 const cachedColors = cachedTemplate?.colors ?? DEFAULT_COLORS;
 const cachedFilled = cachedTemplate ? templateFilled(cachedTemplate) : { activeFilledUpCandle: true, activeFilledDownCandle: true };
@@ -212,8 +234,9 @@ export const useChartSettingsStore = create<ChartSettingsState>((set, get) => ({
 
     _unsubPreferences = ChartTemplateStorageService.subscribePreferences((prefs) => {
       if (prefs) {
-        lsSet(LS_PREFERENCES, prefs);
-        set({ preferences: prefs });
+        const normalized = normalizePreferences(prefs);
+        lsSet(LS_PREFERENCES, normalized);
+        set({ preferences: normalized });
       }
     });
   },
@@ -254,7 +277,7 @@ export const useChartSettingsStore = create<ChartSettingsState>((set, get) => ({
 
   setPreferences: (partial: Partial<ChartPreferences>) => {
     const state = get();
-    const merged = { ...state.preferences, ...partial };
+    const merged = normalizePreferences({ ...state.preferences, ...partial });
     lsSet(LS_PREFERENCES, merged);
     set({ preferences: merged });
     ChartTemplateStorageService.setPreferences(merged);

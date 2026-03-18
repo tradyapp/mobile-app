@@ -8,6 +8,7 @@ import {
   DEFAULT_COLORS,
   type ChartColors,
   type ChartTemplate,
+  type MovingAverageIndicator,
 } from "@/stores/chartSettingsStore";
 import { useDrawingStore } from "@/stores/drawingStore";
 import { useChartStore } from "@/stores/chartStore";
@@ -33,6 +34,8 @@ import ColorsScreen from "./settings-drawer/ColorsScreen";
 import EditTemplateScreen from "./settings-drawer/EditTemplateScreen";
 import ColorPickerScreen from "./settings-drawer/ColorPickerScreen";
 import DrawingsScreen from "./settings-drawer/DrawingsScreen";
+import IndicatorsScreen from "./settings-drawer/IndicatorsScreen";
+import AddIndicatorScreen from "./settings-drawer/AddIndicatorScreen";
 
 // ── Domain context for SettingsDrawer screens ──
 
@@ -234,7 +237,60 @@ function ColorPickerScreenWrapper() {
 }
 
 function IndicatorsScreenWrapper() {
-  return <p className="text-zinc-400 text-center py-8">Work in progress</p>;
+  const { goBack, close, navigateTo } = useDrawerNav();
+  const preferences = useChartSettingsStore((s) => s.preferences);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
+
+  return (
+    <IndicatorsScreen
+      onBack={goBack}
+      onClose={close}
+      indicators={preferences.indicators}
+      onAddIndicator={() => navigateTo('add-indicator')}
+      onRemoveIndicator={(id: string) => {
+        setPreferences({
+          indicators: preferences.indicators.filter((indicator) => indicator.id !== id),
+        });
+      }}
+    />
+  );
+}
+
+function AddIndicatorScreenWrapper() {
+  const { goBack, close } = useDrawerNav();
+  const preferences = useChartSettingsStore((s) => s.preferences);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
+
+  return (
+    <AddIndicatorScreen
+      onBack={goBack}
+      onClose={close}
+      activeIndicators={preferences.indicators}
+      onAddMovingAverage={() => {
+        const alreadyAdded = preferences.indicators.some((indicator) => indicator.type === 'sma');
+        if (alreadyAdded) {
+          goBack();
+          return;
+        }
+
+        const movingAverage: MovingAverageIndicator = {
+          id: crypto.randomUUID(),
+          type: 'sma',
+          name: 'Moving Average',
+          period: 20,
+          source: 'close',
+          color: '#f59e0b',
+          lineWidth: 2,
+          visible: true,
+        };
+
+        setPreferences({
+          indicators: [...preferences.indicators, movingAverage],
+        });
+        goBack();
+      }}
+    />
+  );
 }
 
 function OrionScreenWrapper() {
@@ -388,6 +444,7 @@ const SCREENS: DrawerScreen[] = [
     return COLOR_ITEMS.find(c => c.id === target)?.label ?? 'Color';
   }, component: ColorPickerScreenWrapper },
   { name: 'indicators', title: 'Indicators', component: IndicatorsScreenWrapper },
+  { name: 'add-indicator', title: 'Add indicator', component: AddIndicatorScreenWrapper },
   { name: 'orion', title: 'Orion', component: OrionScreenWrapper },
   { name: 'drawings', title: 'Drawings', component: DrawingsScreenWrapper },
   { name: 'drawing-default-styles', title: 'Default Styles', component: DefaultStylesScreenWrapper },

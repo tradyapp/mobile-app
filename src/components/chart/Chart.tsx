@@ -8,12 +8,13 @@ import {
   ColorType,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   CrosshairMode,
   LineStyle,
 } from "lightweight-charts";
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
-import { useChartSettingsStore } from "@/stores/chartSettingsStore";
+import { useChartSettingsStore, type MovingAverageIndicator } from "@/stores/chartSettingsStore";
 import ChartSkeleton from "./ChartSkeleton";
 import DrawingManager from "./DrawingManager";
 
@@ -61,16 +62,38 @@ interface HoveredCandle {
   volume?: number;
 }
 
+function calculateSmaData(candles: ChartCandle[], period: number) {
+  const data: { time: ChartCandle["time"]; value: number }[] = [];
+  if (period <= 0 || candles.length < period) return data;
+
+  let rollingSum = 0;
+  for (let i = 0; i < candles.length; i++) {
+    rollingSum += candles[i].close;
+    if (i >= period) {
+      rollingSum -= candles[i - period].close;
+    }
+    if (i >= period - 1) {
+      data.push({
+        time: candles[i].time,
+        value: rollingSum / period,
+      });
+    }
+  }
+  return data;
+}
+
 const Chart = ({ width, height }: ChartProps) => {
   const { symbol, symbolType, timeframe } = useChartStore();
   const activeColors = useChartSettingsStore((s) => s.activeColors);
   const activeFilledUpCandle = useChartSettingsStore((s) => s.activeFilledUpCandle);
   const activeFilledDownCandle = useChartSettingsStore((s) => s.activeFilledDownCandle);
   const showVolume = useChartSettingsStore((s) => s.preferences.showVolume);
+  const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
+  const indicatorSeriesRef = useRef<Map<string, any>>(new Map());
   const [loading, setLoading] = React.useState(true);
   const [chartVersion, setChartVersion] = useState(0);
   const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null);
@@ -91,6 +114,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const activeColorsRef = useRef(activeColors);
   const filledUpRef = useRef(activeFilledUpCandle);
   const filledDownRef = useRef(activeFilledDownCandle);
+  const activeIndicatorsRef = useRef(activeIndicators);
 
   // Keep refs in sync with current values
   useEffect(() => {
@@ -100,7 +124,49 @@ const Chart = ({ width, height }: ChartProps) => {
     activeColorsRef.current = activeColors;
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
-  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle]);
+    activeIndicatorsRef.current = activeIndicators;
+  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators]);
+
+  const syncIndicatorSeries = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const seriesMap = indicatorSeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible);
+    const activeIds = new Set(indicators.map((indicator) => indicator.id));
+
+    for (const [id, series] of seriesMap) {
+      if (!activeIds.has(id)) {
+        chart.removeSeries(series);
+        seriesMap.delete(id);
+      }
+    }
+
+    indicators.forEach((indicator) => {
+      if (indicator.type !== 'sma') return;
+
+      const movingAverage = indicator as MovingAverageIndicator;
+      let lineSeries = seriesMap.get(movingAverage.id);
+      if (!lineSeries) {
+        lineSeries = chart.addSeries(LineSeries, {
+          color: movingAverage.color,
+          lineWidth: movingAverage.lineWidth,
+          title: `SMA ${movingAverage.period}`,
+          lastValueVisible: true,
+          priceLineVisible: false,
+        });
+        seriesMap.set(movingAverage.id, lineSeries);
+      } else {
+        lineSeries.applyOptions({
+          color: movingAverage.color,
+          lineWidth: movingAverage.lineWidth,
+          title: `SMA ${movingAverage.period}`,
+        });
+      }
+
+      lineSeries.setData(calculateSmaData(allCandlesRef.current, movingAverage.period));
+    });
+  }, []);
 
   const onLogicalChange = useCallback(() => {
     if (!chartRef.current) return;
@@ -146,6 +212,7 @@ const Chart = ({ width, height }: ChartProps) => {
               .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? activeColorsRef.current.candleUp + '40' : activeColorsRef.current.candleDown + '40' }))
           );
         }
+        syncIndicatorSeries();
       })
       .catch((error) => {
         console.error("Error loading older candles:", error);
@@ -257,8 +324,10 @@ const Chart = ({ width, height }: ChartProps) => {
     });
 
     candleSeriesRef.current = candlestickSeries;
+    syncIndicatorSeries();
 
     return () => {
+      indicatorSeriesRef.current.clear();
       volumeSeriesRef.current = null;
       if (candleSeriesRef.current) {
         candleSeriesRef.current = null;
@@ -315,7 +384,14 @@ const Chart = ({ width, height }: ChartProps) => {
           .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? activeColors.candleUp + '40' : activeColors.candleDown + '40' }))
       );
     }
+
+    syncIndicatorSeries();
   }, [activeColors, activeFilledUpCandle, activeFilledDownCandle]);
+
+  // Effect: manage indicator overlays
+  useEffect(() => {
+    syncIndicatorSeries();
+  }, [activeIndicators, chartVersion, syncIndicatorSeries]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
@@ -461,6 +537,7 @@ const Chart = ({ width, height }: ChartProps) => {
                 .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? colors.candleUp + '40' : colors.candleDown + '40' }))
             );
           }
+          syncIndicatorSeries();
 
           setLoading(false);
         }
@@ -498,7 +575,7 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
       setLoading(true);
     };
-  }, [symbol, symbolType, timeframe]);
+  }, [symbol, symbolType, timeframe, syncIndicatorSeries]);
 
   return (
     <div className="absolute inset-0 ">

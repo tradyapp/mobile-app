@@ -12,6 +12,7 @@ export type Section =
   | 'edit-template'
   | 'color-picker'
   | 'indicators'
+  | 'add-indicator'
   | 'orion'
   | 'drawings'
   | 'drawing-default-styles'
