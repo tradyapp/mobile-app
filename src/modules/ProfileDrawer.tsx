@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
+import { useUserPrefsStore } from "@/stores/userPrefsStore";
 
 interface ProfileDrawerProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function ProfileDrawer({
   const [locale, setLocale] = useState<"en" | "es">("en");
   const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
   const user = useAuthStore((state) => state.user);
+  const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +36,7 @@ export default function ProfileDrawer({
         if (!active) return;
         const nextLocale = profile.userData.locale === "es" ? "es" : "en";
         setLocale(nextLocale);
+        setStoreLocale(nextLocale);
       } catch (error) {
         console.error("Error loading language:", error);
       }
@@ -44,7 +47,7 @@ export default function ProfileDrawer({
     return () => {
       active = false;
     };
-  }, [isOpen, user?.uid]);
+  }, [isOpen, user?.uid, setStoreLocale]);
 
   const handleLanguageChange = async (nextLocale: "en" | "es") => {
     if (!user?.uid || nextLocale === locale || isUpdatingLocale) {
@@ -53,6 +56,7 @@ export default function ProfileDrawer({
     }
 
     setLocale(nextLocale);
+    setStoreLocale(nextLocale);
     setIsUpdatingLocale(true);
     try {
       await userService.updateUserProfile(user.uid, { locale: nextLocale });

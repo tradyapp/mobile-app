@@ -11,6 +11,7 @@ import {
 } from "@/services/LmsService";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
+import { useUserPrefsStore } from "@/stores/userPrefsStore";
 
 type LearnView = "catalog" | "course" | "lesson";
 
@@ -62,7 +63,22 @@ export default function LearnTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
+  const storeLocale = useUserPrefsStore((state) => state.locale);
+  const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
 
+  // Reset to catalog when locale changes
+  useEffect(() => {
+    if (view !== "catalog") {
+      setView("catalog");
+      setSelectedCourse(null);
+      setSelectedLesson(null);
+      setModules([]);
+      setExpandedModules(new Set());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeLocale]);
+
+  // Fetch courses filtered by locale
   useEffect(() => {
     let active = true;
 
@@ -70,16 +86,21 @@ export default function LearnTab() {
       setLoading(true);
       setError(null);
       try {
-        let userLanguage: LmsCourse["language"] = "es";
+        // On first load, sync store locale from profile
         if (user?.uid) {
           const profile = await userService.getUserProfile(user.uid);
+          if (!active) return;
           const loc = (profile.userData.locale as string) ?? "es";
-          userLanguage = localeToLanguage[loc] ?? "es";
+          const resolved = localeToLanguage[loc] ?? "es";
+          if (resolved !== storeLocale) {
+            setStoreLocale(resolved);
+            return; // will re-run via storeLocale change
+          }
         }
 
         const data = await lmsService.getPublishedCourses();
         if (!active) return;
-        setCourses(data.filter((c) => c.language === userLanguage));
+        setCourses(data.filter((c) => c.language === storeLocale));
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "No se pudieron cargar los cursos");
@@ -93,7 +114,7 @@ export default function LearnTab() {
     return () => {
       active = false;
     };
-  }, [user?.uid]);
+  }, [user?.uid, storeLocale, setStoreLocale]);
 
   const lessonCount = useMemo(
     () => modules.reduce((sum, module) => sum + module.lessons.length, 0),
