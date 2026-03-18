@@ -98,52 +98,99 @@ const StarRating = ({ stars }: { stars: number }) => {
 function BackArrow() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
 }
 
 function MarketplaceScreen() {
+  const [tab, setTab] = useState<'explore' | 'my-strategies'>('explore');
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
+  const myStrategies = MARKETPLACE_APPS.slice(0, 3);
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-24">
-      <div className="mt-2 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 p-4">
-        <p className="text-xs uppercase tracking-[0.22em] text-emerald-400">Featured pack</p>
-        <h3 className="mt-1 text-xl font-semibold text-white">Orion Starter Bundle</h3>
-        <p className="mt-1 text-sm text-zinc-400">Colección curada de estrategias para comenzar rápido. Placeholder mock.</p>
-        <button className="mt-4 rounded-full bg-white px-4 py-1.5 text-sm font-medium text-zinc-900">
-          Preview
+      <div className="mt-3 grid grid-cols-2 rounded-xl bg-zinc-900 p-1">
+        <button
+          type="button"
+          onClick={() => setTab('explore')}
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'explore' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
+        >
+          Explore
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('my-strategies')}
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'my-strategies' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
+        >
+          My Strategies
         </button>
       </div>
 
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
-        {categories.map((category) => (
-          <span key={category} className="shrink-0 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-            {category}
-          </span>
-        ))}
-      </div>
+      {tab === 'explore' ? (
+        <>
+          <div className="mt-3 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 p-4">
+            <p className="text-xs uppercase tracking-[0.22em] text-emerald-400">Featured pack</p>
+            <h3 className="mt-1 text-xl font-semibold text-white">Orion Starter Bundle</h3>
+            <p className="mt-1 text-sm text-zinc-400">Colección curada de estrategias para comenzar rápido. Placeholder mock.</p>
+            <button className="mt-4 rounded-full bg-white px-4 py-1.5 text-sm font-medium text-zinc-900">
+              Preview
+            </button>
+          </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        {MARKETPLACE_APPS.map((app) => (
-          <article key={app.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div
-                className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold text-white"
-                style={{ backgroundColor: app.accent }}
-              >
-                {app.icon}
+          <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
+            {categories.map((category) => (
+              <span key={category} className="shrink-0 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                {category}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {MARKETPLACE_APPS.map((app) => (
+              <article key={app.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold text-white"
+                    style={{ backgroundColor: app.accent }}
+                  >
+                    {app.icon}
+                  </div>
+                  <button className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-200">
+                    Get
+                  </button>
+                </div>
+                <h4 className="mt-3 text-sm font-semibold text-white">{app.name}</h4>
+                <p className="mt-1 line-clamp-2 text-xs text-zinc-400">{app.subtitle}</p>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {myStrategies.map((app) => (
+            <article key={app.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold text-white"
+                    style={{ backgroundColor: app.accent }}
+                  >
+                    {app.icon}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">{app.name}</h4>
+                    <p className="text-xs text-zinc-400">{app.subtitle}</p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+                  Enabled
+                </span>
               </div>
-              <button className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-200">
-                Get
-              </button>
-            </div>
-            <h4 className="mt-3 text-sm font-semibold text-white">{app.name}</h4>
-            <p className="mt-1 line-clamp-2 text-xs text-zinc-400">{app.subtitle}</p>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
