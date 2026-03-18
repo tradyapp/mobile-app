@@ -24,6 +24,12 @@ function getMuxStreamUrl(muxId: string): string {
   return `https://stream.mux.com/${muxId}.m3u8`;
 }
 
+function getLessonThumbnail(lesson: LmsLesson): string | null {
+  if (lesson.thumbnail_url) return lesson.thumbnail_url;
+  if (lesson.mux_id) return `https://image.mux.com/${lesson.mux_id}/thumbnail.jpg?width=240`;
+  return null;
+}
+
 function getLessonVideoUrl(lesson: LmsLesson): string | null {
   if (lesson.mux_id) return getMuxStreamUrl(lesson.mux_id);
 
@@ -217,20 +223,34 @@ export default function LearnTab() {
                   {module.lessons.length === 0 ? (
                     <p className="px-3 py-3 text-zinc-500 text-xs">No lessons in this module.</p>
                   ) : (
-                    module.lessons.map((lesson) => (
-                      <button
-                        key={lesson.id}
-                        onClick={() => openLesson(lesson)}
-                        className="w-full px-3 py-3 text-left border-b border-zinc-800 last:border-b-0"
-                      >
-                        <p className="text-zinc-100 text-sm">{lesson.title}</p>
-                        <p className="text-zinc-500 text-xs">
-                          {lesson.content_type.toUpperCase()}
-                          {lesson.duration_minutes ? ` • ${lesson.duration_minutes} min` : ""}
-                          {lesson.is_free ? " • Free" : ""}
-                        </p>
-                      </button>
-                    ))
+                    module.lessons.map((lesson) => {
+                      const thumb = getLessonThumbnail(lesson);
+                      return (
+                        <button
+                          key={lesson.id}
+                          onClick={() => openLesson(lesson)}
+                          className="w-full px-3 py-3 text-left border-b border-zinc-800 last:border-b-0 flex items-center gap-3"
+                        >
+                          <div className="w-16 h-10 shrink-0 rounded-md overflow-hidden bg-zinc-800">
+                            {thumb ? (
+                              <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[10px]">
+                                {lesson.content_type === "video" ? "▶" : "📄"}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-zinc-100 text-sm">{lesson.title}</p>
+                            <p className="text-zinc-500 text-xs">
+                              {lesson.content_type.toUpperCase()}
+                              {lesson.duration_minutes ? ` • ${lesson.duration_minutes} min` : ""}
+                              {lesson.is_free ? " • Free" : ""}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               )}
