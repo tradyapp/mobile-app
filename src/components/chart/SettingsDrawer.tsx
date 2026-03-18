@@ -86,9 +86,14 @@ function MenuScreenWrapper() {
     <div className="space-y-2 pb-6">
       {menuItems.map((item) => (
         <button
+          type="button"
           key={item.id}
-          onClick={() => navigateTo(item.id)}
-          className="w-full px-4 py-4 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors text-left"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            navigateTo(item.id);
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors text-left [touch-action:manipulation]"
         >
           <div className="flex items-center gap-4">
             <div className="text-zinc-400">{item.icon}</div>

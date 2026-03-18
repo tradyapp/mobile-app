@@ -54,8 +54,13 @@ export default function ColorsScreen({
       <div className="space-y-2 pb-6">
         {/* Create Template button */}
         <button
-          onClick={onCreateNew}
-          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-dashed border-zinc-600"
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onCreateNew();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-dashed border-zinc-600 [touch-action:manipulation]"
         >
           <div className="flex items-center gap-3">
             <div className="w-5 h-5 rounded-full border-2 border-zinc-500 flex items-center justify-center">
@@ -69,9 +74,14 @@ export default function ColorsScreen({
         <div className="flex bg-zinc-800 rounded-lg p-1">
           {(['all', 'built-in', 'custom'] as const).map((tab) => (
             <button
+              type="button"
               key={tab}
-              onClick={() => setTemplateFilter(tab)}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+              onPointerDown={(e) => {
+                e.preventDefault();
+                setTemplateFilter(tab);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors [touch-action:manipulation] ${
                 templateFilter === tab ? 'bg-zinc-700 text-white' : 'text-zinc-400'
               }`}
             >
@@ -115,8 +125,9 @@ export default function ColorsScreen({
             return (
               <SwipeableListItem key={template.id} trailingActions={trailing}>
                 <button
+                  type="button"
                   onClick={() => onSelectTemplate(template.id)}
-                  className={`w-full px-4 py-4 rounded-lg text-left transition-colors ${
+                  className={`w-full px-4 py-4 rounded-lg text-left transition-colors [touch-action:manipulation] ${
                     isActive
                       ? 'bg-zinc-700'
                       : 'bg-zinc-800 hover:bg-zinc-700'

@@ -21,8 +21,13 @@ export default function DrawingsScreen({
       <div className="space-y-2 pb-6">
         {/* Configuration */}
         <button
-          onClick={onOpenConfig}
-          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onOpenConfig();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -37,10 +42,15 @@ export default function DrawingsScreen({
 
         {/* Clear all drawings */}
         <button
+          type="button"
           disabled={drawingsCount === 0}
-          onClick={onClearAll}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            if (drawingsCount > 0) onClearAll();
+          }}
+          onClick={(e) => e.preventDefault()}
           className={[
-            "w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 hover:bg-zinc-700",
+            "w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 hover:bg-zinc-700 [touch-action:manipulation]",
             drawingsCount === 0 ? "opacity-50 cursor-not-allowed" : "text-zinc-300",
           ].join(" ")}
         >

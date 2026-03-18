@@ -36,9 +36,14 @@ export default function DefaultStylesScreen({
           const tpl = getDefaultTemplate(cat);
           return (
             <button
+              type="button"
               key={cat}
-              onClick={() => onPickCategory(cat)}
-              className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onPickCategory(cat);
+              }}
+              onClick={(e) => e.preventDefault()}
+              className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

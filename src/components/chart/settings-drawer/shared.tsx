@@ -50,8 +50,13 @@ export const ChevronRight = () => (
 export function ColorRow({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
   return (
     <button
-      onClick={onClick}
-      className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      onClick={(e) => e.preventDefault()}
+      className="w-full px-4 py-4 rounded-lg text-left transition-colors bg-zinc-800 text-zinc-300 hover:bg-zinc-700 [touch-action:manipulation]"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

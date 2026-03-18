@@ -107,9 +107,14 @@ export default function TemplateGridView({
       <div className="flex bg-zinc-800 rounded-lg p-1 mb-4">
         {TABS.map(tab => (
           <button
+            type="button"
             key={tab.value}
-            onClick={() => setFilter(tab.value)}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setFilter(tab.value);
+            }}
+            onClick={(e) => e.preventDefault()}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors [touch-action:manipulation] ${
               filter === tab.value ? 'bg-zinc-700 text-white' : 'text-zinc-400'
             }`}
           >
@@ -123,8 +128,13 @@ export default function TemplateGridView({
         {/* Create new button (optional) */}
         {onCreateNew && (
           <button
-            onClick={onCreateNew}
-            className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-lg border-2 border-dashed border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 transition-colors min-h-25"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onCreateNew();
+            }}
+            onClick={(e) => e.preventDefault()}
+            className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-lg border-2 border-dashed border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 transition-colors min-h-25 [touch-action:manipulation]"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -139,7 +149,11 @@ export default function TemplateGridView({
           return (
             <div
               key={template.id}
-              onClick={() => onSelect(template)}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onSelect(template);
+              }}
+              onClick={(e) => e.preventDefault()}
               className={`relative flex flex-col items-center justify-center gap-1.5 py-4 rounded-lg transition-colors min-h-25 cursor-pointer ${
                 isActive
                   ? 'bg-zinc-700 ring-2 ring-blue-500'
@@ -149,11 +163,17 @@ export default function TemplateGridView({
               {/* Edit icon for custom templates */}
               {!template.builtIn && onEditTemplate && (
                 <button
-                  onClick={(e) => {
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onEditTemplate(template);
                   }}
-                  className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-zinc-300 rounded"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                  className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-zinc-300 rounded [touch-action:manipulation]"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
