@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback, createContext, useContext } from "react";
+import { useState, useCallback, createContext, useContext, useMemo } from "react";
 import AppDrawer, { type DrawerScreen } from "../uiux/AppDrawer";
 import { useDrawerNav } from "../uiux/drawer-nav";
+import { shallow } from "zustand/shallow";
 import {
   useChartSettingsStore,
   DEFAULT_COLORS,
@@ -417,12 +418,34 @@ export default function SettingsDrawer({
     deleteTemplate,
     preferences,
     setPreferences,
-  } = useChartSettingsStore();
+  } = useChartSettingsStore(
+    (s) => ({
+      customTemplates: s.customTemplates,
+      activeTemplateId: s.activeTemplateId,
+      activeColors: s.activeColors,
+      setActiveTemplate: s.setActiveTemplate,
+      saveTemplate: s.saveTemplate,
+      deleteTemplate: s.deleteTemplate,
+      preferences: s.preferences,
+      setPreferences: s.setPreferences,
+    }),
+    shallow
+  );
 
   // Drawing-related stores & state
-  const { symbol } = useChartStore();
-  const { drawings, clearDrawings } = useDrawingStore();
-  const { getDefaultTemplate: getDrawingDefaultTemplate, setDefaultTemplate: setDrawingDefaultTemplate } = useDrawingTemplateStore();
+  const symbol = useChartStore((s) => s.symbol);
+  const { drawings, clearDrawings } = useDrawingStore(
+    (s) => ({ drawings: s.drawings, clearDrawings: s.clearDrawings }),
+    shallow
+  );
+  const { getDefaultTemplate: getDrawingDefaultTemplate, setDefaultTemplate: setDrawingDefaultTemplate } =
+    useDrawingTemplateStore(
+      (s) => ({
+        getDefaultTemplate: s.getDefaultTemplate,
+        setDefaultTemplate: s.setDefaultTemplate,
+      }),
+      shallow
+    );
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [drawingPickerCategory, setDrawingPickerCategory] = useState<DrawingTemplateCategory>("line");
   const [drawingEditingTemplate, setDrawingEditingTemplate] = useState<DrawingTemplate | null>(null);
@@ -444,29 +467,62 @@ export default function SettingsDrawer({
   const [colorTarget, setColorTarget] = useState<ColorTarget>('candleUp');
   const [colorPickerInitial, setColorPickerInitial] = useState('#00ff99');
 
-  const ctxValue: SettingsCtxValue = {
-    customTemplates, activeTemplateId, activeColors,
-    setActiveTemplate, saveTemplate, deleteTemplate,
-    preferences, setPreferences,
-    editingColors, setEditingColors,
-    editingName, setEditingName,
-    editingId, setEditingId,
-    editingFilledUp, setEditingFilledUp,
-    editingFilledDown, setEditingFilledDown,
-    colorTarget, setColorTarget,
-    colorPickerInitial, setColorPickerInitial,
-    drawings, clearDrawings, symbol,
-    isClearDialogOpen, setIsClearDialogOpen,
-    drawingPickerCategory, setDrawingPickerCategory,
-    drawingEditingTemplate, setDrawingEditingTemplate,
-    drawingEditorPickedColor, setDrawingEditorPickedColor,
-    drawingEditorPickedOpacity, setDrawingEditorPickedOpacity,
-    drawingEditorPickedTarget, setDrawingEditorPickedTarget,
-    drawingSelectedColor, setDrawingSelectedColor,
-    drawingColorOpacity, setDrawingColorOpacity,
-    drawingCustomColors, setDrawingCustomColors,
-    getDrawingDefaultTemplate, setDrawingDefaultTemplate,
-  };
+  const ctxValue: SettingsCtxValue = useMemo(
+    () => ({
+      customTemplates, activeTemplateId, activeColors,
+      setActiveTemplate, saveTemplate, deleteTemplate,
+      preferences, setPreferences,
+      editingColors, setEditingColors,
+      editingName, setEditingName,
+      editingId, setEditingId,
+      editingFilledUp, setEditingFilledUp,
+      editingFilledDown, setEditingFilledDown,
+      colorTarget, setColorTarget,
+      colorPickerInitial, setColorPickerInitial,
+      drawings, clearDrawings, symbol,
+      isClearDialogOpen, setIsClearDialogOpen,
+      drawingPickerCategory, setDrawingPickerCategory,
+      drawingEditingTemplate, setDrawingEditingTemplate,
+      drawingEditorPickedColor, setDrawingEditorPickedColor,
+      drawingEditorPickedOpacity, setDrawingEditorPickedOpacity,
+      drawingEditorPickedTarget, setDrawingEditorPickedTarget,
+      drawingSelectedColor, setDrawingSelectedColor,
+      drawingColorOpacity, setDrawingColorOpacity,
+      drawingCustomColors, setDrawingCustomColors,
+      getDrawingDefaultTemplate, setDrawingDefaultTemplate,
+    }),
+    [
+      customTemplates,
+      activeTemplateId,
+      activeColors,
+      setActiveTemplate,
+      saveTemplate,
+      deleteTemplate,
+      preferences,
+      setPreferences,
+      editingColors,
+      editingName,
+      editingId,
+      editingFilledUp,
+      editingFilledDown,
+      colorTarget,
+      colorPickerInitial,
+      drawings,
+      clearDrawings,
+      symbol,
+      isClearDialogOpen,
+      drawingPickerCategory,
+      drawingEditingTemplate,
+      drawingEditorPickedColor,
+      drawingEditorPickedOpacity,
+      drawingEditorPickedTarget,
+      drawingSelectedColor,
+      drawingColorOpacity,
+      drawingCustomColors,
+      getDrawingDefaultTemplate,
+      setDrawingDefaultTemplate,
+    ]
+  );
 
   return (
     <SettingsCtx.Provider value={ctxValue}>
