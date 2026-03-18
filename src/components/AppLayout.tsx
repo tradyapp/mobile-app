@@ -47,7 +47,7 @@ const AppLayout = () => {
         className="fixed left-0 right-0 z-100"
         style={{
           bottom: "0px",
-          transform: isLandscape ? "translateY(18px)" : "none",
+          transform: "none",
         }}
       >
         <Tabbar labels={true} icons={true} className="pr-24">
