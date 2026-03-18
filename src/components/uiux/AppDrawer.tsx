@@ -41,9 +41,11 @@ export default function AppDrawer({
   contentClassName,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
-  const safeAreaPaddingStyle: React.CSSProperties = {
+  const safeAreaInlinePaddingStyle: React.CSSProperties = {
     paddingLeft: "max(16px, env(safe-area-inset-left))",
     paddingRight: "max(16px, env(safe-area-inset-right))",
+  };
+  const safeAreaBottomPaddingStyle: React.CSSProperties = {
     paddingBottom: "max(16px, env(safe-area-inset-bottom))",
   };
 
@@ -59,42 +61,48 @@ export default function AppDrawer({
               {description}
             </Drawer.Description>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-0 flex flex-1 flex-col"
+            style={safeAreaInlinePaddingStyle}
+          >
+            <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
             <div
-              className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800"
-              style={safeAreaPaddingStyle}
+              className="w-full min-h-0 flex-1"
             >
-              <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
-              <div className="w-full pb-2">
-                {useScreenNav ? (
-                  <AnimatedDrawerNav
-                    screens={screens}
-                    title={title}
-                    isOpen={isOpen}
-                    onOpenChange={onOpenChange}
-                    wrapperClassName={contentClassName ?? "pb-6"}
-                  />
-                ) : (
-                  <>
-                    {showHeader ? (
-                      <div className="flex items-center justify-between mb-4 shrink-0">
-                        <Drawer.Title className="text-white mx-auto">
-                          <span className="ml-6">{title}</span>
-                        </Drawer.Title>
-                        <TouchableButton
-                          onClick={() => onOpenChange(false)}
-                          className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
-                        >
-                          ✕
-                        </TouchableButton>
-                      </div>
-                    ) : (
-                      <Drawer.Title className="sr-only">{title}</Drawer.Title>
-                    )}
+              {useScreenNav ? (
+                <AnimatedDrawerNav
+                  screens={screens}
+                  title={title}
+                  isOpen={isOpen}
+                  onOpenChange={onOpenChange}
+                  wrapperClassName={contentClassName ?? "pb-6"}
+                  scrollAreaStyle={safeAreaBottomPaddingStyle}
+                />
+              ) : (
+                <div className="min-h-0 flex flex-1 flex-col">
+                  {showHeader ? (
+                    <div className="flex items-center justify-between mb-4 shrink-0">
+                      <Drawer.Title className="text-white mx-auto">
+                        <span className="ml-6">{title}</span>
+                      </Drawer.Title>
+                      <TouchableButton
+                        onClick={() => onOpenChange(false)}
+                        className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+                      >
+                        ✕
+                      </TouchableButton>
+                    </div>
+                  ) : (
+                    <Drawer.Title className="sr-only">{title}</Drawer.Title>
+                  )}
+                  <div
+                    className="min-h-0 flex-1 overflow-y-auto pb-2"
+                    style={safeAreaBottomPaddingStyle}
+                  >
                     {children}
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Drawer.Content>
