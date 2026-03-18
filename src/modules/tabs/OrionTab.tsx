@@ -501,6 +501,23 @@ interface NodesViewProps {
 }
 
 function NodesView({ strategyName, onClose }: NodesViewProps) {
+  const safeHorizontalInsetStyle = {
+    paddingLeft: 'max(16px, env(safe-area-inset-left))',
+    paddingRight: 'max(16px, env(safe-area-inset-right))',
+  } as const;
+
+  const safeCanvasInsetStyle = {
+    paddingLeft: 'max(16px, env(safe-area-inset-left))',
+    paddingRight: 'max(16px, env(safe-area-inset-right))',
+    paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+  } as const;
+
+  const safeDrawerInsetStyle = {
+    paddingLeft: 'max(16px, env(safe-area-inset-left))',
+    paddingRight: 'max(16px, env(safe-area-inset-right))',
+    paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+  } as const;
+
   const nodeTypes = useMemo<NodeTypes>(() => ({
     editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => (
       <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
@@ -595,7 +612,10 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
       <div className="flex h-full flex-col overflow-hidden">
-        <header className="flex items-center gap-3 border-b border-zinc-800 px-4 pb-3 pt-[max(16px,env(safe-area-inset-top))]">
+        <header
+          className="flex items-center gap-3 border-b border-zinc-800 pb-3 pt-[max(16px,env(safe-area-inset-top))]"
+          style={safeHorizontalInsetStyle}
+        >
           <button
             type="button"
             onClick={onClose}
@@ -620,7 +640,10 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden p-4">
+        <div
+          className="flex-1 overflow-hidden pb-4 pt-4"
+          style={safeCanvasInsetStyle}
+        >
           <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
             <ReactFlow
               nodes={nodes}
@@ -665,7 +688,7 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           />
 
           <div className="absolute bottom-0 left-0 right-0 max-h-[72vh] rounded-t-2xl border-t border-zinc-700 bg-zinc-950">
-            <div className="px-4 pb-4 pt-3">
+            <div className="pb-4 pt-3" style={safeDrawerInsetStyle}>
               <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-700" />
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">Add Node</h3>
