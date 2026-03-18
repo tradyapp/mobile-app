@@ -64,7 +64,9 @@ class StrategiesService {
       let message = `Strategies API error: ${response.status}`;
       try {
         const payload = await response.json();
-        if (payload?.message) message = payload.message;
+        const parts = [payload?.message, payload?.details, payload?.hint, payload?.code]
+          .filter((part): part is string => typeof part === "string" && part.length > 0);
+        if (parts.length > 0) message = parts.join(" | ");
       } catch {
         // no-op
       }
@@ -77,7 +79,13 @@ class StrategiesService {
 
   private isMissingPhotoUrlColumn(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
-    return error.message.includes("Could not find the 'photo_url' column");
+    const msg = error.message.toLowerCase();
+    if (!msg.includes("photo_url")) return false;
+    return (
+      msg.includes("column") ||
+      msg.includes("schema cache") ||
+      msg.includes("does not exist")
+    );
   }
 
   private normalizeRow(row: Partial<StrategyRecord>): StrategyRecord {
