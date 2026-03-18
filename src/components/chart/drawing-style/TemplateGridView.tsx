@@ -119,7 +119,7 @@ export default function TemplateGridView({
       </div>
 
       {/* Grid: 3 columns */}
-      <div className="grid grid-cols-3 gap-2 pb-6">
+      <div className="grid grid-cols-3 gap-2 pb-6 max-h-[50vh] overflow-y-auto">
         {/* Create new button (optional) */}
         {onCreateNew && (
           <button

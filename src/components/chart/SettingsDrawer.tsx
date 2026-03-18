@@ -477,7 +477,7 @@ export default function SettingsDrawer({
         height="full"
         description="Chart settings, indicators, and Orion studies."
         screens={SCREENS}
-        contentClassName="pb-6"
+        contentClassName="flex-1 overflow-y-auto"
       />
 
       <ClearDrawingsDialog

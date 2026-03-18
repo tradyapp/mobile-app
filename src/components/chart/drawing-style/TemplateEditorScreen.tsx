@@ -181,7 +181,7 @@ export default function TemplateEditorScreen({
         }
       />
 
-      <div style={internalStyle}>
+      <div className="overflow-y-auto max-h-[60vh]" style={internalStyle}>
 
         {/* ══════════════ MAIN ══════════════ */}
         {internalScreen === 'main' && (

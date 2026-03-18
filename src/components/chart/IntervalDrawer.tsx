@@ -39,7 +39,7 @@ export default function IntervalDrawer({
       height="auto"
       description="Choose a time interval for the chart."
     >
-      <div className="space-y-2 pb-6">
+      <div className="flex-1 overflow-y-auto space-y-2 pb-6">
         {intervals.map((interval) => (
           <button
             key={interval.value}
