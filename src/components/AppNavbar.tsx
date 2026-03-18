@@ -60,7 +60,8 @@ export default function AppNavbar({ title, left, titlePosition = 'center' }: App
     <>
       <Navbar
         title={title ? <MarqueeTitle text={title} /> : undefined}
-        titleClassName={`overflow-hidden ${titlePosition === 'left' ? 'text-left flex-none ml-0' : ''}`}
+        centerTitle={false}
+        titleClassName={`!whitespace-normal overflow-hidden flex-1 min-w-0 ${titlePosition === 'left' ? 'text-left' : 'text-center'}`}
         left={left}
         right={
           <button onClick={() => setIsProfileOpen(true)}>
