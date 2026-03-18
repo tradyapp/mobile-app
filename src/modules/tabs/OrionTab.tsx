@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 import { BlockTitle, List, ListItem } from 'konsta/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppNavbar from '@/components/AppNavbar';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import CogIcon from '@/components/icons/CogIcon';
@@ -104,6 +104,74 @@ function CloseIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
+}
+
+const PHOTO_SIZE_PX = 40;
+
+function optimizeImageToWebp40(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = PHOTO_SIZE_PX;
+        canvas.height = PHOTO_SIZE_PX;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          reject(new Error('Unable to process image'));
+          return;
+        }
+
+        const sourceAspect = image.width / image.height;
+        const targetAspect = 1;
+
+        let sourceWidth = image.width;
+        let sourceHeight = image.height;
+        let sourceX = 0;
+        let sourceY = 0;
+
+        if (sourceAspect > targetAspect) {
+          sourceWidth = image.height;
+          sourceX = (image.width - sourceWidth) / 2;
+        } else if (sourceAspect < targetAspect) {
+          sourceHeight = image.width;
+          sourceY = (image.height - sourceHeight) / 2;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, PHOTO_SIZE_PX, PHOTO_SIZE_PX);
+        ctx.drawImage(
+          image,
+          sourceX,
+          sourceY,
+          sourceWidth,
+          sourceHeight,
+          0,
+          0,
+          PHOTO_SIZE_PX,
+          PHOTO_SIZE_PX
+        );
+
+        const webpDataUrl = canvas.toDataURL('image/webp', 0.9);
+        URL.revokeObjectURL(url);
+        resolve(webpDataUrl);
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        reject(error);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Invalid image file'));
+    };
+
+    image.src = url;
+  });
 }
 
 function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'photo_url'> }) {
@@ -265,23 +333,26 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
   const user = useAuthStore((state) => state.user);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setName('');
       setDescription('');
-      setPhotoUrl('');
+      setPhotoUrl(null);
       setError(null);
       setIsCreating(false);
+      setIsProcessingPhoto(false);
     }
   }, [isOpen]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!name.trim() || isCreating) return;
+    if (!name.trim() || isCreating || isProcessingPhoto) return;
     if (!user?.uid) {
       setError('You must be signed in to create a strategy.');
       return;
@@ -294,7 +365,7 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
       const created = await strategiesService.createStrategy({
         name: name.trim(),
         description: description.trim() ? description.trim() : null,
-        photo_url: photoUrl.trim() ? photoUrl.trim() : null,
+        photo_url: photoUrl,
       });
       onCreated(created);
       onOpenChange(false);
@@ -302,6 +373,23 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
       setError(err instanceof Error ? err.message : 'Failed to create strategy');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleUploadPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setIsProcessingPhoto(true);
+    setError(null);
+    try {
+      const optimized = await optimizeImageToWebp40(file);
+      setPhotoUrl(optimized);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process image');
+    } finally {
+      setIsProcessingPhoto(false);
     }
   };
 
@@ -339,16 +427,44 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="strategy-photo" className="text-sm text-zinc-300">Photo URL</label>
-          <input
-            id="strategy-photo"
-            type="url"
-            value={photoUrl}
-            onChange={(e) => setPhotoUrl(e.target.value)}
-            placeholder="https://..."
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
-          />
+        <div className="space-y-2">
+          <div className="text-sm text-zinc-300">Photo</div>
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
+              {photoUrl ? (
+                <img src={photoUrl} alt="Strategy logo preview" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-500">40x40</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPhoto}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingPhoto}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-200 disabled:opacity-50"
+              >
+                {isProcessingPhoto ? 'Optimizing...' : 'Upload Photo'}
+              </button>
+              {photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl(null)}
+                  disabled={isProcessingPhoto}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -359,7 +475,7 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
 
         <button
           type="submit"
-          disabled={isCreating || !name.trim()}
+          disabled={isCreating || isProcessingPhoto || !name.trim()}
           className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isCreating ? 'Creating...' : 'Create Strategy'}
