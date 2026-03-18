@@ -110,9 +110,10 @@ export default function CompleteProfileScreen({
     try {
       await userService.updateUserProfile(uid, formData);
       onProfileCompleted();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error updating profile:", err);
-      setError("Failed to update profile. Please try again.");
+      const detail = err?.message || err?.details || err?.code || JSON.stringify(err);
+      setError(`Failed to update profile: ${detail}`);
     } finally {
       setLoading(false);
     }
