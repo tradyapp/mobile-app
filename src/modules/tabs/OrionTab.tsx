@@ -1,9 +1,12 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 import { BlockTitle, List, ListItem } from 'konsta/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppNavbar from '@/components/AppNavbar';
+import AppDrawer from '@/components/uiux/AppDrawer';
 import CogIcon from '@/components/icons/CogIcon';
+import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Notification {
   id: number;
@@ -95,7 +98,7 @@ const StarRating = ({ stars }: { stars: number }) => {
   );
 };
 
-function BackArrow() {
+function CloseIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
@@ -103,24 +106,59 @@ function BackArrow() {
   );
 }
 
-function MarketplaceScreen() {
-  const [tab, setTab] = useState<'explore' | 'my-strategies'>('explore');
+function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'photo_url'> }) {
+  if (strategy.photo_url) {
+    return <img src={strategy.photo_url} alt={strategy.name} className="h-11 w-11 rounded-xl object-cover" />;
+  }
+
+  const initials = strategy.name
+    .split(' ')
+    .map((word) => word[0] ?? '')
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-700 text-sm font-semibold text-white">
+      {initials || 'ST'}
+    </div>
+  );
+}
+
+type MarketplaceTab = 'explore' | 'my-strategies';
+
+interface MarketplaceScreenProps {
+  tab: MarketplaceTab;
+  onChangeTab: (tab: MarketplaceTab) => void;
+  strategies: StrategyRecord[];
+  isLoadingStrategies: boolean;
+  strategiesError: string | null;
+  onOpenCreateStrategy: () => void;
+}
+
+function MarketplaceScreen({
+  tab,
+  onChangeTab,
+  strategies,
+  isLoadingStrategies,
+  strategiesError,
+  onOpenCreateStrategy,
+}: MarketplaceScreenProps) {
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
-  const myStrategies = MARKETPLACE_APPS.slice(0, 3);
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-24">
       <div className="mt-3 grid grid-cols-2 rounded-xl bg-zinc-900 p-1">
         <button
           type="button"
-          onClick={() => setTab('explore')}
+          onClick={() => onChangeTab('explore')}
           className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'explore' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
         >
           Explore
         </button>
         <button
           type="button"
-          onClick={() => setTab('my-strategies')}
+          onClick={() => onChangeTab('my-strategies')}
           className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'my-strategies' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
         >
           My Strategies
@@ -167,38 +205,181 @@ function MarketplaceScreen() {
           </div>
         </>
       ) : (
-        <div className="mt-4 space-y-3">
-          {myStrategies.map((app) => (
-            <article key={app.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold text-white"
-                    style={{ backgroundColor: app.accent }}
-                  >
-                    {app.icon}
+        <div className="mt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-300">Installed Strategies</h3>
+            <button
+              type="button"
+              onClick={onOpenCreateStrategy}
+              className="rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-zinc-900"
+            >
+              Create Strategy
+            </button>
+          </div>
+
+          {isLoadingStrategies ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
+              Loading strategies...
+            </div>
+          ) : strategiesError ? (
+            <div className="rounded-xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-300">
+              {strategiesError}
+            </div>
+          ) : strategies.length === 0 ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
+              You have no strategies yet. Tap <span className="text-zinc-200 font-medium">Create Strategy</span> to add your first one.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {strategies.map((strategy) => (
+                <article key={strategy.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <StrategyLogo strategy={strategy} />
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">{strategy.name}</h4>
+                        <p className="line-clamp-2 text-xs text-zinc-400">{strategy.description || 'No description'}</p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+                      Saved
+                    </span>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-white">{app.name}</h4>
-                    <p className="text-xs text-zinc-400">{app.subtitle}</p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                  Enabled
-                </span>
-              </div>
-            </article>
-          ))}
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+interface CreateStrategyDrawerProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (strategy: StrategyRecord) => void;
+}
+
+function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrategyDrawerProps) {
+  const user = useAuthStore((state) => state.user);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setName('');
+      setDescription('');
+      setPhotoUrl('');
+      setError(null);
+      setIsCreating(false);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || isCreating) return;
+    if (!user?.uid) {
+      setError('You must be signed in to create a strategy.');
+      return;
+    }
+
+    setIsCreating(true);
+    setError(null);
+
+    try {
+      const created = await strategiesService.createStrategy({
+        name: name.trim(),
+        description: description.trim() ? description.trim() : null,
+        photo_url: photoUrl.trim() ? photoUrl.trim() : null,
+      });
+      onCreated(created);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create strategy');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <AppDrawer
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      title="Create Strategy"
+      height="auto"
+      description="Create a new Orion strategy."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 px-1 pb-6">
+        <div className="space-y-1.5">
+          <label htmlFor="strategy-name" className="text-sm text-zinc-300">Name</label>
+          <input
+            id="strategy-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My breakout strategy"
+            required
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="strategy-description" className="text-sm text-zinc-300">Description</label>
+          <textarea
+            id="strategy-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe what this strategy does"
+            rows={3}
+            className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="strategy-photo" className="text-sm text-zinc-300">Photo URL</label>
+          <input
+            id="strategy-photo"
+            type="url"
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+          />
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isCreating || !name.trim()}
+          className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isCreating ? 'Creating...' : 'Create Strategy'}
+        </button>
+      </form>
+    </AppDrawer>
+  );
+}
+
 export default function OrionTab() {
+  const user = useAuthStore((state) => state.user);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [view, setView] = useState<'notifications' | 'marketplace'>('notifications');
+  const [marketplaceTab, setMarketplaceTab] = useState<MarketplaceTab>('explore');
+  const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
+  const [isStrategiesLoading, setIsStrategiesLoading] = useState(false);
+  const [strategiesError, setStrategiesError] = useState<string | null>(null);
+  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
+
   const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
   const isMarketplace = view === 'marketplace';
 
@@ -206,6 +387,31 @@ export default function OrionTab() {
     setIsClient(true);
     setNotifications(generateMockNotifications());
   }, []);
+
+  const loadStrategies = useCallback(async () => {
+    if (!user?.uid) {
+      setStrategies([]);
+      setStrategiesError('Sign in to load your strategies.');
+      return;
+    }
+
+    setIsStrategiesLoading(true);
+    setStrategiesError(null);
+    try {
+      const records = await strategiesService.listStrategies();
+      setStrategies(records);
+    } catch (err) {
+      setStrategiesError(err instanceof Error ? err.message : 'Failed to load strategies');
+    } finally {
+      setIsStrategiesLoading(false);
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!isMarketplace) return;
+    if (marketplaceTab !== 'my-strategies') return;
+    void loadStrategies();
+  }, [isMarketplace, marketplaceTab, loadStrategies]);
 
   return (
     <>
@@ -217,9 +423,9 @@ export default function OrionTab() {
               type="button"
               onClick={() => setView('notifications')}
               className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
-              aria-label="Back to notifications"
+              aria-label="Close Orion marketplace"
             >
-              <BackArrow />
+              <CloseIcon />
             </button>
           ) : (
             <button
@@ -235,7 +441,14 @@ export default function OrionTab() {
       />
 
       {isMarketplace ? (
-        <MarketplaceScreen />
+        <MarketplaceScreen
+          tab={marketplaceTab}
+          onChangeTab={setMarketplaceTab}
+          strategies={strategies}
+          isLoadingStrategies={isStrategiesLoading}
+          strategiesError={strategiesError}
+          onOpenCreateStrategy={() => setIsCreateDrawerOpen(true)}
+        />
       ) : (
         <div className="space-y-2 max-w-xl mx-auto pb-24">
           {isClient && Object.entries(groupedNotifications).map(([dateLabel, items]) => (
@@ -265,6 +478,14 @@ export default function OrionTab() {
           ))}
         </div>
       )}
+
+      <CreateStrategyDrawer
+        isOpen={isCreateDrawerOpen}
+        onOpenChange={setIsCreateDrawerOpen}
+        onCreated={(strategy) => {
+          setStrategies((prev) => [strategy, ...prev]);
+        }}
+      />
     </>
   );
 }
