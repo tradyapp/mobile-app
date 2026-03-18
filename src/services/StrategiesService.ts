@@ -30,6 +30,8 @@ interface UpdateStrategyInput {
 }
 
 class StrategiesService {
+  private hasPhotoUrlColumn: boolean | null = null;
+
   private async getAuthToken(): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -73,44 +75,134 @@ class StrategiesService {
     return response.json() as Promise<T>;
   }
 
+  private isMissingPhotoUrlColumn(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    return error.message.includes("Could not find the 'photo_url' column");
+  }
+
+  private normalizeRow(row: Partial<StrategyRecord>): StrategyRecord {
+    return {
+      id: row.id ?? "",
+      user_id: row.user_id ?? "",
+      name: row.name ?? "",
+      description: row.description ?? null,
+      photo_url: row.photo_url ?? null,
+      created_at: row.created_at ?? "",
+      updated_at: row.updated_at ?? "",
+    };
+  }
+
+  private getSelectFields(includePhoto: boolean): string {
+    const fields = ["id", "user_id", "name", "description"];
+    if (includePhoto) fields.push("photo_url");
+    fields.push("created_at", "updated_at");
+    return fields.join(",");
+  }
+
   async listStrategies(): Promise<StrategyRecord[]> {
-    return this.request<StrategyRecord[]>(
-      "/strategies?select=id,user_id,name,description,photo_url,created_at,updated_at&order=created_at.desc",
-      { method: "GET" }
-    );
+    const includePhoto = this.hasPhotoUrlColumn !== false;
+    const select = this.getSelectFields(includePhoto);
+
+    try {
+      const rows = await this.request<Partial<StrategyRecord>[]>(
+        `/strategies?select=${select}&order=created_at.desc`,
+        { method: "GET" }
+      );
+      if (this.hasPhotoUrlColumn === null) this.hasPhotoUrlColumn = includePhoto;
+      return rows.map((row) => this.normalizeRow(row));
+    } catch (error) {
+      if (includePhoto && this.hasPhotoUrlColumn !== false && this.isMissingPhotoUrlColumn(error)) {
+        this.hasPhotoUrlColumn = false;
+        const fallbackSelect = this.getSelectFields(false);
+        const rows = await this.request<Partial<StrategyRecord>[]>(
+          `/strategies?select=${fallbackSelect}&order=created_at.desc`,
+          { method: "GET" }
+        );
+        return rows.map((row) => this.normalizeRow(row));
+      }
+      throw error;
+    }
   }
 
   async createStrategy(input: CreateStrategyInput): Promise<StrategyRecord> {
     const user_id = await this.getUserId();
-    const payload = [{
+    const payload: Record<string, unknown> = {
       user_id,
       name: input.name,
       description: input.description ?? null,
-      photo_url: input.photo_url ?? null,
-    }];
+    };
+    if (this.hasPhotoUrlColumn !== false) {
+      payload.photo_url = input.photo_url ?? null;
+    }
 
-    const rows = await this.request<StrategyRecord[]>("/strategies", {
-      method: "POST",
-      headers: {
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!rows[0]) throw new Error("Strategy creation failed");
-    return rows[0];
+    try {
+      const rows = await this.request<Partial<StrategyRecord>[]>("/strategies", {
+        method: "POST",
+        headers: {
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify([payload]),
+      });
+      if (this.hasPhotoUrlColumn === null) this.hasPhotoUrlColumn = "photo_url" in (rows[0] ?? {});
+      if (!rows[0]) throw new Error("Strategy creation failed");
+      return this.normalizeRow(rows[0]);
+    } catch (error) {
+      if (this.hasPhotoUrlColumn !== false && this.isMissingPhotoUrlColumn(error)) {
+        this.hasPhotoUrlColumn = false;
+        const fallbackPayload = [{
+          user_id,
+          name: input.name,
+          description: input.description ?? null,
+        }];
+        const rows = await this.request<Partial<StrategyRecord>[]>("/strategies", {
+          method: "POST",
+          headers: {
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify(fallbackPayload),
+        });
+        if (!rows[0]) throw new Error("Strategy creation failed");
+        return this.normalizeRow(rows[0]);
+      }
+      throw error;
+    }
   }
 
   async updateStrategy(id: string, input: UpdateStrategyInput): Promise<StrategyRecord | null> {
-    const rows = await this.request<StrategyRecord[]>(
-      `/strategies?id=eq.${encodeURIComponent(id)}`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(input),
+    const payload: Record<string, unknown> = {};
+    if (input.name !== undefined) payload.name = input.name;
+    if (input.description !== undefined) payload.description = input.description;
+    if (input.photo_url !== undefined && this.hasPhotoUrlColumn !== false) payload.photo_url = input.photo_url;
+
+    try {
+      const rows = await this.request<Partial<StrategyRecord>[]>(
+        `/strategies?id=eq.${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(payload),
+        }
+      );
+      return rows[0] ? this.normalizeRow(rows[0]) : null;
+    } catch (error) {
+      if (this.hasPhotoUrlColumn !== false && this.isMissingPhotoUrlColumn(error)) {
+        this.hasPhotoUrlColumn = false;
+        const fallbackPayload: Record<string, unknown> = {};
+        if (input.name !== undefined) fallbackPayload.name = input.name;
+        if (input.description !== undefined) fallbackPayload.description = input.description;
+
+        const rows = await this.request<Partial<StrategyRecord>[]>(
+          `/strategies?id=eq.${encodeURIComponent(id)}`,
+          {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(fallbackPayload),
+          }
+        );
+        return rows[0] ? this.normalizeRow(rows[0]) : null;
       }
-    );
-    return rows[0] ?? null;
+      throw error;
+    }
   }
 
   async deleteStrategy(id: string): Promise<void> {
