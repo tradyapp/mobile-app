@@ -43,28 +43,55 @@ export default function AppDrawer({
   const useScreenNav = !!screens;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
+  const pullGestureAllowedRef = useRef(false);
   const CLOSE_PULL_THRESHOLD = 52;
+  const DRAG_START_THRESHOLD = 10;
   const safeAreaPaddingStyle: React.CSSProperties = {
     paddingLeft: "max(16px, env(safe-area-inset-left))",
     paddingRight: "max(16px, env(safe-area-inset-right))",
     paddingBottom: "max(16px, env(safe-area-inset-bottom))",
   };
 
+  const isInteractiveTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [data-no-drag], [data-drawer-ignore-drag]'
+      )
+    );
+  };
+
   const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    const touch = event.touches[0];
+    touchStartYRef.current = touch?.clientY ?? null;
+    touchStartXRef.current = touch?.clientX ?? null;
     pullDistanceRef.current = 0;
+    pullGestureAllowedRef.current = !isInteractiveTarget(event.target);
   };
 
   const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
-    const startY = touchStartYRef.current;
-    const container = scrollContainerRef.current;
-    if (startY === null || !container) return;
+    if (!pullGestureAllowedRef.current) return;
 
-    const currentY = event.touches[0]?.clientY;
-    if (currentY === undefined) return;
+    const startY = touchStartYRef.current;
+    const startX = touchStartXRef.current;
+    const container = scrollContainerRef.current;
+    if (startY === null || startX === null || !container) return;
+
+    const touch = event.touches[0];
+    const currentY = touch?.clientY;
+    const currentX = touch?.clientX;
+    if (currentY === undefined || currentX === undefined) return;
 
     const deltaY = currentY - startY;
+    const deltaX = currentX - startX;
+
+    if (Math.abs(deltaY) <= DRAG_START_THRESHOLD || Math.abs(deltaY) <= Math.abs(deltaX)) {
+      pullDistanceRef.current = 0;
+      return;
+    }
+
     if (container.scrollTop <= 0 && deltaY > 0) {
       pullDistanceRef.current = deltaY;
     } else {
@@ -73,9 +100,11 @@ export default function AppDrawer({
   };
 
   const handleTouchEnd = () => {
-    const shouldClose = pullDistanceRef.current > CLOSE_PULL_THRESHOLD;
+    const shouldClose = pullGestureAllowedRef.current && pullDistanceRef.current > CLOSE_PULL_THRESHOLD;
     touchStartYRef.current = null;
+    touchStartXRef.current = null;
     pullDistanceRef.current = 0;
+    pullGestureAllowedRef.current = false;
     if (shouldClose) onOpenChange(false);
   };
 
