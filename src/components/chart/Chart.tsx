@@ -274,7 +274,6 @@ const Chart = ({ width, height }: ChartProps) => {
   const rsiLevel30SeriesRef = useRef<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [chartVersion, setChartVersion] = useState(0);
-  const [layoutEpoch, setLayoutEpoch] = useState(0);
   const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null);
   const [panelHeightDraft, setPanelHeightDraft] = useState<number | null>(null);
   const [isResizingPanels, setIsResizingPanels] = useState(false);
@@ -293,7 +292,6 @@ const Chart = ({ width, height }: ChartProps) => {
   const activeSecondaryPanelsRef = useRef<SecondaryPanelId[]>(activeSecondaryPanels);
   const secondaryPanelHeightRef = useRef(secondaryPanelHeight);
   const resizeStartRef = useRef<{ active: boolean }>({ active: false });
-  const previousPanelSignatureRef = useRef(panelSignature);
 
   // Refs for latest colors/fill (read during chart creation without adding to deps)
   const activeColorsRef = useRef(activeColors);
@@ -319,14 +317,6 @@ const Chart = ({ width, height }: ChartProps) => {
     showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
   }, [symbol, symbolType, timeframe, activeSecondaryPanels, secondaryPanelHeight, panelHeightDraft, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
-
-  // Mobile-safe fallback: fully recreate chart when panel composition changes.
-  // Some mobile WebViews keep stale pane layout after dynamic pane removal.
-  useEffect(() => {
-    if (previousPanelSignatureRef.current === panelSignature) return;
-    previousPanelSignatureRef.current = panelSignature;
-    setLayoutEpoch((value) => value + 1);
-  }, [panelSignature]);
 
   const getSecondaryHeightFromPointer = useCallback((clientY: number) => {
     const container = chartContainerRef.current;
@@ -820,7 +810,7 @@ const Chart = ({ width, height }: ChartProps) => {
       });
   }, [syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
-  // Effect 1: Crear el chart (solo cuando cambian width/height)
+  // Effect 1: Crear el chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -945,7 +935,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe, layoutEpoch, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
+  }, [timeframe, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
@@ -1036,6 +1026,41 @@ const Chart = ({ width, height }: ChartProps) => {
     syncMacdSeries();
     applyPanelLayout();
   }, [panelSignature, chartVersion, clearSecondarySeries, syncRsiSeries, syncMacdSeries, applyPanelLayout]);
+
+  // Mobile/WebView resume guard: re-run lightweight pane reconciliation on focus/visible.
+  // This avoids full chart recreation (expensive) while still cleaning stale panes after resume.
+  useEffect(() => {
+    const reconcile = () => {
+      if (!chartRef.current) return;
+      clearSecondarySeries();
+      while (chartRef.current.panes().length > 1) {
+        chartRef.current.removePane(chartRef.current.panes().length - 1);
+      }
+      syncRsiSeries();
+      syncMacdSeries();
+      applyPanelLayout();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      requestAnimationFrame(() => {
+        reconcile();
+      });
+    };
+
+    const onFocus = () => {
+      requestAnimationFrame(() => {
+        reconcile();
+      });
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [chartVersion, clearSecondarySeries, syncRsiSeries, syncMacdSeries, applyPanelLayout]);
 
   // Defensive enforcement: no secondary panels means only main pane.
   useEffect(() => {
