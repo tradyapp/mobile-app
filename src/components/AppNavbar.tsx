@@ -33,7 +33,7 @@ function FloatingTitle({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-30 pointer-events-none flex items-center justify-center pt-[max(16px,env(safe-area-inset-top))] h-[calc(max(16px,env(safe-area-inset-top))_+_44px)]">
+    <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none flex items-center justify-center pt-[max(16px,env(safe-area-inset-top))] h-[calc(max(16px,env(safe-area-inset-top))_+_44px)]">
       <div
         ref={containerRef}
         className="relative overflow-hidden mx-16"
