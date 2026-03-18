@@ -198,8 +198,37 @@ export default function CompleteProfileScreen({
     );
   };
 
+  const renderSelectField = (field: UserFieldMetadata) => {
+    const options = (field.options ?? []).map((opt) => {
+      const [value, label] = opt.includes(":") ? opt.split(":", 2) : [opt, opt];
+      return { value, label };
+    });
+
+    return (
+      <ListInput
+        key={field.name}
+        label={(field.label || field.name) + (field.required ? " *" : "")}
+        type="select"
+        value={formData[field.name] || ""}
+        onChange={(e) => updateField(field.name, e.target.value)}
+        required={field.required}
+      >
+        <option value="">Select...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </ListInput>
+    );
+  };
+
   const renderField = (field: UserFieldMetadata) => {
     const fieldType = field.type.toLowerCase();
+
+    if (field.options && field.options.length > 0) {
+      return renderSelectField(field);
+    }
 
     if (fieldType === "bool" || fieldType === "boolean") {
       return renderBooleanField(field);
