@@ -39,7 +39,7 @@ const MARKETPLACE_APPS: StrategyApp[] = [
   { id: 'news-shield', name: 'News Shield', subtitle: 'Bloquea entradas en eventos de alto impacto', category: 'Risk', icon: 'NS', accent: '#fb7185' },
 ];
 
-const PHOTO_SIZE_PX = 40;
+const PHOTO_SIZE_PX = 250;
 
 const createEmptyDraft = (): StrategyDraft => ({
   name: '',
@@ -98,7 +98,7 @@ const groupByDate = (notifications: Notification[]) => {
   return groups;
 };
 
-function optimizeImageToWebp40(file: File): Promise<string> {
+function optimizeImageToWebp250(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -182,7 +182,7 @@ function isSvgFile(file: File): boolean {
 
 async function processStrategyPhoto(file: File): Promise<string> {
   if (isSvgFile(file)) return readFileAsDataUrl(file);
-  return optimizeImageToWebp40(file);
+  return optimizeImageToWebp250(file);
 }
 
 const StarRating = ({ stars }: { stars: number }) => (
@@ -302,11 +302,11 @@ function StrategyFormScreen({
       <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
-            <div className="h-10 w-10 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+            <div className="h-[250px] w-[250px] overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-800">
               {draft.photoUrl ? (
                 <img src={draft.photoUrl} alt="Strategy logo" className="h-full w-full object-contain" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-[9px] text-zinc-500">40x40</div>
+                <div className="flex h-full w-full items-center justify-center text-xs text-zinc-500">250x250</div>
               )}
             </div>
             {draft.photoUrl && (
