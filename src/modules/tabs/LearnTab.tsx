@@ -157,17 +157,17 @@ export default function LearnTab() {
           <button
             key={course.id}
             onClick={() => void openCourse(course)}
-            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-row"
+            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
           >
-            <div className="w-32 min-h-[5rem] shrink-0 bg-zinc-800">
+            <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800">
               {course.thumbnail_url ? (
                 <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
               )}
             </div>
-            <div className="p-3 flex flex-col justify-center min-w-0">
-              <h3 className="text-white font-semibold text-sm">{course.title}</h3>
+            <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
+              <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
               {course.description && (
                 <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
               )}
