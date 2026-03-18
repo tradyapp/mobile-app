@@ -25,6 +25,8 @@ export interface ChartTemplate {
 export interface ChartPreferences {
   showVolume: boolean;
   indicators: ChartIndicator[];
+  showMaLabels: boolean;
+  showLastPriceLine: boolean;
 }
 
 export interface MovingAverageIndicator {
@@ -117,12 +119,16 @@ export const DEFAULT_COLORS: ChartColors = BUILT_IN_TEMPLATES[0].colors;
 const DEFAULT_PREFERENCES: ChartPreferences = {
   showVolume: false,
   indicators: [],
+  showMaLabels: true,
+  showLastPriceLine: true,
 };
 
 function normalizePreferences(prefs: Partial<ChartPreferences> | null | undefined): ChartPreferences {
   return {
     showVolume: prefs?.showVolume ?? DEFAULT_PREFERENCES.showVolume,
     indicators: prefs?.indicators ?? DEFAULT_PREFERENCES.indicators,
+    showMaLabels: prefs?.showMaLabels ?? DEFAULT_PREFERENCES.showMaLabels,
+    showLastPriceLine: prefs?.showLastPriceLine ?? DEFAULT_PREFERENCES.showLastPriceLine,
   };
 }
 

@@ -91,6 +91,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const activeFilledUpCandle = useChartSettingsStore((s) => s.activeFilledUpCandle);
   const activeFilledDownCandle = useChartSettingsStore((s) => s.activeFilledDownCandle);
   const showVolume = useChartSettingsStore((s) => s.preferences.showVolume);
+  const showMaLabels = useChartSettingsStore((s) => s.preferences.showMaLabels);
+  const showLastPriceLine = useChartSettingsStore((s) => s.preferences.showLastPriceLine);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
@@ -118,6 +120,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const filledUpRef = useRef(activeFilledUpCandle);
   const filledDownRef = useRef(activeFilledDownCandle);
   const activeIndicatorsRef = useRef(activeIndicators);
+  const showMaLabelsRef = useRef(showMaLabels);
+  const showLastPriceLineRef = useRef(showLastPriceLine);
 
   // Keep refs in sync with current values
   useEffect(() => {
@@ -128,7 +132,9 @@ const Chart = ({ width, height }: ChartProps) => {
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
     activeIndicatorsRef.current = activeIndicators;
-  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators]);
+    showMaLabelsRef.current = showMaLabels;
+    showLastPriceLineRef.current = showLastPriceLine;
+  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaLabels, showLastPriceLine]);
 
   const syncIndicatorSeries = useCallback(() => {
     const chart = chartRef.current;
@@ -155,7 +161,7 @@ const Chart = ({ width, height }: ChartProps) => {
           color: movingAverage.color,
           lineWidth: movingAverage.lineWidth,
           title: `SMA ${movingAverage.period}`,
-          lastValueVisible: true,
+          lastValueVisible: showMaLabelsRef.current,
           priceLineVisible: false,
         });
         seriesMap.set(movingAverage.id, lineSeries);
@@ -164,6 +170,7 @@ const Chart = ({ width, height }: ChartProps) => {
           color: movingAverage.color,
           lineWidth: movingAverage.lineWidth,
           title: `SMA ${movingAverage.period}`,
+          lastValueVisible: showMaLabelsRef.current,
         });
       }
 
@@ -319,6 +326,7 @@ const Chart = ({ width, height }: ChartProps) => {
       borderDownColor: colors.candleDown,
       wickUpColor: colors.candleUp,
       wickDownColor: colors.candleDown,
+      priceLineVisible: showLastPriceLineRef.current,
       priceFormat: {
         type: "price",
         precision: 2,
@@ -377,6 +385,7 @@ const Chart = ({ width, height }: ChartProps) => {
       borderDownColor: activeColors.candleDown,
       wickUpColor: activeColors.candleUp,
       wickDownColor: activeColors.candleDown,
+      priceLineVisible: showLastPriceLine,
     });
 
     // Re-color volume bars with new template colors
@@ -388,13 +397,18 @@ const Chart = ({ width, height }: ChartProps) => {
       );
     }
 
+    if (!showLastPriceLine && priceLineRef.current && candleSeriesRef.current) {
+      candleSeriesRef.current.removePriceLine(priceLineRef.current);
+      priceLineRef.current = null;
+    }
+
     syncIndicatorSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle]);
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaLabels]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
     syncIndicatorSeries();
-  }, [activeIndicators, chartVersion, syncIndicatorSeries]);
+  }, [activeIndicators, showMaLabels, chartVersion, syncIndicatorSeries]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
@@ -546,7 +560,7 @@ const Chart = ({ width, height }: ChartProps) => {
         }
 
         // Post-market price line management
-        if (meta?.postMarketPrice != null) {
+        if (meta?.postMarketPrice != null && showLastPriceLineRef.current) {
           if (priceLineRef.current) {
             priceLineRef.current.applyOptions({ price: meta.postMarketPrice });
           } else {

@@ -9,6 +9,8 @@ interface ChartSettingsScreenProps {
   activeColors: ChartColors;
   preferences: ChartPreferences;
   onToggleVolume: () => void;
+  onToggleMaLabels: () => void;
+  onToggleLastPriceLine: () => void;
 }
 
 export default function ChartSettingsScreen({
@@ -18,6 +20,8 @@ export default function ChartSettingsScreen({
   activeColors,
   preferences,
   onToggleVolume,
+  onToggleMaLabels,
+  onToggleLastPriceLine,
 }: ChartSettingsScreenProps) {
   return (
     <>
@@ -51,6 +55,24 @@ export default function ChartSettingsScreen({
               <Toggle
                 checked={preferences.showVolume}
                 onChange={onToggleVolume}
+              />
+            }
+          />
+          <ListItem
+            title="Show MA Labels"
+            after={
+              <Toggle
+                checked={preferences.showMaLabels}
+                onChange={onToggleMaLabels}
+              />
+            }
+          />
+          <ListItem
+            title="Show Last Price Line"
+            after={
+              <Toggle
+                checked={preferences.showLastPriceLine}
+                onChange={onToggleLastPriceLine}
               />
             }
           />
