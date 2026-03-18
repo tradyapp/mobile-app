@@ -202,6 +202,7 @@ interface MarketplaceScreenProps {
   isLoadingStrategies: boolean;
   strategiesError: string | null;
   onOpenCreateStrategy: () => void;
+  onOpenStrategy: (strategy: StrategyRecord) => void;
 }
 
 function MarketplaceScreen({
@@ -211,6 +212,7 @@ function MarketplaceScreen({
   isLoadingStrategies,
   strategiesError,
   onOpenCreateStrategy,
+  onOpenStrategy,
 }: MarketplaceScreenProps) {
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
 
@@ -300,7 +302,12 @@ function MarketplaceScreen({
           ) : (
             <div className="space-y-3">
               {strategies.map((strategy) => (
-                <article key={strategy.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+                <button
+                  key={strategy.id}
+                  type="button"
+                  onClick={() => onOpenStrategy(strategy)}
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-left"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <StrategyLogo strategy={strategy} />
@@ -313,7 +320,7 @@ function MarketplaceScreen({
                       Saved
                     </span>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           )}
@@ -485,6 +492,197 @@ function CreateStrategyDrawer({ isOpen, onOpenChange, onCreated }: CreateStrateg
   );
 }
 
+interface StrategyConfigDrawerProps {
+  strategy: StrategyRecord | null;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUpdated: (strategy: StrategyRecord) => void;
+  onDeleted: (strategyId: string) => void;
+}
+
+function StrategyConfigDrawer({
+  strategy,
+  isOpen,
+  onOpenChange,
+  onUpdated,
+  onDeleted,
+}: StrategyConfigDrawerProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !strategy) return;
+    setName(strategy.name);
+    setDescription(strategy.description ?? '');
+    setPhotoUrl(strategy.photo_url);
+    setIsSaving(false);
+    setIsDeleting(false);
+    setIsProcessingPhoto(false);
+    setError(null);
+  }, [isOpen, strategy]);
+
+  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!strategy || !name.trim() || isSaving || isDeleting || isProcessingPhoto) return;
+
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await strategiesService.updateStrategy(strategy.id, {
+        name: name.trim(),
+        description: description.trim() ? description.trim() : null,
+        photo_url: photoUrl,
+      });
+      if (!updated) throw new Error('Failed to update strategy');
+      onUpdated(updated);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update strategy');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!strategy || isSaving || isDeleting) return;
+    const confirmed = window.confirm(`Delete strategy "${strategy.name}"?`);
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await strategiesService.deleteStrategy(strategy.id);
+      onDeleted(strategy.id);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete strategy');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleUploadPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setIsProcessingPhoto(true);
+    setError(null);
+    try {
+      const optimized = await optimizeImageToWebp40(file);
+      setPhotoUrl(optimized);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process image');
+    } finally {
+      setIsProcessingPhoto(false);
+    }
+  };
+
+  return (
+    <AppDrawer
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      title="Strategy Config"
+      height="auto"
+      description="Edit strategy settings."
+    >
+      <form onSubmit={handleSave} className="space-y-4 px-1 pb-6">
+        <div className="space-y-1.5">
+          <label htmlFor="strategy-config-name" className="text-sm text-zinc-300">Name</label>
+          <input
+            id="strategy-config-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="strategy-config-description" className="text-sm text-zinc-300">Description</label>
+          <textarea
+            id="strategy-config-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm text-zinc-300">Photo</div>
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
+              {photoUrl ? (
+                <img src={photoUrl} alt="Strategy logo preview" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-500">40x40</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPhoto}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingPhoto}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-200 disabled:opacity-50"
+              >
+                {isProcessingPhoto ? 'Optimizing...' : 'Upload Photo'}
+              </button>
+              {photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl(null)}
+                  disabled={isProcessingPhoto}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isSaving || isDeleting || isProcessingPhoto || !name.trim()}
+          className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={isSaving || isDeleting}
+          className="w-full rounded-lg border border-red-900 bg-red-950/40 px-4 py-2.5 text-sm font-semibold text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isDeleting ? 'Deleting...' : 'Delete Strategy'}
+        </button>
+      </form>
+    </AppDrawer>
+  );
+}
+
 export default function OrionTab() {
   const user = useAuthStore((state) => state.user);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -495,6 +693,8 @@ export default function OrionTab() {
   const [isStrategiesLoading, setIsStrategiesLoading] = useState(false);
   const [strategiesError, setStrategiesError] = useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyRecord | null>(null);
+  const [isStrategyConfigOpen, setIsStrategyConfigOpen] = useState(false);
 
   const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
   const isMarketplace = view === 'marketplace';
@@ -564,6 +764,10 @@ export default function OrionTab() {
           isLoadingStrategies={isStrategiesLoading}
           strategiesError={strategiesError}
           onOpenCreateStrategy={() => setIsCreateDrawerOpen(true)}
+          onOpenStrategy={(strategy) => {
+            setSelectedStrategy(strategy);
+            setIsStrategyConfigOpen(true);
+          }}
         />
       ) : (
         <div className="space-y-2 max-w-xl mx-auto pb-24">
@@ -600,6 +804,23 @@ export default function OrionTab() {
         onOpenChange={setIsCreateDrawerOpen}
         onCreated={(strategy) => {
           setStrategies((prev) => [strategy, ...prev]);
+        }}
+      />
+
+      <StrategyConfigDrawer
+        strategy={selectedStrategy}
+        isOpen={isStrategyConfigOpen}
+        onOpenChange={(open) => {
+          setIsStrategyConfigOpen(open);
+          if (!open) setSelectedStrategy(null);
+        }}
+        onUpdated={(updated) => {
+          setStrategies((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+          setSelectedStrategy(updated);
+        }}
+        onDeleted={(strategyId) => {
+          setStrategies((prev) => prev.filter((item) => item.id !== strategyId));
+          setSelectedStrategy(null);
         }}
       />
     </>
