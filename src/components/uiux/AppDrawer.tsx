@@ -52,7 +52,7 @@ export default function AppDrawer({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/40 z-1002" />
         <Drawer.Content
-          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 ${heightClasses[height]}`}
+          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 overflow-y-auto overscroll-contain ${heightClasses[height]}`}
         >
           {description && (
             <Drawer.Description className="sr-only">
@@ -60,18 +60,18 @@ export default function AppDrawer({
             </Drawer.Description>
           )}
           <div
-            className="pt-4 bg-zinc-950 rounded-t-[10px] flex-1 flex flex-col overflow-hidden border-t border-zinc-800"
+            className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-full"
             style={safeAreaPaddingStyle}
           >
             <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
-            <div className="w-full flex-1 flex flex-col overflow-hidden">
+            <div className="w-full pb-2">
               {useScreenNav ? (
                 <AnimatedDrawerNav
                   screens={screens}
                   title={title}
                   isOpen={isOpen}
                   onOpenChange={onOpenChange}
-                  wrapperClassName={contentClassName}
+                  wrapperClassName={contentClassName ?? "pb-6"}
                 />
               ) : (
                 <>

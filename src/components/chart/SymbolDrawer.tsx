@@ -237,7 +237,7 @@ export default function SymbolDrawer({
       </div>
 
       {/* Symbols List */}
-      <div ref={listRef} className="flex-1 overflow-y-auto space-y-1.5">
+      <div ref={listRef} className="space-y-1.5 pb-6">
         {isLoading ? (
           <div className="text-center text-zinc-500 py-8">
             Loading symbols...

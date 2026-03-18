@@ -72,7 +72,7 @@ export default function ProfileDrawer({
         title="Account"
         height="full"
       >
-        <div className="flex-1 overflow-y-auto">
+        <div>
           {/* Profile Section */}
           <List strong className="mb-6 rounded-xl overflow-hidden">
             <ListItem
