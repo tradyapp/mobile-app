@@ -45,7 +45,10 @@ const AppLayout = () => {
 
       <div
         className="fixed left-0 right-0 z-100"
-        style={{ bottom: isLandscape ? "-8px" : "0px" }}
+        style={{
+          bottom: "0px",
+          transform: isLandscape ? "translateY(6px)" : "none",
+        }}
       >
         <Tabbar labels={true} icons={true} className="pr-24">
           <ToolbarPane>
@@ -62,7 +65,8 @@ const AppLayout = () => {
         </Tabbar>
 
         <div
-          className={isLandscape ? "absolute right-2 bottom-3 z-101" : "absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101"}
+          className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101"
+          style={isLandscape ? { transform: "translateX(8px)" } : undefined}
         >
           <TouchableButton className="rounded-full ">
             <div className="w-16 h-16 flex items-center justify-center">
