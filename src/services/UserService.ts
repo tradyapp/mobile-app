@@ -80,19 +80,32 @@ class UserService {
 
   async updateUserProfile(uid: string, data: Partial<UserType>): Promise<void> {
     const payload: Record<string, unknown> = {
-      id: uid,
       display_name: typeof data.displayName === "string" ? data.displayName : "",
       locale: typeof data.locale === "string" && data.locale ? data.locale : "es",
       timezone: typeof data.timezone === "string" && data.timezone ? data.timezone : "America/Bogota",
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    // Try update first
+    const { data: updated, error: updateError } = await supabase
       .from("user_profiles")
-      .upsert(payload, { onConflict: "id" });
+      .update(payload)
+      .eq("id", uid)
+      .select("id");
 
-    if (error) {
-      throw error;
+    if (updateError) {
+      throw updateError;
+    }
+
+    // If no row was updated, insert a new one
+    if (!updated || updated.length === 0) {
+      const { error: insertError } = await supabase
+        .from("user_profiles")
+        .insert({ id: uid, ...payload });
+
+      if (insertError) {
+        throw insertError;
+      }
     }
   }
 
