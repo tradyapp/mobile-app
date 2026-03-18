@@ -265,6 +265,7 @@ export default function LearnTab() {
     if (!selectedLesson) return null;
     const videoUrl = getLessonVideoUrl(selectedLesson);
     const textContent = getLessonTextContent(selectedLesson);
+    const poster = getLessonThumbnail(selectedLesson);
 
     return (
       <Block className="pt-2 pb-24">
@@ -277,7 +278,7 @@ export default function LearnTab() {
 
         {videoUrl && (
           <div className="mb-4 rounded-xl overflow-hidden border border-zinc-800 bg-black">
-            <video src={videoUrl} controls className="w-full aspect-video object-contain" />
+            <video src={videoUrl} controls poster={poster ?? undefined} className="w-full aspect-video object-contain" />
           </div>
         )}
 
