@@ -1,13 +1,126 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import { List, ListItem, ListButton, Dialog, DialogButton } from "konsta/react";
-import AppDrawer from "../components/uiux/AppDrawer";
+import AppDrawer, { type DrawerScreen } from "../components/uiux/AppDrawer";
+import { useDrawerNav } from "../components/uiux/drawer-nav";
 import { authService } from "@/services/AuthService";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
+
+// ── Shared context for profile state ──
+
+interface ProfileCtxValue {
+  locale: "en" | "es";
+  isUpdatingLocale: boolean;
+  handleLanguageChange: (nextLocale: "en" | "es") => void;
+  setIsLogoutDialogOpen: (open: boolean) => void;
+}
+
+const ProfileCtx = createContext<ProfileCtxValue>(null!);
+
+// ── Screen: Account (root) ──
+
+function AccountScreen() {
+  const { navigateTo } = useDrawerNav();
+  const { locale, isUpdatingLocale, setIsLogoutDialogOpen } = useContext(ProfileCtx);
+
+  return (
+    <div>
+      <List strong className="mb-6 rounded-xl overflow-hidden">
+        <ListItem
+          link
+          title={
+            <div className="flex flex-col">
+              <span className="text-base text-zinc-200 font-medium">
+                John Doe
+              </span>
+              <span className="text-sm text-zinc-500">
+                john.doe@email.com
+              </span>
+            </div>
+          }
+          media={
+            <img
+              src="/img/default-user.jpg"
+              alt="Profile"
+              className="w-14 h-14 rounded-full"
+            />
+          }
+        />
+        <ListButton>
+          <span className="text-zinc-400 w-full flex justify-between">
+            <span> Subscription status: </span>
+            <span className="text-brand-primary font-medium">Active</span>
+          </span>
+        </ListButton>
+      </List>
+
+      <List strong className="mb-6 rounded-xl overflow-hidden">
+        <ListItem link title="Trading Accounts" />
+        <ListItem link title="Subscriptions" />
+        <ListItem
+          link
+          title="Language"
+          after={isUpdatingLocale ? "Saving..." : locale === "es" ? "Español" : "English"}
+          onClick={() => navigateTo("language")}
+        />
+        <ListItem link title="Contact" />
+      </List>
+
+      <List strong className="rounded-xl overflow-hidden">
+        <ListButton
+          className="k-color-brand-red text-rose-500"
+          onClick={() => setIsLogoutDialogOpen(true)}
+        >
+          Sign Out
+        </ListButton>
+      </List>
+    </div>
+  );
+}
+
+// ── Screen: Language ──
+
+const LANGUAGES: { code: "en" | "es"; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
+];
+
+function LanguageScreen() {
+  const { goBack } = useDrawerNav();
+  const { locale, handleLanguageChange } = useContext(ProfileCtx);
+
+  const onSelect = (code: "en" | "es") => {
+    handleLanguageChange(code);
+    goBack();
+  };
+
+  return (
+    <List strong className="rounded-xl overflow-hidden">
+      {LANGUAGES.map((lang) => (
+        <ListItem
+          key={lang.code}
+          link
+          title={lang.label}
+          after={locale === lang.code ? "✓" : ""}
+          onClick={() => onSelect(lang.code)}
+        />
+      ))}
+    </List>
+  );
+}
+
+// ── Screen definitions ──
+
+const SCREENS: DrawerScreen[] = [
+  { name: "account", title: "Account", component: AccountScreen, isRoot: true },
+  { name: "language", title: "Language", component: LanguageScreen },
+];
+
+// ── Main component ──
 
 interface ProfileDrawerProps {
   isOpen: boolean;
@@ -19,7 +132,6 @@ export default function ProfileDrawer({
   onOpenChange,
 }: ProfileDrawerProps) {
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
-  const [isLanguageDialogOpen, setIsLanguageDialogOpen] = useState(false);
   const [locale, setLocale] = useState<"en" | "es">("en");
   const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
   const user = useAuthStore((state) => state.user);
@@ -50,10 +162,7 @@ export default function ProfileDrawer({
   }, [isOpen, user?.uid, setStoreLocale]);
 
   const handleLanguageChange = async (nextLocale: "en" | "es") => {
-    if (!user?.uid || nextLocale === locale || isUpdatingLocale) {
-      setIsLanguageDialogOpen(false);
-      return;
-    }
+    if (!user?.uid || nextLocale === locale || isUpdatingLocale) return;
 
     setLocale(nextLocale);
     setStoreLocale(nextLocale);
@@ -64,79 +173,27 @@ export default function ProfileDrawer({
       console.error("Error updating language:", error);
     } finally {
       setIsUpdatingLocale(false);
-      setIsLanguageDialogOpen(false);
     }
   };
 
+  const ctxValue: ProfileCtxValue = {
+    locale,
+    isUpdatingLocale,
+    handleLanguageChange,
+    setIsLogoutDialogOpen,
+  };
+
   return (
-    <>
+    <ProfileCtx.Provider value={ctxValue}>
       <AppDrawer
         isOpen={isOpen}
         onOpenChange={onOpenChange}
         title="Account"
         height="full"
-      >
-        <div>
-          {/* Profile Section */}
-          <List strong className="mb-6 rounded-xl overflow-hidden">
-            <ListItem
-              link
-              title={
-                <div className="flex flex-col">
-                  <span className="text-base text-zinc-200 font-medium">
-                    John Doe
-                  </span>
-                  <span className="text-sm text-zinc-500">
-                    john.doe@email.com
-                  </span>
-                </div>
-              }
-              media={
-                <img
-                  src="/img/default-user.jpg"
-                  alt="Profile"
-                  className="w-14 h-14 rounded-full"
-                />
-              }
-            />
-            <ListButton>
-              <span className="text-zinc-400 w-full flex justify-between">
-                <span className=""> Subscription status: </span>
-                <span className="text-brand-primary font-medium">
-                  Active
-                </span>
-              </span>
-            </ListButton>
-          </List>
+        description="User profile, language, and account settings."
+        screens={SCREENS}
+      />
 
-          {/* Menu Options */}
-          <List strong className="mb-6 rounded-xl overflow-hidden">
-            <ListItem link title="Trading Accounts" />
-            <ListItem link title="Subscriptions" />
-            <ListItem
-              link
-              title="Language"
-              after={isUpdatingLocale ? "Saving..." : locale === "es" ? "Español" : "English"}
-              onClick={() => setIsLanguageDialogOpen(true)}
-            />
-            <ListItem link title="Contact" />
-          </List>
-
-          {/* Sign Out */}
-          <List strong className="rounded-xl overflow-hidden">
-            <ListButton
-              className="k-color-brand-red text-rose-500"
-              onClick={() => {
-                setIsLogoutDialogOpen(true);
-              }}
-            >
-              Sign Out
-            </ListButton>
-          </List>
-        </div>
-      </AppDrawer>
-
-      {/* Logout Confirmation Dialog */}
       {typeof window !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-9999 pointer-events-none">
@@ -175,49 +232,10 @@ export default function ProfileDrawer({
                   </>
                 }
               />
-
-              <Dialog
-                backdrop
-                opened={isLanguageDialogOpen}
-                onBackdropClick={(e) => {
-                  e?.stopPropagation?.();
-                  setIsLanguageDialogOpen(false);
-                }}
-                title="Language"
-                content="Choose your app language"
-                buttons={
-                  <>
-                    <DialogButton
-                      onClick={(e) => {
-                        e?.stopPropagation?.();
-                        void handleLanguageChange("en");
-                      }}
-                    >
-                      English {locale === "en" ? "✓" : ""}
-                    </DialogButton>
-                    <DialogButton
-                      onClick={(e) => {
-                        e?.stopPropagation?.();
-                        void handleLanguageChange("es");
-                      }}
-                    >
-                      Español {locale === "es" ? "✓" : ""}
-                    </DialogButton>
-                    <DialogButton
-                      onClick={(e) => {
-                        e?.stopPropagation?.();
-                        setIsLanguageDialogOpen(false);
-                      }}
-                    >
-                      Cancel
-                    </DialogButton>
-                  </>
-                }
-              />
             </div>
           </div>,
           document.body
         )}
-    </>
+    </ProfileCtx.Provider>
   );
 }
