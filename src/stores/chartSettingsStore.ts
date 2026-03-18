@@ -25,7 +25,8 @@ export interface ChartTemplate {
 export interface ChartPreferences {
   showVolume: boolean;
   indicators: ChartIndicator[];
-  showMaLabels: boolean;
+  showMaNameLabels: boolean;
+  showMaPriceLabels: boolean;
   showLastPriceLine: boolean;
 }
 
@@ -119,15 +120,18 @@ export const DEFAULT_COLORS: ChartColors = BUILT_IN_TEMPLATES[0].colors;
 const DEFAULT_PREFERENCES: ChartPreferences = {
   showVolume: false,
   indicators: [],
-  showMaLabels: true,
+  showMaNameLabels: true,
+  showMaPriceLabels: true,
   showLastPriceLine: true,
 };
 
 function normalizePreferences(prefs: Partial<ChartPreferences> | null | undefined): ChartPreferences {
+  const legacyShowMaLabels = (prefs as { showMaLabels?: boolean } | null | undefined)?.showMaLabels;
   return {
     showVolume: prefs?.showVolume ?? DEFAULT_PREFERENCES.showVolume,
     indicators: prefs?.indicators ?? DEFAULT_PREFERENCES.indicators,
-    showMaLabels: prefs?.showMaLabels ?? DEFAULT_PREFERENCES.showMaLabels,
+    showMaNameLabels: prefs?.showMaNameLabels ?? legacyShowMaLabels ?? DEFAULT_PREFERENCES.showMaNameLabels,
+    showMaPriceLabels: prefs?.showMaPriceLabels ?? legacyShowMaLabels ?? DEFAULT_PREFERENCES.showMaPriceLabels,
     showLastPriceLine: prefs?.showLastPriceLine ?? DEFAULT_PREFERENCES.showLastPriceLine,
   };
 }

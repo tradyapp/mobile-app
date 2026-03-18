@@ -128,7 +128,8 @@ function ChartSettingsScreenWrapper() {
       activeColors={activeColors}
       preferences={preferences}
       onToggleVolume={() => setPreferences({ showVolume: !preferences.showVolume })}
-      onToggleMaLabels={() => setPreferences({ showMaLabels: !preferences.showMaLabels })}
+      onToggleMaNameLabels={() => setPreferences({ showMaNameLabels: !preferences.showMaNameLabels })}
+      onToggleMaPriceLabels={() => setPreferences({ showMaPriceLabels: !preferences.showMaPriceLabels })}
       onToggleLastPriceLine={() => setPreferences({ showLastPriceLine: !preferences.showLastPriceLine })}
     />
   );

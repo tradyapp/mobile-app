@@ -91,7 +91,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const activeFilledUpCandle = useChartSettingsStore((s) => s.activeFilledUpCandle);
   const activeFilledDownCandle = useChartSettingsStore((s) => s.activeFilledDownCandle);
   const showVolume = useChartSettingsStore((s) => s.preferences.showVolume);
-  const showMaLabels = useChartSettingsStore((s) => s.preferences.showMaLabels);
+  const showMaNameLabels = useChartSettingsStore((s) => s.preferences.showMaNameLabels);
+  const showMaPriceLabels = useChartSettingsStore((s) => s.preferences.showMaPriceLabels);
   const showLastPriceLine = useChartSettingsStore((s) => s.preferences.showLastPriceLine);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -120,7 +121,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const filledUpRef = useRef(activeFilledUpCandle);
   const filledDownRef = useRef(activeFilledDownCandle);
   const activeIndicatorsRef = useRef(activeIndicators);
-  const showMaLabelsRef = useRef(showMaLabels);
+  const showMaNameLabelsRef = useRef(showMaNameLabels);
+  const showMaPriceLabelsRef = useRef(showMaPriceLabels);
   const showLastPriceLineRef = useRef(showLastPriceLine);
 
   // Keep refs in sync with current values
@@ -132,9 +134,10 @@ const Chart = ({ width, height }: ChartProps) => {
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
     activeIndicatorsRef.current = activeIndicators;
-    showMaLabelsRef.current = showMaLabels;
+    showMaNameLabelsRef.current = showMaNameLabels;
+    showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
-  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaLabels, showLastPriceLine]);
+  }, [symbol, symbolType, timeframe, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
 
   const syncIndicatorSeries = useCallback(() => {
     const chart = chartRef.current;
@@ -160,8 +163,8 @@ const Chart = ({ width, height }: ChartProps) => {
         lineSeries = chart.addSeries(LineSeries, {
           color: movingAverage.color,
           lineWidth: movingAverage.lineWidth,
-          title: `SMA ${movingAverage.period}`,
-          lastValueVisible: showMaLabelsRef.current,
+          title: showMaNameLabelsRef.current ? `SMA ${movingAverage.period}` : '',
+          lastValueVisible: showMaPriceLabelsRef.current,
           priceLineVisible: false,
         });
         seriesMap.set(movingAverage.id, lineSeries);
@@ -169,8 +172,8 @@ const Chart = ({ width, height }: ChartProps) => {
         lineSeries.applyOptions({
           color: movingAverage.color,
           lineWidth: movingAverage.lineWidth,
-          title: `SMA ${movingAverage.period}`,
-          lastValueVisible: showMaLabelsRef.current,
+          title: showMaNameLabelsRef.current ? `SMA ${movingAverage.period}` : '',
+          lastValueVisible: showMaPriceLabelsRef.current,
         });
       }
 
@@ -403,12 +406,12 @@ const Chart = ({ width, height }: ChartProps) => {
     }
 
     syncIndicatorSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaLabels]);
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
     syncIndicatorSeries();
-  }, [activeIndicators, showMaLabels, chartVersion, syncIndicatorSeries]);
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, syncIndicatorSeries]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
