@@ -61,7 +61,6 @@ const generateMockNotifications = (): Notification[] => {
   for (let i = 0; i < 200; i++) {
     const hoursAgo = Math.floor(Math.random() * 720);
     const timestamp = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-
     notifications.push({
       id: i,
       ticker: tickers[Math.floor(Math.random() * tickers.length)],
@@ -84,22 +83,18 @@ const getDateLabel = (date: Date): string => {
   if (inputDate.getTime() === yesterday.getTime()) return 'Yesterday';
 
   const daysAgo = Math.floor((today.getTime() - inputDate.getTime()) / (24 * 60 * 60 * 1000));
-  if (daysAgo < 7) {
-    return date.toLocaleDateString('en-US', { weekday: 'long' });
-  }
+  if (daysAgo < 7) return date.toLocaleDateString('en-US', { weekday: 'long' });
 
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const groupByDate = (notifications: Notification[]) => {
   const groups: { [key: string]: Notification[] } = {};
-
   notifications.forEach((notification) => {
     const label = getDateLabel(notification.timestamp);
     if (!groups[label]) groups[label] = [];
     groups[label].push(notification);
   });
-
   return groups;
 };
 
@@ -115,7 +110,6 @@ function optimizeImageToWebp40(file: File): Promise<string> {
         canvas.height = PHOTO_SIZE_PX;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          URL.revokeObjectURL(url);
           reject(new Error('Unable to process image'));
           return;
         }
@@ -166,6 +160,31 @@ function optimizeImageToWebp40(file: File): Promise<string> {
   });
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Failed to read image file'));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function isSvgFile(file: File): boolean {
+  return file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+}
+
+async function processStrategyPhoto(file: File): Promise<string> {
+  if (isSvgFile(file)) return readFileAsDataUrl(file);
+  return optimizeImageToWebp40(file);
+}
+
 const StarRating = ({ stars }: { stars: number }) => (
   <div className="flex gap-0.5">
     {[1, 2, 3, 4, 5].map((star) => (
@@ -202,7 +221,7 @@ function PencilIcon() {
 
 function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'photo_url'> }) {
   if (strategy.photo_url) {
-    return <img src={strategy.photo_url} alt={strategy.name} className="h-11 w-11 rounded-xl object-cover" />;
+    return <img src={strategy.photo_url} alt={strategy.name} className="h-11 w-11 rounded-xl bg-zinc-800 object-contain" />;
   }
 
   const initials = strategy.name
@@ -227,7 +246,6 @@ interface StrategyFormScreenProps {
   draft: StrategyDraft;
   onChangeDraft: (updater: (prev: StrategyDraft) => StrategyDraft) => void;
   isSubmitting: boolean;
-  isProcessingPhoto: boolean;
   error: string | null;
   submitLabel: string;
   onBack: () => void;
@@ -240,7 +258,6 @@ function StrategyFormScreen({
   draft,
   onChangeDraft,
   isSubmitting,
-  isProcessingPhoto,
   error,
   submitLabel,
   onBack,
@@ -248,17 +265,23 @@ function StrategyFormScreen({
   onDelete,
 }: StrategyFormScreenProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
 
+    setIsProcessingPhoto(true);
+    setPhotoError(null);
     try {
-      const optimized = await optimizeImageToWebp40(file);
-      onChangeDraft((prev) => ({ ...prev, photoUrl: optimized }));
+      const processed = await processStrategyPhoto(file);
+      onChangeDraft((prev) => ({ ...prev, photoUrl: processed }));
     } catch (err) {
-      console.error('Image processing error:', err);
+      setPhotoError(err instanceof Error ? err.message : 'Image processing error');
+    } finally {
+      setIsProcessingPhoto(false);
     }
   };
 
@@ -279,18 +302,18 @@ function StrategyFormScreen({
       <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
-            <div className="h-24 w-24 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-800">
+            <div className="h-10 w-10 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
               {draft.photoUrl ? (
-                <img src={draft.photoUrl} alt="Strategy logo" className="h-full w-full object-cover" />
+                <img src={draft.photoUrl} alt="Strategy logo" className="h-full w-full object-contain" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-[11px] text-zinc-500">40x40</div>
+                <div className="flex h-full w-full items-center justify-center text-[9px] text-zinc-500">40x40</div>
               )}
             </div>
             {draft.photoUrl && (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-200"
+                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-200"
                 aria-label="Edit photo"
               >
                 <PencilIcon />
@@ -301,7 +324,7 @@ function StrategyFormScreen({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.svg"
             onChange={handleUpload}
             className="hidden"
           />
@@ -313,7 +336,7 @@ function StrategyFormScreen({
               disabled={isProcessingPhoto}
               className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs font-medium text-zinc-200 disabled:opacity-50"
             >
-              {isProcessingPhoto ? 'Optimizing...' : 'Upload Photo'}
+              {isProcessingPhoto ? 'Processing...' : 'Upload Photo'}
             </button>
           )}
         </div>
@@ -342,9 +365,9 @@ function StrategyFormScreen({
           />
         </div>
 
-        {error && (
+        {(error || photoError) && (
           <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-            {error}
+            {error || photoError}
           </div>
         )}
 
@@ -384,13 +407,11 @@ interface MarketplaceScreenProps {
   createDraft: StrategyDraft;
   onChangeCreateDraft: (updater: (prev: StrategyDraft) => StrategyDraft) => void;
   isCreatingStrategy: boolean;
-  isProcessingCreatePhoto: boolean;
   createError: string | null;
   onCreate: () => void;
   detailDraft: StrategyDraft;
   onChangeDetailDraft: (updater: (prev: StrategyDraft) => StrategyDraft) => void;
   isSavingDetail: boolean;
-  isProcessingDetailPhoto: boolean;
   detailError: string | null;
   onSaveDetail: () => void;
   onDeleteDetail: () => void;
@@ -408,13 +429,11 @@ function MarketplaceScreen({
   createDraft,
   onChangeCreateDraft,
   isCreatingStrategy,
-  isProcessingCreatePhoto,
   createError,
   onCreate,
   detailDraft,
   onChangeDetailDraft,
   isSavingDetail,
-  isProcessingDetailPhoto,
   detailError,
   onSaveDetail,
   onDeleteDetail,
@@ -540,7 +559,6 @@ function MarketplaceScreen({
               draft={createDraft}
               onChangeDraft={onChangeCreateDraft}
               isSubmitting={isCreatingStrategy}
-              isProcessingPhoto={isProcessingCreatePhoto}
               error={createError}
               submitLabel="Create Strategy"
               onBack={() => onChangeMyStrategiesScreen('list')}
@@ -554,7 +572,6 @@ function MarketplaceScreen({
               draft={detailDraft}
               onChangeDraft={onChangeDetailDraft}
               isSubmitting={isSavingDetail}
-              isProcessingPhoto={isProcessingDetailPhoto}
               error={detailError}
               submitLabel="Save Changes"
               onBack={() => onChangeMyStrategiesScreen('list')}
@@ -669,8 +686,8 @@ export default function OrionTab() {
       if (!updated) throw new Error('Failed to update strategy');
 
       setStrategies((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setMyStrategiesScreen('list');
       setSelectedStrategyId(null);
+      setMyStrategiesScreen('list');
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : 'Failed to update strategy');
     } finally {
@@ -679,7 +696,7 @@ export default function OrionTab() {
   };
 
   const handleDeleteStrategy = async () => {
-    if (!selectedStrategy) return;
+    if (!selectedStrategy || isSavingDetail) return;
     const confirmed = window.confirm(`Delete strategy "${selectedStrategy.name}"?`);
     if (!confirmed) return;
 
@@ -688,8 +705,8 @@ export default function OrionTab() {
     try {
       await strategiesService.deleteStrategy(selectedStrategy.id);
       setStrategies((prev) => prev.filter((item) => item.id !== selectedStrategy.id));
-      setMyStrategiesScreen('list');
       setSelectedStrategyId(null);
+      setMyStrategiesScreen('list');
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : 'Failed to delete strategy');
     } finally {
@@ -758,13 +775,11 @@ export default function OrionTab() {
           createDraft={createDraft}
           onChangeCreateDraft={(updater) => setCreateDraft((prev) => updater(prev))}
           isCreatingStrategy={isCreatingStrategy}
-          isProcessingCreatePhoto={false}
           createError={createError}
           onCreate={handleCreateStrategy}
           detailDraft={detailDraft}
           onChangeDetailDraft={(updater) => setDetailDraft((prev) => updater(prev))}
           isSavingDetail={isSavingDetail}
-          isProcessingDetailPhoto={false}
           detailError={detailError}
           onSaveDetail={handleSaveStrategy}
           onDeleteDetail={handleDeleteStrategy}
