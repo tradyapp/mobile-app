@@ -5,6 +5,7 @@ import { useNavigationStore } from "@/stores/navigationStore";
 import OrionTab from "@/modules/tabs/OrionTab";
 import ChartTab from "@/modules/tabs/ChartTab";
 import LearnTab from "@/modules/tabs/LearnTab";
+import { useWindowSize } from "@/hooks/useWindowSize";
 
 import TouchableButton from "./uiux/TouchableButton";
 import SearchIcon from "./icons/SearchIcon";
@@ -14,6 +15,8 @@ import OrionIcon from "./icons/OrionIcon";
 
 const AppLayout = () => {
   const { currentTab, setCurrentTab } = useNavigationStore();
+  const { width, height } = useWindowSize();
+  const isLandscape = width > height;
 
   const tabs = [
     { id: "orion" as const, label: "Orion", icon: <OrionIcon/>, component: OrionTab },
@@ -40,7 +43,10 @@ const AppLayout = () => {
         </AnimatePresence>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-100">
+      <div
+        className="fixed left-0 right-0 z-100"
+        style={{ bottom: isLandscape ? "-8px" : "0px" }}
+      >
         <Tabbar labels={true} icons={true} className="pr-24">
           <ToolbarPane>
             {tabs.map((tab) => (
@@ -55,7 +61,9 @@ const AppLayout = () => {
           </ToolbarPane>
         </Tabbar>
 
-        <div className="absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101">
+        <div
+          className={isLandscape ? "absolute right-2 bottom-3 z-101" : "absolute right-4 md:left-1/2 md:ml-28 bottom-4 z-101"}
+        >
           <TouchableButton className="rounded-full ">
             <div className="w-16 h-16 flex items-center justify-center">
               <SearchIcon />
