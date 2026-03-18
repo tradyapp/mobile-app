@@ -582,11 +582,28 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               nodeTypes={nodeTypes}
+              proOptions={{ hideAttribution: true }}
               fitView
             >
               <Background color="#3f3f46" gap={16} />
-              <Controls />
+              <Controls className="orion-nodes-controls" />
             </ReactFlow>
+            <style>{`
+              .orion-nodes-controls {
+                box-shadow: none !important;
+              }
+              .orion-nodes-controls .react-flow__controls-button {
+                background: #09090b !important;
+                border-color: #27272a !important;
+                color: #ffffff !important;
+              }
+              .orion-nodes-controls .react-flow__controls-button svg {
+                fill: #ffffff !important;
+              }
+              .orion-nodes-controls .react-flow__controls-button:hover {
+                background: #18181b !important;
+              }
+            `}</style>
           </div>
         </div>
       </div>
