@@ -79,8 +79,6 @@ export default function AppDrawer({
     if (shouldClose) onOpenChange(false);
   };
 
-  const enablePullToCloseGesture = !useScreenNav;
-
   return (
     <Drawer.Root open={isOpen} onOpenChange={onOpenChange}>
       <Drawer.Portal>
@@ -96,10 +94,10 @@ export default function AppDrawer({
           <div
             ref={scrollContainerRef}
             className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y]"
-            onTouchStart={enablePullToCloseGesture ? handleTouchStart : undefined}
-            onTouchMove={enablePullToCloseGesture ? handleTouchMove : undefined}
-            onTouchEnd={enablePullToCloseGesture ? handleTouchEnd : undefined}
-            onTouchCancel={enablePullToCloseGesture ? handleTouchEnd : undefined}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
           >
             <div
               className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-full"
