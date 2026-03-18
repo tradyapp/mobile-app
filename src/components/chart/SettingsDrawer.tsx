@@ -19,6 +19,7 @@ import {
 } from "@/stores/drawingTemplateStore";
 import {
   ensureColorInPalette,
+  getCustomColors,
   saveCustomColors,
 } from "./drawing-style/shared";
 import TemplateGridView from "./drawing-style/TemplateGridView";
@@ -36,6 +37,7 @@ import ColorPickerScreen from "./settings-drawer/ColorPickerScreen";
 import DrawingsScreen from "./settings-drawer/DrawingsScreen";
 import IndicatorsScreen from "./settings-drawer/IndicatorsScreen";
 import AddIndicatorScreen from "./settings-drawer/AddIndicatorScreen";
+import IndicatorAttributesScreen from "./settings-drawer/IndicatorAttributesScreen";
 
 // ── Domain context for SettingsDrawer screens ──
 
@@ -75,6 +77,10 @@ interface SettingsCtxValue {
   setDrawingColorOpacity: React.Dispatch<React.SetStateAction<number>>;
   drawingCustomColors: string[];
   setDrawingCustomColors: React.Dispatch<React.SetStateAction<string[]>>;
+  indicatorSelectedColor: string;
+  setIndicatorSelectedColor: React.Dispatch<React.SetStateAction<string>>;
+  indicatorCustomColors: string[];
+  setIndicatorCustomColors: React.Dispatch<React.SetStateAction<string[]>>;
   getDrawingDefaultTemplate: (cat: DrawingTemplateCategory) => DrawingTemplate;
   setDrawingDefaultTemplate: (cat: DrawingTemplateCategory, id: string) => void;
 }
@@ -247,6 +253,7 @@ function IndicatorsScreenWrapper() {
       onClose={close}
       indicators={preferences.indicators}
       onAddIndicator={() => navigateTo('add-indicator')}
+      onOpenAttributes={(id: string) => navigateTo('indicator-attributes', { id })}
       onRemoveIndicator={(id: string) => {
         setPreferences({
           indicators: preferences.indicators.filter((indicator) => indicator.id !== id),
@@ -289,6 +296,101 @@ function AddIndicatorScreenWrapper() {
         });
         goBack();
       }}
+    />
+  );
+}
+
+function IndicatorAttributesScreenWrapper() {
+  const ctx = useContext(SettingsCtx);
+  const { goBack, close, navigateTo, params, goBackTo } = useDrawerNav();
+  const preferences = useChartSettingsStore((s) => s.preferences);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
+
+  const indicatorId = typeof params.id === 'string' ? params.id : '';
+  const indicator = preferences.indicators.find((item) => item.id === indicatorId && item.type === 'sma');
+
+  if (!indicator) {
+    return (
+      <div className="px-4 py-8 text-center text-zinc-400">
+        Indicator not found.
+      </div>
+    );
+  }
+
+  return (
+    <IndicatorAttributesScreen
+      onBack={goBack}
+      onClose={close}
+      indicator={indicator}
+      onOpenColorPicker={() => {
+        ctx.setIndicatorSelectedColor(indicator.color);
+        ctx.setIndicatorCustomColors(getCustomColors());
+        navigateTo('indicator-color-picker', { id: indicator.id });
+      }}
+      onUpdate={(partial) => {
+        setPreferences({
+          indicators: preferences.indicators.map((item) => {
+            if (item.id !== indicator.id || item.type !== 'sma') return item;
+            return { ...item, ...partial };
+          }),
+        });
+      }}
+      onRemove={() => {
+        setPreferences({
+          indicators: preferences.indicators.filter((item) => item.id !== indicator.id),
+        });
+        goBackTo('indicators');
+      }}
+    />
+  );
+}
+
+function IndicatorColorPickerScreenWrapper() {
+  const ctx = useContext(SettingsCtx);
+  const { goBack, navigateTo, params } = useDrawerNav();
+  const preferences = useChartSettingsStore((s) => s.preferences);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
+  const indicatorId = typeof params.id === 'string' ? params.id : '';
+
+  return (
+    <ColorPaletteView
+      selectedColor={ctx.indicatorSelectedColor}
+      opacity={100}
+      customColors={ctx.indicatorCustomColors}
+      onSelectColor={ctx.setIndicatorSelectedColor}
+      onOpacityChange={() => { /* not used for indicators */ }}
+      onAddColor={() => navigateTo('indicator-hsl-picker', { id: indicatorId })}
+      onApply={() => {
+        setPreferences({
+          indicators: preferences.indicators.map((item) =>
+            item.id === indicatorId && item.type === 'sma'
+              ? { ...item, color: ctx.indicatorSelectedColor }
+              : item
+          ),
+        });
+        goBack();
+      }}
+      minOpacity={100}
+    />
+  );
+}
+
+function IndicatorHslPickerScreenWrapper() {
+  const ctx = useContext(SettingsCtx);
+  const { goBack, close } = useDrawerNav();
+
+  return (
+    <HslPickerScreen
+      onBack={goBack}
+      onClose={close}
+      onAddColor={(hex: string) => {
+        const updated = ensureColorInPalette(hex);
+        ctx.setIndicatorCustomColors(updated);
+        saveCustomColors(updated);
+        ctx.setIndicatorSelectedColor(hex);
+        goBack();
+      }}
+      initialColor={ctx.indicatorSelectedColor}
     />
   );
 }
@@ -445,6 +547,9 @@ const SCREENS: DrawerScreen[] = [
   }, component: ColorPickerScreenWrapper },
   { name: 'indicators', title: 'Indicators', component: IndicatorsScreenWrapper },
   { name: 'add-indicator', title: 'Add indicator', component: AddIndicatorScreenWrapper },
+  { name: 'indicator-attributes', title: 'Indicator attributes', component: IndicatorAttributesScreenWrapper },
+  { name: 'indicator-color-picker', title: 'Color', component: IndicatorColorPickerScreenWrapper },
+  { name: 'indicator-hsl-picker', title: 'Color Picker', component: IndicatorHslPickerScreenWrapper },
   { name: 'orion', title: 'Orion', component: OrionScreenWrapper },
   { name: 'drawings', title: 'Drawings', component: DrawingsScreenWrapper },
   { name: 'drawing-default-styles', title: 'Default Styles', component: DefaultStylesScreenWrapper },
@@ -478,6 +583,8 @@ export default function SettingsDrawer({
   const [drawingSelectedColor, setDrawingSelectedColor] = useState("#ffffff");
   const [drawingColorOpacity, setDrawingColorOpacity] = useState(100);
   const [drawingCustomColors, setDrawingCustomColors] = useState<string[]>([]);
+  const [indicatorSelectedColor, setIndicatorSelectedColor] = useState("#f59e0b");
+  const [indicatorCustomColors, setIndicatorCustomColors] = useState<string[]>([]);
 
   // Template editor state
   const [editingColors, setEditingColors] = useState<ChartColors>({ ...DEFAULT_COLORS });
@@ -508,6 +615,8 @@ export default function SettingsDrawer({
       drawingSelectedColor, setDrawingSelectedColor,
       drawingColorOpacity, setDrawingColorOpacity,
       drawingCustomColors, setDrawingCustomColors,
+      indicatorSelectedColor, setIndicatorSelectedColor,
+      indicatorCustomColors, setIndicatorCustomColors,
     }),
     [
       editingColors,
@@ -526,6 +635,8 @@ export default function SettingsDrawer({
       drawingSelectedColor,
       drawingColorOpacity,
       drawingCustomColors,
+      indicatorSelectedColor,
+      indicatorCustomColors,
     ]
   );
 

@@ -1,11 +1,12 @@
 import type { ChartIndicator } from "@/stores/chartSettingsStore";
-import { ScreenHeader } from "./shared";
+import { ScreenHeader, ChevronRight } from "./shared";
 
 interface IndicatorsScreenProps {
   onBack: () => void;
   onClose: () => void;
   indicators: ChartIndicator[];
   onAddIndicator: () => void;
+  onOpenAttributes: (id: string) => void;
   onRemoveIndicator: (id: string) => void;
 }
 
@@ -21,6 +22,7 @@ export default function IndicatorsScreen({
   onClose,
   indicators,
   onAddIndicator,
+  onOpenAttributes,
   onRemoveIndicator,
 }: IndicatorsScreenProps) {
   return (
@@ -56,16 +58,27 @@ export default function IndicatorsScreen({
               className="w-full px-4 py-4 rounded-lg bg-zinc-800 text-zinc-200"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-4 h-4 rounded-full border border-zinc-700"
-                    style={{ backgroundColor: indicator.color }}
-                  />
-                  <div>
-                    <div className="text-base text-white">{getIndicatorLabel(indicator)}</div>
-                    <div className="text-xs text-zinc-400">{indicator.source.toUpperCase()}</div>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    onOpenAttributes(indicator.id);
+                  }}
+                  onClick={(e) => e.preventDefault()}
+                  className="flex-1 text-left [touch-action:manipulation]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-4 h-4 rounded-full border border-zinc-700"
+                      style={{ backgroundColor: indicator.color }}
+                    />
+                    <div>
+                      <div className="text-base text-white">{getIndicatorLabel(indicator)}</div>
+                      <div className="text-xs text-zinc-400">{indicator.source.toUpperCase()}</div>
+                    </div>
+                    <ChevronRight />
                   </div>
-                </div>
+                </button>
                 <button
                   type="button"
                   onPointerDown={(e) => {
