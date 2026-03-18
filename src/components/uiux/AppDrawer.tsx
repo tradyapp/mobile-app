@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from "react";
+import { ReactNode, useRef } from "react";
 import { Drawer } from "vaul";
 import TouchableButton from "./TouchableButton";
 import { AnimatedDrawerNav, type DrawerScreen } from "./drawer-nav";
@@ -41,50 +41,99 @@ export default function AppDrawer({
   contentClassName,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
+  const CLOSE_PULL_THRESHOLD = 52;
+  const safeAreaPaddingStyle: React.CSSProperties = {
+    paddingLeft: "max(16px, env(safe-area-inset-left))",
+    paddingRight: "max(16px, env(safe-area-inset-right))",
+    paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+  };
+
+  const handleTouchStart: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    pullDistanceRef.current = 0;
+  };
+
+  const handleTouchMove: React.TouchEventHandler<HTMLDivElement> = (event) => {
+    const startY = touchStartYRef.current;
+    const container = scrollContainerRef.current;
+    if (startY === null || !container) return;
+
+    const currentY = event.touches[0]?.clientY;
+    if (currentY === undefined) return;
+
+    const deltaY = currentY - startY;
+    if (container.scrollTop <= 0 && deltaY > 0) {
+      pullDistanceRef.current = deltaY;
+    } else {
+      pullDistanceRef.current = 0;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    const shouldClose = pullDistanceRef.current > CLOSE_PULL_THRESHOLD;
+    touchStartYRef.current = null;
+    pullDistanceRef.current = 0;
+    if (shouldClose) onOpenChange(false);
+  };
 
   return (
     <Drawer.Root open={isOpen} onOpenChange={onOpenChange}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/40 z-1002" />
         <Drawer.Content
-          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 ${heightClasses[height]}`}
+          className={`bg-black flex flex-col rounded-t-[10px] fixed bottom-0 left-0 right-0 z-1003 overflow-hidden ${heightClasses[height]}`}
         >
           {description && (
             <Drawer.Description className="sr-only">
               {description}
             </Drawer.Description>
           )}
-          <div className="p-4 bg-zinc-950 rounded-t-[10px] flex-1 flex flex-col overflow-hidden border-t border-zinc-800">
-            <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
-            <div className="max-w-md mx-auto w-full flex-1 flex flex-col overflow-hidden">
-              {useScreenNav ? (
-                <AnimatedDrawerNav
-                  screens={screens}
-                  title={title}
-                  isOpen={isOpen}
-                  onOpenChange={onOpenChange}
-                  wrapperClassName={contentClassName}
-                />
-              ) : (
-                <>
-                  {showHeader ? (
-                    <div className="flex items-center justify-between mb-4 shrink-0">
-                      <Drawer.Title className="text-white mx-auto">
-                        <span className="ml-6">{title}</span>
-                      </Drawer.Title>
-                      <TouchableButton
-                        onClick={() => onOpenChange(false)}
-                        className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
-                      >
-                        ✕
-                      </TouchableButton>
-                    </div>
-                  ) : (
-                    <Drawer.Title className="sr-only">{title}</Drawer.Title>
-                  )}
-                  {children}
-                </>
-              )}
+          <div
+            ref={scrollContainerRef}
+            className="min-h-0 flex-1 overflow-y-auto [touch-action:pan-y]"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+          >
+            <div
+              className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800 min-h-full"
+              style={safeAreaPaddingStyle}
+            >
+              <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
+              <div className="w-full pb-2">
+                {useScreenNav ? (
+                  <AnimatedDrawerNav
+                    screens={screens}
+                    title={title}
+                    isOpen={isOpen}
+                    onOpenChange={onOpenChange}
+                    wrapperClassName={contentClassName ?? "pb-6"}
+                  />
+                ) : (
+                  <>
+                    {showHeader ? (
+                      <div className="flex items-center justify-between mb-4 shrink-0">
+                        <Drawer.Title className="text-white mx-auto">
+                          <span className="ml-6">{title}</span>
+                        </Drawer.Title>
+                        <TouchableButton
+                          onClick={() => onOpenChange(false)}
+                          className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+                        >
+                          ✕
+                        </TouchableButton>
+                      </div>
+                    ) : (
+                      <Drawer.Title className="sr-only">{title}</Drawer.Title>
+                    )}
+                    {children}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </Drawer.Content>

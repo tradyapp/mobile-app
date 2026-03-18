@@ -111,7 +111,7 @@ export default function DrawingToolGrid({
   }, [isActive, onSelect]);
 
   return (
-    <div className="flex-1 overflow-y-auto max-h-[80vh] space-y-5 pb-6">
+    <div className="space-y-5 pb-6">
       {categories.map((category) => (
         <div key={category.label}>
           <div className="text-zinc-500 text-xs font-semibold uppercase tracking-wider mb-2 px-1">
