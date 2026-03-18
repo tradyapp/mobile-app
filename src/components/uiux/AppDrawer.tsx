@@ -59,7 +59,7 @@ export default function AppDrawer({
               {description}
             </Drawer.Description>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <div
               className="pt-4 bg-zinc-950 rounded-t-[10px] border-t border-zinc-800"
               style={safeAreaPaddingStyle}
