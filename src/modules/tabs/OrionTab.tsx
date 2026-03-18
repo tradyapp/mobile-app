@@ -233,7 +233,7 @@ function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'p
 }
 
 type MarketplaceTab = 'explore' | 'my-strategies';
-type MyStrategiesScreen = 'list' | 'create' | 'detail';
+type MyStrategiesScreen = 'list' | 'create' | 'detail' | 'nodes';
 
 interface StrategyFormScreenProps {
   title: string;
@@ -407,10 +407,12 @@ interface MarketplaceScreenProps {
 
 interface StrategyDetailViewProps {
   strategy: StrategyRecord;
+  onOpenNodes: () => void;
 }
 
 function StrategyDetailView({
   strategy,
+  onOpenNodes,
 }: StrategyDetailViewProps) {
   const [isLive, setIsLive] = useState(false);
   const initials = strategy.name
@@ -445,7 +447,7 @@ function StrategyDetailView({
       </List>
 
       <List strong className="mt-4 overflow-hidden rounded-xl">
-        <ListItem link title="Nodes" />
+        <ListItem link title="Nodes" onClick={onOpenNodes} />
         <ListItem link title="Back Testing" />
         <ListItem
           title="Live"
@@ -465,10 +467,16 @@ function StrategyDetailView({
           )}
         />
       </List>
+    </div>
+  );
+}
 
-      <div className="mt-6 min-h-[58vh] rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-        <div className="flex h-full min-h-[50vh] items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70">
-          <p className="text-sm text-zinc-400">Work in Progress</p>
+function NodesView() {
+  return (
+    <div className="mx-auto max-w-xl px-4 pb-24">
+      <div className="mt-6 min-h-[68vh] rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex h-full min-h-[60vh] items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70">
+          <p className="text-sm text-zinc-400">Node WIP!</p>
         </div>
       </div>
     </div>
@@ -679,6 +687,7 @@ export default function OrionTab() {
     [strategies, selectedStrategyId]
   );
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
+  const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
     setSelectedStrategyId(strategy.id);
@@ -709,9 +718,30 @@ export default function OrionTab() {
   return (
     <>
       <AppNavbar
-        title={isStrategyDetailView ? (selectedStrategy?.name ?? 'Strategy') : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
+        title={isNodesView ? 'Nodes' : (isStrategyDetailView ? (selectedStrategy?.name ?? 'Strategy') : (isMarketplace ? 'Orion Marketplace' : 'Notifications'))}
         left={
-          isStrategyDetailView ? null : isMarketplace ? (
+          isNodesView ? (
+            <button
+              type="button"
+              onClick={() => setMyStrategiesScreen('detail')}
+              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
+              aria-label="Close nodes view"
+            >
+              <CloseIcon />
+            </button>
+          ) : isStrategyDetailView ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMyStrategiesScreen('list');
+                setSelectedStrategyId(null);
+              }}
+              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
+              aria-label="Close strategy view"
+            >
+              <CloseIcon />
+            </button>
+          ) : isMarketplace ? (
             <button
               type="button"
               onClick={() => {
@@ -740,12 +770,17 @@ export default function OrionTab() {
         }
       />
 
-      {isStrategyDetailView && selectedStrategy ? (
-        <StrategyDetailView strategy={selectedStrategy} />
+      {isNodesView && selectedStrategy ? (
+        <NodesView />
+      ) : isStrategyDetailView && selectedStrategy ? (
+        <StrategyDetailView
+          strategy={selectedStrategy}
+          onOpenNodes={() => setMyStrategiesScreen('nodes')}
+        />
       ) : isMarketplace ? (
         <MarketplaceScreen
           tab={marketplaceTab}
-          myStrategiesScreen={myStrategiesScreen === 'detail' ? 'list' : myStrategiesScreen}
+          myStrategiesScreen={myStrategiesScreen === 'detail' || myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
           onChangeTab={(tab) => {
             setMarketplaceTab(tab);
             if (tab === 'my-strategies') setMyStrategiesScreen('list');
