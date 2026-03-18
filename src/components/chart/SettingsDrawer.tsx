@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, createContext, useContext } from "react";
+import { useState, useCallback, createContext, useContext, useMemo } from "react";
 import AppDrawer, { type DrawerScreen } from "../uiux/AppDrawer";
 import { useDrawerNav } from "../uiux/drawer-nav";
 import {
@@ -37,15 +37,6 @@ import DrawingsScreen from "./settings-drawer/DrawingsScreen";
 // ── Domain context for SettingsDrawer screens ──
 
 interface SettingsCtxValue {
-  // Chart settings store
-  customTemplates: ChartTemplate[];
-  activeTemplateId: string;
-  activeColors: ChartColors;
-  setActiveTemplate: (id: string) => void;
-  saveTemplate: (template: ChartTemplate) => void;
-  deleteTemplate: (id: string) => void;
-  preferences: { showVolume: boolean };
-  setPreferences: (prefs: { showVolume: boolean }) => void;
   // Template editor state
   editingColors: ChartColors;
   setEditingColors: React.Dispatch<React.SetStateAction<ChartColors>>;
@@ -63,9 +54,6 @@ interface SettingsCtxValue {
   colorPickerInitial: string;
   setColorPickerInitial: React.Dispatch<React.SetStateAction<string>>;
   // Drawing state
-  drawings: { length: number };
-  clearDrawings: (symbol: string) => void;
-  symbol: string;
   isClearDialogOpen: boolean;
   setIsClearDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
   drawingPickerCategory: DrawingTemplateCategory;
@@ -113,17 +101,19 @@ function MenuScreenWrapper() {
 }
 
 function ChartSettingsScreenWrapper() {
-  const ctx = useContext(SettingsCtx);
   const { goBack, close, navigateTo } = useDrawerNav();
+  const activeColors = useChartSettingsStore((s) => s.activeColors);
+  const preferences = useChartSettingsStore((s) => s.preferences);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
 
   return (
     <ChartSettingsScreen
       onBack={goBack}
       onClose={close}
       onOpenColors={() => navigateTo('colors')}
-      activeColors={ctx.activeColors}
-      preferences={ctx.preferences}
-      onToggleVolume={() => ctx.setPreferences({ showVolume: !ctx.preferences.showVolume })}
+      activeColors={activeColors}
+      preferences={preferences}
+      onToggleVolume={() => setPreferences({ showVolume: !preferences.showVolume })}
     />
   );
 }
@@ -131,6 +121,10 @@ function ChartSettingsScreenWrapper() {
 function ColorsScreenWrapper() {
   const ctx = useContext(SettingsCtx);
   const { goBack, close, navigateTo } = useDrawerNav();
+  const customTemplates = useChartSettingsStore((s) => s.customTemplates);
+  const activeTemplateId = useChartSettingsStore((s) => s.activeTemplateId);
+  const setActiveTemplate = useChartSettingsStore((s) => s.setActiveTemplate);
+  const deleteTemplate = useChartSettingsStore((s) => s.deleteTemplate);
 
   const startNewTemplate = useCallback(() => {
     ctx.setEditingId(null);
@@ -163,13 +157,13 @@ function ColorsScreenWrapper() {
     <ColorsScreen
       onBack={goBack}
       onClose={close}
-      customTemplates={ctx.customTemplates}
-      activeTemplateId={ctx.activeTemplateId}
-      onSelectTemplate={ctx.setActiveTemplate}
+      customTemplates={customTemplates}
+      activeTemplateId={activeTemplateId}
+      onSelectTemplate={setActiveTemplate}
       onCreateNew={startNewTemplate}
       onEdit={startEditTemplate}
       onDuplicate={duplicateTemplate}
-      onDelete={ctx.deleteTemplate}
+      onDelete={deleteTemplate}
     />
   );
 }
@@ -177,6 +171,8 @@ function ColorsScreenWrapper() {
 function EditTemplateScreenWrapper() {
   const ctx = useContext(SettingsCtx);
   const { goBack, close, navigateTo } = useDrawerNav();
+  const saveTemplate = useChartSettingsStore((s) => s.saveTemplate);
+  const setActiveTemplate = useChartSettingsStore((s) => s.setActiveTemplate);
 
   const handleSave = useCallback(() => {
     const id = ctx.editingId ?? crypto.randomUUID();
@@ -187,10 +183,10 @@ function EditTemplateScreenWrapper() {
       filledUpCandle: ctx.editingFilledUp,
       filledDownCandle: ctx.editingFilledDown,
     };
-    ctx.saveTemplate(template);
-    ctx.setActiveTemplate(id);
+    saveTemplate(template);
+    setActiveTemplate(id);
     goBack();
-  }, [ctx, goBack]);
+  }, [ctx, goBack, saveTemplate, setActiveTemplate]);
 
   return (
     <EditTemplateScreen
@@ -243,6 +239,7 @@ function OrionScreenWrapper() {
 function DrawingsScreenWrapper() {
   const ctx = useContext(SettingsCtx);
   const { goBack, close, navigateTo } = useDrawerNav();
+  const drawingsCount = useDrawingStore((s) => s.drawings.length);
 
   return (
     <DrawingsScreen
@@ -250,7 +247,7 @@ function DrawingsScreenWrapper() {
       onClose={close}
       onOpenConfig={() => navigateTo('drawing-default-styles')}
       onClearAll={() => ctx.setIsClearDialogOpen(true)}
-      drawingsCount={ctx.drawings.length}
+      drawingsCount={drawingsCount}
     />
   );
 }
@@ -274,13 +271,15 @@ function DefaultStylesScreenWrapper() {
 function DrawingTemplatePickerScreenWrapper() {
   const ctx = useContext(SettingsCtx);
   const { goBack, navigateTo } = useDrawerNav();
+  const getDrawingDefaultTemplate = useDrawingTemplateStore((s) => s.getDefaultTemplate);
+  const setDrawingDefaultTemplate = useDrawingTemplateStore((s) => s.setDefaultTemplate);
 
   return (
     <TemplateGridView
       category={ctx.drawingPickerCategory}
-      activeTemplateId={ctx.getDrawingDefaultTemplate(ctx.drawingPickerCategory).id}
+      activeTemplateId={getDrawingDefaultTemplate(ctx.drawingPickerCategory).id}
       onSelect={(template) => {
-        ctx.setDrawingDefaultTemplate(ctx.drawingPickerCategory, template.id);
+        setDrawingDefaultTemplate(ctx.drawingPickerCategory, template.id);
         goBack();
       }}
       onCreateNew={() => {
@@ -407,22 +406,7 @@ export default function SettingsDrawer({
   isOpen,
   onOpenChange,
 }: SettingsDrawerProps) {
-  // Store
-  const {
-    customTemplates,
-    activeTemplateId,
-    activeColors,
-    setActiveTemplate,
-    saveTemplate,
-    deleteTemplate,
-    preferences,
-    setPreferences,
-  } = useChartSettingsStore();
-
-  // Drawing-related stores & state
-  const { symbol } = useChartStore();
-  const { drawings, clearDrawings } = useDrawingStore();
-  const { getDefaultTemplate: getDrawingDefaultTemplate, setDefaultTemplate: setDrawingDefaultTemplate } = useDrawingTemplateStore();
+  // Local-only UI state for this drawer
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [drawingPickerCategory, setDrawingPickerCategory] = useState<DrawingTemplateCategory>("line");
   const [drawingEditingTemplate, setDrawingEditingTemplate] = useState<DrawingTemplate | null>(null);
@@ -444,29 +428,44 @@ export default function SettingsDrawer({
   const [colorTarget, setColorTarget] = useState<ColorTarget>('candleUp');
   const [colorPickerInitial, setColorPickerInitial] = useState('#00ff99');
 
-  const ctxValue: SettingsCtxValue = {
-    customTemplates, activeTemplateId, activeColors,
-    setActiveTemplate, saveTemplate, deleteTemplate,
-    preferences, setPreferences,
-    editingColors, setEditingColors,
-    editingName, setEditingName,
-    editingId, setEditingId,
-    editingFilledUp, setEditingFilledUp,
-    editingFilledDown, setEditingFilledDown,
-    colorTarget, setColorTarget,
-    colorPickerInitial, setColorPickerInitial,
-    drawings, clearDrawings, symbol,
-    isClearDialogOpen, setIsClearDialogOpen,
-    drawingPickerCategory, setDrawingPickerCategory,
-    drawingEditingTemplate, setDrawingEditingTemplate,
-    drawingEditorPickedColor, setDrawingEditorPickedColor,
-    drawingEditorPickedOpacity, setDrawingEditorPickedOpacity,
-    drawingEditorPickedTarget, setDrawingEditorPickedTarget,
-    drawingSelectedColor, setDrawingSelectedColor,
-    drawingColorOpacity, setDrawingColorOpacity,
-    drawingCustomColors, setDrawingCustomColors,
-    getDrawingDefaultTemplate, setDrawingDefaultTemplate,
-  };
+  const ctxValue: SettingsCtxValue = useMemo(
+    () => ({
+      editingColors, setEditingColors,
+      editingName, setEditingName,
+      editingId, setEditingId,
+      editingFilledUp, setEditingFilledUp,
+      editingFilledDown, setEditingFilledDown,
+      colorTarget, setColorTarget,
+      colorPickerInitial, setColorPickerInitial,
+      isClearDialogOpen, setIsClearDialogOpen,
+      drawingPickerCategory, setDrawingPickerCategory,
+      drawingEditingTemplate, setDrawingEditingTemplate,
+      drawingEditorPickedColor, setDrawingEditorPickedColor,
+      drawingEditorPickedOpacity, setDrawingEditorPickedOpacity,
+      drawingEditorPickedTarget, setDrawingEditorPickedTarget,
+      drawingSelectedColor, setDrawingSelectedColor,
+      drawingColorOpacity, setDrawingColorOpacity,
+      drawingCustomColors, setDrawingCustomColors,
+    }),
+    [
+      editingColors,
+      editingName,
+      editingId,
+      editingFilledUp,
+      editingFilledDown,
+      colorTarget,
+      colorPickerInitial,
+      isClearDialogOpen,
+      drawingPickerCategory,
+      drawingEditingTemplate,
+      drawingEditorPickedColor,
+      drawingEditorPickedOpacity,
+      drawingEditorPickedTarget,
+      drawingSelectedColor,
+      drawingColorOpacity,
+      drawingCustomColors,
+    ]
+  );
 
   return (
     <SettingsCtx.Provider value={ctxValue}>
@@ -484,7 +483,8 @@ export default function SettingsDrawer({
         isOpen={isClearDialogOpen}
         onClose={() => setIsClearDialogOpen(false)}
         onConfirm={() => {
-          clearDrawings(symbol);
+          const symbol = useChartStore.getState().symbol;
+          useDrawingStore.getState().clearDrawings(symbol);
           setIsClearDialogOpen(false);
         }}
       />
