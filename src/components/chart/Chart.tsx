@@ -274,6 +274,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const rsiLevel30SeriesRef = useRef<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [chartVersion, setChartVersion] = useState(0);
+  const [layoutEpoch, setLayoutEpoch] = useState(0);
   const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null);
   const [panelHeightDraft, setPanelHeightDraft] = useState<number | null>(null);
   const [isResizingPanels, setIsResizingPanels] = useState(false);
@@ -292,6 +293,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const activeSecondaryPanelsRef = useRef<SecondaryPanelId[]>(activeSecondaryPanels);
   const secondaryPanelHeightRef = useRef(secondaryPanelHeight);
   const resizeStartRef = useRef<{ active: boolean }>({ active: false });
+  const previousPanelSignatureRef = useRef(panelSignature);
 
   // Refs for latest colors/fill (read during chart creation without adding to deps)
   const activeColorsRef = useRef(activeColors);
@@ -317,6 +319,14 @@ const Chart = ({ width, height }: ChartProps) => {
     showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
   }, [symbol, symbolType, timeframe, activeSecondaryPanels, secondaryPanelHeight, panelHeightDraft, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
+
+  // Mobile-safe fallback: fully recreate chart when panel composition changes.
+  // Some mobile WebViews keep stale pane layout after dynamic pane removal.
+  useEffect(() => {
+    if (previousPanelSignatureRef.current === panelSignature) return;
+    previousPanelSignatureRef.current = panelSignature;
+    setLayoutEpoch((value) => value + 1);
+  }, [panelSignature]);
 
   const getSecondaryHeightFromPointer = useCallback((clientY: number) => {
     const container = chartContainerRef.current;
@@ -905,7 +915,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
+  }, [timeframe, layoutEpoch, syncPriceOverlaySeries, syncBollingerSeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
