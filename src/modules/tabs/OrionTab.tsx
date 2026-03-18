@@ -6,10 +6,14 @@ import {
   addEdge,
   Background,
   Controls,
+  Handle,
+  Position,
   ReactFlow,
   type Connection,
   type Edge as RFEdge,
   type Node as RFNode,
+  type NodeProps as RFNodeProps,
+  type NodeTypes,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
@@ -40,6 +44,10 @@ interface StrategyDraft {
   name: string;
   description: string;
   photoUrl: string | null;
+}
+
+interface EditorNodeData {
+  label: string;
 }
 
 const MARKETPLACE_APPS: StrategyApp[] = [
@@ -489,6 +497,26 @@ interface NodesViewProps {
 }
 
 function NodesView({ strategyName, onClose }: NodesViewProps) {
+  const nodeTypes = useMemo<NodeTypes>(() => ({
+    editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => (
+      <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <Handle
+          id="left"
+          type="target"
+          position={Position.Left}
+          className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+        />
+        <span>{data?.label ?? 'Node'}</span>
+        <Handle
+          id="right"
+          type="source"
+          position={Position.Right}
+          className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+        />
+      </div>
+    ),
+  }), []);
+
   const nodeCounterRef = useRef(1);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -505,6 +533,7 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
 
       const nextNode: RFNode = {
         id: `node-${nextLabel}`,
+        type: 'editorNode',
         position: {
           x: 80 + (index % 4) * 180,
           y: 80 + Math.floor(index / 4) * 120,
@@ -552,6 +581,7 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              nodeTypes={nodeTypes}
               fitView
             >
               <Background color="#3f3f46" gap={16} />
