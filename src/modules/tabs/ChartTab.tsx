@@ -43,15 +43,18 @@ export default function ChartTab() {
 
   const isLandscape = width > height;
   const chartBarCompensation = isLandscape ? CHARTBAR_WIDTH : 0;
-  const fallbackWidth = Math.max(0, width - chartBarCompensation - CHART_SAFE_GUTTER * 2);
+  const sideGutter = isLandscape ? CHART_SAFE_GUTTER : 0;
+  const fallbackWidth = Math.max(0, width - chartBarCompensation - sideGutter * 2);
   const effectiveChartWidth = chartWidth || fallbackWidth;
   const chartHeight = isLandscape
     ? height - TOOLBAR_HEIGHT
     : height - FOOTER_HEIGHT;
-  const safeChartContentStyle: React.CSSProperties = {
-    paddingLeft: `max(${CHART_SAFE_GUTTER}px, env(safe-area-inset-left))`,
-    paddingRight: `max(${CHART_SAFE_GUTTER}px, env(safe-area-inset-right))`,
-  };
+  const safeChartContentStyle: React.CSSProperties = isLandscape
+    ? {
+        paddingLeft: `max(${CHART_SAFE_GUTTER}px, env(safe-area-inset-left))`,
+        paddingRight: `max(${CHART_SAFE_GUTTER}px, env(safe-area-inset-right))`,
+      }
+    : {};
   const symbolOverlayStyle: React.CSSProperties = {
     left: `max(${CHART_SAFE_GUTTER}px, env(safe-area-inset-left))`,
   };
