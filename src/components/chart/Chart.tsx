@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
-import { useChartSettingsStore, type ChartIndicator, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
+import { useChartSettingsStore, type ChartIndicator, type MacdIndicator, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
 import {
   buildChartPanelLayout,
   getRequiredSecondaryPanels,
@@ -156,6 +156,76 @@ function calculateRsiData(candles: ChartCandle[], period: number) {
   return data;
 }
 
+function calculateEmaValues(values: number[], period: number): Array<number | null> {
+  const result: Array<number | null> = Array(values.length).fill(null);
+  if (period <= 0 || values.length < period) return result;
+
+  const multiplier = 2 / (period + 1);
+  let seed = 0;
+  for (let i = 0; i < period; i++) seed += values[i];
+
+  let ema = seed / period;
+  result[period - 1] = ema;
+
+  for (let i = period; i < values.length; i++) {
+    ema = ((values[i] - ema) * multiplier) + ema;
+    result[i] = ema;
+  }
+
+  return result;
+}
+
+function calculateMacdData(candles: ChartCandle[], fastPeriod: number, slowPeriod: number, signalPeriod: number) {
+  const closes = candles.map((candle) => candle.close);
+  const fast = calculateEmaValues(closes, fastPeriod);
+  const slow = calculateEmaValues(closes, slowPeriod);
+
+  const macdValues: Array<number | null> = closes.map((_, index) => {
+    if (fast[index] == null || slow[index] == null) return null;
+    return fast[index]! - slow[index]!;
+  });
+
+  const compactMacdValues: number[] = [];
+  const compactMacdTimes: ChartCandle["time"][] = [];
+  macdValues.forEach((value, index) => {
+    if (value == null) return;
+    compactMacdValues.push(value);
+    compactMacdTimes.push(candles[index].time);
+  });
+
+  const signalValuesCompact = calculateEmaValues(compactMacdValues, signalPeriod);
+  const signalValues: Array<number | null> = Array(candles.length).fill(null);
+  let compactIndex = 0;
+  for (let i = 0; i < candles.length; i++) {
+    if (macdValues[i] == null) continue;
+    signalValues[i] = signalValuesCompact[compactIndex];
+    compactIndex += 1;
+  }
+
+  const macdLine: { time: ChartCandle["time"]; value: number }[] = [];
+  const signalLine: { time: ChartCandle["time"]; value: number }[] = [];
+  const histogram: { time: ChartCandle["time"]; value: number; color: string }[] = [];
+
+  for (let i = 0; i < candles.length; i++) {
+    if (macdValues[i] != null) {
+      macdLine.push({ time: candles[i].time, value: macdValues[i]! });
+    }
+    if (signalValues[i] != null) {
+      signalLine.push({ time: candles[i].time, value: signalValues[i]! });
+    }
+    if (macdValues[i] != null && signalValues[i] != null) {
+      const hist = macdValues[i]! - signalValues[i]!;
+      histogram.push({
+        time: candles[i].time,
+        value: hist,
+        color: hist >= 0 ? '#22c55e99' : '#ef444499',
+      });
+    }
+  }
+
+  return { macdLine, signalLine, histogram };
+}
+
 const Chart = ({ width, height }: ChartProps) => {
   const { symbol, symbolType, timeframe } = useChartStore();
   const activeColors = useChartSettingsStore((s) => s.activeColors);
@@ -175,6 +245,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const volumeSeriesRef = useRef<any>(null);
   const priceOverlaySeriesRef = useRef<Map<string, any>>(new Map());
   const rsiSeriesRef = useRef<Map<string, any>>(new Map());
+  const macdSeriesRef = useRef<Map<string, { macdLine: any; signalLine: any; histogram: any }>>(new Map());
   const rsiLevel70SeriesRef = useRef<any>(null);
   const rsiLevel30SeriesRef = useRef<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -270,6 +341,7 @@ const Chart = ({ width, height }: ChartProps) => {
     chart.applyOptions({ rightPriceScale: { borderColor: activeColorsRef.current.scaleBorder } });
 
     const hasRsi = activeSecondaryPanelsRef.current.includes("rsi");
+    const hasMacd = activeSecondaryPanelsRef.current.includes("macd");
     const hasVolume = activeSecondaryPanelsRef.current.includes("volume");
     const panes = chart.panes();
     const mainPane = panes[0];
@@ -278,23 +350,53 @@ const Chart = ({ width, height }: ChartProps) => {
     const mainFactor = Math.max(0.05, 1 - secondaryPanelHeightRef.current);
     const secondarySpace = Math.max(0.05, 1 - mainFactor);
     const rsiWeight = hasRsi ? 0.28 : 0;
+    const macdWeight = hasMacd ? 0.24 : 0;
     const volumeWeight = hasVolume ? 0.16 : 0;
-    const totalWeight = Math.max(0.0001, rsiWeight + volumeWeight);
+    const totalWeight = Math.max(0.0001, rsiWeight + macdWeight + volumeWeight);
 
     mainPane.setStretchFactor(mainFactor);
 
+    let nextPaneIndex = 1;
     if (hasRsi) {
-      const rsiPane = panes[1];
+      const rsiPane = panes[nextPaneIndex];
       if (rsiPane) {
         rsiPane.setStretchFactor(secondarySpace * (rsiWeight / totalWeight));
       }
+      nextPaneIndex += 1;
+    }
+
+    if (hasMacd) {
+      const macdPane = panes[nextPaneIndex];
+      if (macdPane) {
+        macdPane.setStretchFactor(secondarySpace * (macdWeight / totalWeight));
+      }
+      nextPaneIndex += 1;
     }
 
     if (hasVolume) {
-      const volumePane = panes[hasRsi ? 2 : 1];
+      const volumePane = panes[nextPaneIndex];
       if (volumePane) {
         volumePane.setStretchFactor(secondarySpace * (volumeWeight / totalWeight));
       }
+    }
+  }, []);
+
+  const getPaneIndex = useCallback((panelId: SecondaryPanelId): number => {
+    const topDownOrder: SecondaryPanelId[] = ['rsi', 'macd', 'volume'];
+    let paneIndex = 1;
+    for (const panel of topDownOrder) {
+      if (!activeSecondaryPanelsRef.current.includes(panel)) continue;
+      if (panel === panelId) return paneIndex;
+      paneIndex += 1;
+    }
+    return 1;
+  }, []);
+
+  const ensurePaneExists = useCallback((paneIndex: number) => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+    while (chart.panes().length <= paneIndex) {
+      chart.addPane(true);
     }
   }, []);
 
@@ -352,6 +454,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const syncRsiSeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
+    const rsiPaneIndex = getPaneIndex('rsi');
+    ensurePaneExists(rsiPaneIndex);
 
     const seriesMap = rsiSeriesRef.current;
     const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible && indicator.type === 'rsi') as RsiIndicator[];
@@ -387,7 +491,7 @@ const Chart = ({ width, height }: ChartProps) => {
         lineWidth: 1,
         lastValueVisible: false,
         priceLineVisible: false,
-      }, 1);
+      }, rsiPaneIndex);
     }
     rsiLevel70SeriesRef.current.setData(levelData70);
 
@@ -399,7 +503,7 @@ const Chart = ({ width, height }: ChartProps) => {
         lineWidth: 1,
         lastValueVisible: false,
         priceLineVisible: false,
-      }, 1);
+      }, rsiPaneIndex);
     }
     rsiLevel30SeriesRef.current.setData(levelData30);
 
@@ -413,7 +517,7 @@ const Chart = ({ width, height }: ChartProps) => {
           title: `RSI ${indicator.period}`,
           lastValueVisible: true,
           priceLineVisible: false,
-        }, 1);
+        }, rsiPaneIndex);
         seriesMap.set(indicator.id, lineSeries);
       } else {
         lineSeries.applyOptions({
@@ -425,7 +529,70 @@ const Chart = ({ width, height }: ChartProps) => {
 
       lineSeries.setData(calculateRsiData(allCandlesRef.current, indicator.period));
     });
-  }, []);
+  }, [ensurePaneExists, getPaneIndex]);
+
+  const syncMacdSeries = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const macdPaneIndex = getPaneIndex('macd');
+    ensurePaneExists(macdPaneIndex);
+
+    const seriesMap = macdSeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible && indicator.type === 'macd') as MacdIndicator[];
+    const activeIds = new Set(indicators.map((indicator) => indicator.id));
+
+    for (const [id, seriesBundle] of seriesMap) {
+      if (activeIds.has(id)) continue;
+      chart.removeSeries(seriesBundle.macdLine);
+      chart.removeSeries(seriesBundle.signalLine);
+      chart.removeSeries(seriesBundle.histogram);
+      seriesMap.delete(id);
+    }
+
+    indicators.forEach((indicator) => {
+      let bundle = seriesMap.get(indicator.id);
+      if (!bundle) {
+        const macdLine = chart.addSeries(LineSeries, {
+          priceScaleId: 'macd',
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: `MACD ${indicator.fastPeriod}/${indicator.slowPeriod}`,
+          lastValueVisible: true,
+          priceLineVisible: false,
+        }, macdPaneIndex);
+        const signalLine = chart.addSeries(LineSeries, {
+          priceScaleId: 'macd',
+          color: '#60a5fa',
+          lineWidth: 1,
+          title: `Signal ${indicator.signalPeriod}`,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        }, macdPaneIndex);
+        const histogram = chart.addSeries(HistogramSeries, {
+          priceScaleId: 'macd',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        }, macdPaneIndex);
+
+        bundle = { macdLine, signalLine, histogram };
+        seriesMap.set(indicator.id, bundle);
+      } else {
+        bundle.macdLine.applyOptions({
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: `MACD ${indicator.fastPeriod}/${indicator.slowPeriod}`,
+        });
+        bundle.signalLine.applyOptions({
+          title: `Signal ${indicator.signalPeriod}`,
+        });
+      }
+
+      const macdData = calculateMacdData(allCandlesRef.current, indicator.fastPeriod, indicator.slowPeriod, indicator.signalPeriod);
+      bundle.macdLine.setData(macdData.macdLine);
+      bundle.signalLine.setData(macdData.signalLine);
+      bundle.histogram.setData(macdData.histogram);
+    });
+  }, [ensurePaneExists, getPaneIndex]);
 
   const onLogicalChange = useCallback(() => {
     if (!chartRef.current) return;
@@ -473,6 +640,7 @@ const Chart = ({ width, height }: ChartProps) => {
         }
         syncPriceOverlaySeries();
         syncRsiSeries();
+        syncMacdSeries();
       })
       .catch((error) => {
         console.error("Error loading older candles:", error);
@@ -480,7 +648,7 @@ const Chart = ({ width, height }: ChartProps) => {
       .finally(() => {
         isLoadingMoreRef.current = false;
       });
-  }, [syncPriceOverlaySeries, syncRsiSeries]);
+  }, [syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect 1: Crear el chart (solo cuando cambian width/height)
   useEffect(() => {
@@ -588,10 +756,12 @@ const Chart = ({ width, height }: ChartProps) => {
     applyPanelLayout();
     syncPriceOverlaySeries();
     syncRsiSeries();
+    syncMacdSeries();
 
     return () => {
       priceOverlaySeriesRef.current.clear();
       rsiSeriesRef.current.clear();
+      macdSeriesRef.current.clear();
       rsiLevel70SeriesRef.current = null;
       rsiLevel30SeriesRef.current = null;
       volumeSeriesRef.current = null;
@@ -603,7 +773,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe, syncPriceOverlaySeries, syncRsiSeries]);
+  }, [timeframe, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
@@ -660,14 +830,16 @@ const Chart = ({ width, height }: ChartProps) => {
 
     syncPriceOverlaySeries();
     syncRsiSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries]);
+    syncMacdSeries();
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
     syncPriceOverlaySeries();
     syncRsiSeries();
+    syncMacdSeries();
     applyPanelLayout();
-  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries]);
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
 
   // Effect: react to panel height resize changes
   useEffect(() => {
@@ -681,7 +853,8 @@ const Chart = ({ width, height }: ChartProps) => {
     const shouldShow = showVolume && symbolType === 'STOCK';
 
     if (shouldShow && !volumeSeriesRef.current) {
-      const volumePaneIndex = activeSecondaryPanelsRef.current.includes("rsi") ? 2 : 1;
+      const volumePaneIndex = getPaneIndex('volume');
+      ensurePaneExists(volumePaneIndex);
       const volSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
         priceLineVisible: false,
@@ -707,7 +880,7 @@ const Chart = ({ width, height }: ChartProps) => {
       volumeSeriesRef.current = null;
     }
     applyPanelLayout();
-  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion, applyPanelLayout]);
+  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion, applyPanelLayout, ensurePaneExists, getPaneIndex]);
 
   // Effect 2: Actualizar localization cuando cambia el timeframe
   useEffect(() => {
@@ -828,6 +1001,7 @@ const Chart = ({ width, height }: ChartProps) => {
           }
           syncPriceOverlaySeries();
           syncRsiSeries();
+          syncMacdSeries();
 
           setLoading(false);
         }
@@ -865,7 +1039,7 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
       setLoading(true);
     };
-  }, [symbol, symbolType, timeframe, syncPriceOverlaySeries, syncRsiSeries]);
+  }, [symbol, symbolType, timeframe, syncPriceOverlaySeries, syncRsiSeries, syncMacdSeries]);
 
   const effectiveSecondaryPanelHeight = panelHeightDraft ?? secondaryPanelHeight;
   const currentPanelLayout = buildChartPanelLayout(activeSecondaryPanels, effectiveSecondaryPanelHeight);

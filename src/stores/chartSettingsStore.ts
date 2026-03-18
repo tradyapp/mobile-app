@@ -63,7 +63,19 @@ export interface RsiIndicator {
   visible: boolean;
 }
 
-export type ChartIndicator = MovingAverageIndicator | ExponentialMovingAverageIndicator | RsiIndicator;
+export interface MacdIndicator {
+  id: string;
+  type: 'macd';
+  name: 'MACD';
+  fastPeriod: number;
+  slowPeriod: number;
+  signalPeriod: number;
+  color: string;
+  lineWidth: number;
+  visible: boolean;
+}
+
+export type ChartIndicator = MovingAverageIndicator | ExponentialMovingAverageIndicator | RsiIndicator | MacdIndicator;
 
 // ── Built-in templates ──
 export const BUILT_IN_TEMPLATES: ChartTemplate[] = [

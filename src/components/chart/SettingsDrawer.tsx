@@ -9,6 +9,7 @@ import {
   type ChartColors,
   type ChartTemplate,
   type ExponentialMovingAverageIndicator,
+  type MacdIndicator,
   type MovingAverageIndicator,
   type RsiIndicator,
 } from "@/stores/chartSettingsStore";
@@ -320,6 +321,24 @@ function AddIndicatorScreenWrapper() {
 
         setPreferences({
           indicators: [...preferences.indicators, rsi],
+        });
+        goBack();
+      }}
+      onAddMacd={() => {
+        const macd: MacdIndicator = {
+          id: crypto.randomUUID(),
+          type: 'macd',
+          name: 'MACD',
+          fastPeriod: 12,
+          slowPeriod: 26,
+          signalPeriod: 9,
+          color: '#f59e0b',
+          lineWidth: 2,
+          visible: true,
+        };
+
+        setPreferences({
+          indicators: [...preferences.indicators, macd],
         });
         goBack();
       }}

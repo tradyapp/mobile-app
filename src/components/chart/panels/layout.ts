@@ -1,7 +1,7 @@
 import type { ChartIndicator } from "@/stores/chartSettingsStore";
 import type { SymbolType } from "@/stores/chartStore";
 
-export type SecondaryPanelId = "rsi" | "volume";
+export type SecondaryPanelId = "rsi" | "macd" | "volume";
 export const DEFAULT_SECONDARY_PANEL_HEIGHT = 0.32;
 export const MIN_SECONDARY_PANEL_HEIGHT = 0.16;
 export const MAX_SECONDARY_PANEL_HEIGHT = 0.65;
@@ -24,16 +24,18 @@ export interface ChartPanelLayout {
 
 const PANEL_SPECS: Record<SecondaryPanelId, PanelSpec> = {
   rsi: { id: "rsi", priceScaleId: "rsi", height: 0.28 },
+  macd: { id: "macd", priceScaleId: "macd", height: 0.24 },
   volume: { id: "volume", priceScaleId: "volume", height: 0.16 },
 };
 
-const PANEL_ORDER_FROM_BOTTOM: SecondaryPanelId[] = ["rsi", "volume"];
+const PANEL_ORDER_FROM_BOTTOM: SecondaryPanelId[] = ["macd", "rsi", "volume"];
 const MAIN_TOP_MARGIN = 0.02;
 const PANEL_BOTTOM_PADDING = 0.02;
 const INTER_PANEL_GAP = 0.02;
 
 const INDICATOR_PANEL: Partial<Record<ChartIndicator["type"], SecondaryPanelId>> = {
   rsi: "rsi",
+  macd: "macd",
 };
 
 export function getRequiredSecondaryPanels(

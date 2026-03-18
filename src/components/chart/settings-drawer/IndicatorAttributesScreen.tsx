@@ -52,31 +52,84 @@ export default function IndicatorAttributesScreen({
           </div>
         </button>
 
-        <div className="rounded-lg bg-zinc-800 p-4">
-          <div className="text-zinc-400 text-sm mb-2">Period</div>
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={2}
-              max={200}
-              value={indicator.period}
-              onChange={(e) => onUpdate({ period: Number(e.target.value) })}
-              className="w-full h-2 bg-zinc-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow"
-            />
-            <input
-              type="number"
-              min={2}
-              max={200}
-              value={indicator.period}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (Number.isNaN(value)) return;
-                onUpdate({ period: Math.min(200, Math.max(2, value)) });
-              }}
-              className="w-18 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
-            />
+        {indicator.type !== 'macd' ? (
+          <div className="rounded-lg bg-zinc-800 p-4">
+            <div className="text-zinc-400 text-sm mb-2">Period</div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={2}
+                max={200}
+                value={indicator.period}
+                onChange={(e) => onUpdate({ period: Number(e.target.value) })}
+                className="w-full h-2 bg-zinc-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow"
+              />
+              <input
+                type="number"
+                min={2}
+                max={200}
+                value={indicator.period}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (Number.isNaN(value)) return;
+                  onUpdate({ period: Math.min(200, Math.max(2, value)) });
+                }}
+                className="w-18 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg bg-zinc-800 p-4 space-y-3">
+            <div className="text-zinc-400 text-sm">Periods</div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <div className="text-[11px] text-zinc-500 mb-1">Fast</div>
+                <input
+                  type="number"
+                  min={2}
+                  max={100}
+                  value={indicator.fastPeriod}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (Number.isNaN(value)) return;
+                    onUpdate({ fastPeriod: Math.min(100, Math.max(2, value)) });
+                  }}
+                  className="w-full px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              <div>
+                <div className="text-[11px] text-zinc-500 mb-1">Slow</div>
+                <input
+                  type="number"
+                  min={3}
+                  max={200}
+                  value={indicator.slowPeriod}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (Number.isNaN(value)) return;
+                    onUpdate({ slowPeriod: Math.min(200, Math.max(3, value)) });
+                  }}
+                  className="w-full px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+              <div>
+                <div className="text-[11px] text-zinc-500 mb-1">Signal</div>
+                <input
+                  type="number"
+                  min={2}
+                  max={100}
+                  value={indicator.signalPeriod}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (Number.isNaN(value)) return;
+                    onUpdate({ signalPeriod: Math.min(100, Math.max(2, value)) });
+                  }}
+                  className="w-full px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-lg bg-zinc-800 p-4">
           <div className="text-zinc-400 text-sm mb-2">Line width</div>

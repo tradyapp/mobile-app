@@ -8,6 +8,7 @@ interface AddIndicatorScreenProps {
   onAddMovingAverage: () => void;
   onAddExponentialMovingAverage: () => void;
   onAddRsi: () => void;
+  onAddMacd: () => void;
 }
 
 export default function AddIndicatorScreen({
@@ -17,6 +18,7 @@ export default function AddIndicatorScreen({
   onAddMovingAverage,
   onAddExponentialMovingAverage,
   onAddRsi,
+  onAddMacd,
 }: AddIndicatorScreenProps) {
   return (
     <>
@@ -72,6 +74,24 @@ export default function AddIndicatorScreen({
             <div>
               <div className="text-base text-white">RSI</div>
               <div className="text-xs text-zinc-400">Relative Strength Index</div>
+            </div>
+            <ChevronRight />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onAddMacd();
+          }}
+          onClick={(e) => e.preventDefault()}
+          className="w-full px-4 py-4 rounded-lg text-left transition-colors [touch-action:manipulation] bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-base text-white">MACD</div>
+              <div className="text-xs text-zinc-400">Moving Average Convergence Divergence</div>
             </div>
             <ChevronRight />
           </div>

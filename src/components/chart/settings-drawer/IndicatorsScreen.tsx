@@ -19,6 +19,9 @@ function getIndicatorLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'rsi') {
     return `RSI (${indicator.period})`;
   }
+  if (indicator.type === 'macd') {
+    return `MACD (${indicator.fastPeriod}, ${indicator.slowPeriod}, ${indicator.signalPeriod})`;
+  }
   return indicator.name;
 }
 
@@ -26,6 +29,7 @@ function getIndicatorSubLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'sma') return indicator.source.toUpperCase();
   if (indicator.type === 'ema') return indicator.source.toUpperCase();
   if (indicator.type === 'rsi') return 'Oscillator';
+  if (indicator.type === 'macd') return 'Oscillator';
   return '';
 }
 
