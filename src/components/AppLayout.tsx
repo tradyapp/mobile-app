@@ -40,7 +40,10 @@ const AppLayout = () => {
         </AnimatePresence>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-100">
+      <div
+        className="fixed bottom-0 left-0 right-0 z-100"
+        style={{ transform: "translateY(calc(env(safe-area-inset-bottom) / 2))" }}
+      >
         <Tabbar labels={true} icons={true} className="pr-24">
           <ToolbarPane>
             {tabs.map((tab) => (
