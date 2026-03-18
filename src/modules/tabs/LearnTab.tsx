@@ -9,19 +9,15 @@ import {
   type LmsLesson,
   type LmsModuleWithLessons,
 } from "@/services/LmsService";
+import { useAuthStore } from "@/stores/authStore";
+import { userService } from "@/services/UserService";
 
 type LearnView = "catalog" | "course" | "lesson";
 
-const levelLabels: Record<LmsCourse["level"], string> = {
-  beginner: "Beginner",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
-};
-
-const languageLabels: Record<LmsCourse["language"], string> = {
-  es: "ES",
-  en: "EN",
-  pt: "PT",
+const localeToLanguage: Record<string, LmsCourse["language"]> = {
+  es: "es",
+  en: "en",
+  pt: "pt",
 };
 
 function getMuxStreamUrl(muxId: string): string {
@@ -59,6 +55,7 @@ export default function LearnTab() {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
     let active = true;
@@ -67,9 +64,16 @@ export default function LearnTab() {
       setLoading(true);
       setError(null);
       try {
+        let userLanguage: LmsCourse["language"] = "es";
+        if (user?.uid) {
+          const profile = await userService.getUserProfile(user.uid);
+          const loc = (profile.userData.locale as string) ?? "es";
+          userLanguage = localeToLanguage[loc] ?? "es";
+        }
+
         const data = await lmsService.getPublishedCourses();
         if (!active) return;
-        setCourses(data);
+        setCourses(data.filter((c) => c.language === userLanguage));
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "No se pudieron cargar los cursos");
@@ -83,7 +87,7 @@ export default function LearnTab() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.uid]);
 
   const lessonCount = useMemo(
     () => modules.reduce((sum, module) => sum + module.lessons.length, 0),
@@ -153,28 +157,20 @@ export default function LearnTab() {
           <button
             key={course.id}
             onClick={() => void openCourse(course)}
-            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden"
+            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-row"
           >
-            <div className="aspect-video bg-zinc-800">
+            <div className="w-32 min-h-[5rem] shrink-0 bg-zinc-800">
               {course.thumbnail_url ? (
                 <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
               )}
             </div>
-            <div className="p-3">
-              <h3 className="text-white font-semibold">{course.title}</h3>
+            <div className="p-3 flex flex-col justify-center min-w-0">
+              <h3 className="text-white font-semibold text-sm">{course.title}</h3>
               {course.description && (
                 <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
               )}
-              <div className="flex gap-2 mt-2 text-[10px]">
-                <span className="px-2 py-1 rounded-full bg-zinc-800 text-zinc-300">
-                  {levelLabels[course.level]}
-                </span>
-                <span className="px-2 py-1 rounded-full bg-zinc-800 text-zinc-300">
-                  {languageLabels[course.language]}
-                </span>
-              </div>
             </div>
           </button>
         ))}
