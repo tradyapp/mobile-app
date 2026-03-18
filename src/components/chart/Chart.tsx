@@ -261,6 +261,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const setPreferences = useChartSettingsStore((s) => s.setPreferences);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
   const activeSecondaryPanels = getRequiredSecondaryPanels(activeIndicators, showVolume, symbolType);
+  const panelSignature = activeSecondaryPanels.join("|");
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
@@ -402,6 +403,36 @@ const Chart = ({ width, height }: ChartProps) => {
         volumePane.setStretchFactor(secondarySpace * (volumeWeight / totalWeight));
       }
     }
+  }, []);
+
+  const clearSecondarySeries = useCallback(() => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+
+    if (volumeSeriesRef.current) {
+      chart.removeSeries(volumeSeriesRef.current);
+      volumeSeriesRef.current = null;
+    }
+
+    for (const series of rsiSeriesRef.current.values()) {
+      chart.removeSeries(series);
+    }
+    rsiSeriesRef.current.clear();
+    if (rsiLevel70SeriesRef.current) {
+      chart.removeSeries(rsiLevel70SeriesRef.current);
+      rsiLevel70SeriesRef.current = null;
+    }
+    if (rsiLevel30SeriesRef.current) {
+      chart.removeSeries(rsiLevel30SeriesRef.current);
+      rsiLevel30SeriesRef.current = null;
+    }
+
+    for (const bundle of macdSeriesRef.current.values()) {
+      chart.removeSeries(bundle.macdLine);
+      chart.removeSeries(bundle.signalLine);
+      chart.removeSeries(bundle.histogram);
+    }
+    macdSeriesRef.current.clear();
   }, []);
 
   const getPaneIndex = useCallback((panelId: SecondaryPanelId): number => {
@@ -944,6 +975,23 @@ const Chart = ({ width, height }: ChartProps) => {
     applyPanelLayout();
   }, [activeSecondaryPanels, secondaryPanelHeight, panelHeightDraft, chartVersion, applyPanelLayout]);
 
+  // Effect: reconcile pane structure when active secondary panels change.
+  // This prevents stale empty panes (e.g. volume turned off).
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+
+    clearSecondarySeries();
+
+    while (chart.panes().length > 1) {
+      chart.removePane(chart.panes().length - 1);
+    }
+
+    syncRsiSeries();
+    syncMacdSeries();
+    applyPanelLayout();
+  }, [panelSignature, chartVersion, clearSecondarySeries, syncRsiSeries, syncMacdSeries, applyPanelLayout]);
+
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
     if (!chartRef.current) return;
@@ -978,7 +1026,7 @@ const Chart = ({ width, height }: ChartProps) => {
       volumeSeriesRef.current = null;
     }
     applyPanelLayout();
-  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion, applyPanelLayout, ensurePaneExists, getPaneIndex]);
+  }, [showVolume, symbolType, activeColors.candleUp, activeColors.candleDown, chartVersion, panelSignature, applyPanelLayout, ensurePaneExists, getPaneIndex]);
 
   // Effect 2: Actualizar localization cuando cambia el timeframe
   useEffect(() => {
