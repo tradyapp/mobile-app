@@ -67,7 +67,7 @@ export default function AppDrawer({
           >
             <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-zinc-600 mb-6" />
             <div
-              className="w-full min-h-0 flex-1"
+              className="w-full min-h-0 flex-1 flex flex-col"
             >
               {useScreenNav ? (
                 <AnimatedDrawerNav
