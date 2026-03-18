@@ -42,6 +42,17 @@ export interface MovingAverageIndicator {
   visible: boolean;
 }
 
+export interface ExponentialMovingAverageIndicator {
+  id: string;
+  type: 'ema';
+  name: 'Exponential Moving Average';
+  period: number;
+  source: 'close';
+  color: string;
+  lineWidth: number;
+  visible: boolean;
+}
+
 export interface RsiIndicator {
   id: string;
   type: 'rsi';
@@ -52,7 +63,7 @@ export interface RsiIndicator {
   visible: boolean;
 }
 
-export type ChartIndicator = MovingAverageIndicator | RsiIndicator;
+export type ChartIndicator = MovingAverageIndicator | ExponentialMovingAverageIndicator | RsiIndicator;
 
 // ── Built-in templates ──
 export const BUILT_IN_TEMPLATES: ChartTemplate[] = [

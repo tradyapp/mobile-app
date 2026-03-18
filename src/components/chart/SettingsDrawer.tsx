@@ -8,6 +8,7 @@ import {
   DEFAULT_COLORS,
   type ChartColors,
   type ChartTemplate,
+  type ExponentialMovingAverageIndicator,
   type MovingAverageIndicator,
   type RsiIndicator,
 } from "@/stores/chartSettingsStore";
@@ -286,6 +287,23 @@ function AddIndicatorScreenWrapper() {
 
         setPreferences({
           indicators: [...preferences.indicators, movingAverage],
+        });
+        goBack();
+      }}
+      onAddExponentialMovingAverage={() => {
+        const exponentialMovingAverage: ExponentialMovingAverageIndicator = {
+          id: crypto.randomUUID(),
+          type: 'ema',
+          name: 'Exponential Moving Average',
+          period: 20,
+          source: 'close',
+          color: '#22d3ee',
+          lineWidth: 2,
+          visible: true,
+        };
+
+        setPreferences({
+          indicators: [...preferences.indicators, exponentialMovingAverage],
         });
         goBack();
       }}

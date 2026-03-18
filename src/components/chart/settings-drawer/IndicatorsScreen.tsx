@@ -13,6 +13,9 @@ function getIndicatorLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'sma') {
     return `Moving Average (${indicator.period})`;
   }
+  if (indicator.type === 'ema') {
+    return `EMA (${indicator.period})`;
+  }
   if (indicator.type === 'rsi') {
     return `RSI (${indicator.period})`;
   }
@@ -21,6 +24,7 @@ function getIndicatorLabel(indicator: ChartIndicator): string {
 
 function getIndicatorSubLabel(indicator: ChartIndicator): string {
   if (indicator.type === 'sma') return indicator.source.toUpperCase();
+  if (indicator.type === 'ema') return indicator.source.toUpperCase();
   if (indicator.type === 'rsi') return 'Oscillator';
   return '';
 }

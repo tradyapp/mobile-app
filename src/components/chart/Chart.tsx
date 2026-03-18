@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
-import { useChartSettingsStore, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
+import { useChartSettingsStore, type ChartIndicator, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
 import {
   buildChartPanelLayout,
   getRequiredSecondaryPanels,
@@ -92,6 +92,29 @@ function calculateSmaData(candles: ChartCandle[], period: number) {
   return data;
 }
 
+function calculateEmaData(candles: ChartCandle[], period: number) {
+  const data: { time: ChartCandle["time"]; value: number }[] = [];
+  if (period <= 0 || candles.length < period) return data;
+
+  const multiplier = 2 / (period + 1);
+
+  let smaSeed = 0;
+  for (let i = 0; i < period; i++) {
+    smaSeed += candles[i].close;
+  }
+
+  let ema = smaSeed / period;
+  data.push({ time: candles[period - 1].time, value: ema });
+
+  for (let i = period; i < candles.length; i++) {
+    const close = candles[i].close;
+    ema = ((close - ema) * multiplier) + ema;
+    data.push({ time: candles[i].time, value: ema });
+  }
+
+  return data;
+}
+
 function calculateRsiData(candles: ChartCandle[], period: number) {
   const data: { time: ChartCandle["time"]; value: number }[] = [];
   if (period <= 0 || candles.length <= period) return data;
@@ -150,7 +173,7 @@ const Chart = ({ width, height }: ChartProps) => {
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
-  const movingAverageSeriesRef = useRef<Map<string, any>>(new Map());
+  const priceOverlaySeriesRef = useRef<Map<string, any>>(new Map());
   const rsiSeriesRef = useRef<Map<string, any>>(new Map());
   const rsiLevel70SeriesRef = useRef<any>(null);
   const rsiLevel30SeriesRef = useRef<any>(null);
@@ -275,12 +298,14 @@ const Chart = ({ width, height }: ChartProps) => {
     }
   }, []);
 
-  const syncMovingAverageSeries = useCallback(() => {
+  const syncPriceOverlaySeries = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const seriesMap = movingAverageSeriesRef.current;
-    const indicators = activeIndicatorsRef.current.filter((indicator) => indicator.visible && indicator.type === 'sma');
+    const seriesMap = priceOverlaySeriesRef.current;
+    const indicators = activeIndicatorsRef.current.filter(
+      (indicator) => indicator.visible && (indicator.type === 'sma' || indicator.type === 'ema')
+    );
     const activeIds = new Set(indicators.map((indicator) => indicator.id));
 
     for (const [id, series] of seriesMap) {
@@ -291,27 +316,36 @@ const Chart = ({ width, height }: ChartProps) => {
     }
 
     indicators.forEach((indicator) => {
-      const movingAverage = indicator as MovingAverageIndicator;
-      let lineSeries = seriesMap.get(movingAverage.id);
+      let lineSeries = seriesMap.get(indicator.id);
       if (!lineSeries) {
         lineSeries = chart.addSeries(LineSeries, {
-          color: movingAverage.color,
-          lineWidth: movingAverage.lineWidth,
-          title: showMaNameLabelsRef.current ? `SMA ${movingAverage.period}` : '',
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current
+            ? `${indicator.type.toUpperCase()} ${indicator.period}`
+            : '',
           lastValueVisible: showMaPriceLabelsRef.current,
           priceLineVisible: false,
         });
-        seriesMap.set(movingAverage.id, lineSeries);
+        seriesMap.set(indicator.id, lineSeries);
       } else {
         lineSeries.applyOptions({
-          color: movingAverage.color,
-          lineWidth: movingAverage.lineWidth,
-          title: showMaNameLabelsRef.current ? `SMA ${movingAverage.period}` : '',
+          color: indicator.color,
+          lineWidth: indicator.lineWidth,
+          title: showMaNameLabelsRef.current
+            ? `${indicator.type.toUpperCase()} ${indicator.period}`
+            : '',
           lastValueVisible: showMaPriceLabelsRef.current,
         });
       }
 
-      lineSeries.setData(calculateSmaData(allCandlesRef.current, movingAverage.period));
+      if (indicator.type === 'sma') {
+        const movingAverage = indicator as MovingAverageIndicator;
+        lineSeries.setData(calculateSmaData(allCandlesRef.current, movingAverage.period));
+        return;
+      }
+
+      lineSeries.setData(calculateEmaData(allCandlesRef.current, indicator.period));
     });
   }, []);
 
@@ -437,7 +471,7 @@ const Chart = ({ width, height }: ChartProps) => {
               .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? activeColorsRef.current.candleUp + '40' : activeColorsRef.current.candleDown + '40' }))
           );
         }
-        syncMovingAverageSeries();
+        syncPriceOverlaySeries();
         syncRsiSeries();
       })
       .catch((error) => {
@@ -446,7 +480,7 @@ const Chart = ({ width, height }: ChartProps) => {
       .finally(() => {
         isLoadingMoreRef.current = false;
       });
-  }, [syncMovingAverageSeries, syncRsiSeries]);
+  }, [syncPriceOverlaySeries, syncRsiSeries]);
 
   // Effect 1: Crear el chart (solo cuando cambian width/height)
   useEffect(() => {
@@ -552,11 +586,11 @@ const Chart = ({ width, height }: ChartProps) => {
 
     candleSeriesRef.current = candlestickSeries;
     applyPanelLayout();
-    syncMovingAverageSeries();
+    syncPriceOverlaySeries();
     syncRsiSeries();
 
     return () => {
-      movingAverageSeriesRef.current.clear();
+      priceOverlaySeriesRef.current.clear();
       rsiSeriesRef.current.clear();
       rsiLevel70SeriesRef.current = null;
       rsiLevel30SeriesRef.current = null;
@@ -569,7 +603,7 @@ const Chart = ({ width, height }: ChartProps) => {
         chartRef.current = null;
       }
     };
-  }, [timeframe, syncMovingAverageSeries, syncRsiSeries]);
+  }, [timeframe, syncPriceOverlaySeries, syncRsiSeries]);
 
   // Effect: Resize chart when dimensions change (without recreating it)
   useEffect(() => {
@@ -624,16 +658,16 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
     }
 
-    syncMovingAverageSeries();
+    syncPriceOverlaySeries();
     syncRsiSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
-    syncMovingAverageSeries();
+    syncPriceOverlaySeries();
     syncRsiSeries();
     applyPanelLayout();
-  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncPriceOverlaySeries, syncRsiSeries]);
 
   // Effect: react to panel height resize changes
   useEffect(() => {
@@ -792,7 +826,7 @@ const Chart = ({ width, height }: ChartProps) => {
                 .map((c) => ({ time: c.time, value: c.volume!, color: c.close >= c.open ? colors.candleUp + '40' : colors.candleDown + '40' }))
             );
           }
-          syncMovingAverageSeries();
+          syncPriceOverlaySeries();
           syncRsiSeries();
 
           setLoading(false);
@@ -831,7 +865,7 @@ const Chart = ({ width, height }: ChartProps) => {
       priceLineRef.current = null;
       setLoading(true);
     };
-  }, [symbol, symbolType, timeframe, syncMovingAverageSeries, syncRsiSeries]);
+  }, [symbol, symbolType, timeframe, syncPriceOverlaySeries, syncRsiSeries]);
 
   const effectiveSecondaryPanelHeight = panelHeightDraft ?? secondaryPanelHeight;
   const currentPanelLayout = buildChartPanelLayout(activeSecondaryPanels, effectiveSecondaryPanelHeight);
