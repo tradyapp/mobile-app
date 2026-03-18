@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 import { Navbar } from 'konsta/react';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import ProfileDrawer from '../modules/ProfileDrawer';
 
 interface AppNavbarProps {
@@ -10,29 +10,72 @@ interface AppNavbarProps {
   titlePosition?: 'center' | 'left';
 }
 
+function MarqueeTitle({ text }: { text: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const container = containerRef.current;
+      const span = textRef.current;
+      if (!container || !span) return;
+      const isOverflowing = span.scrollWidth > container.clientWidth;
+      setOverflows(isOverflowing);
+      if (isOverflowing) {
+        container.style.setProperty('--marquee-container-width', `${container.clientWidth}px`);
+      }
+    };
+
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [text]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden max-w-full"
+    >
+      {overflows && (
+        <>
+          <div className="absolute left-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-r from-zinc-950 to-transparent" />
+          <div className="absolute right-0 top-0 bottom-0 w-6 z-10 pointer-events-none bg-gradient-to-l from-zinc-950 to-transparent" />
+        </>
+      )}
+      <span
+        ref={textRef}
+        className={`inline-block whitespace-nowrap font-semibold ${overflows ? 'animate-marquee' : ''}`}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 export default function AppNavbar({ title, left, titlePosition = 'center' }: AppNavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   return (
     <>
-      <Navbar 
-        title={title}
+      <Navbar
+        title={title ? <MarqueeTitle text={title} /> : undefined}
         titleClassName={titlePosition === 'left' ? 'text-left flex-none ml-0' : ''}
         left={left}
         right={
           <button onClick={() => setIsProfileOpen(true)}>
-            <img 
-              src="/img/default-user.jpg" 
-              alt="User" 
-              className="w-10 h-10 rounded-full" 
+            <img
+              src="/img/default-user.jpg"
+              alt="User"
+              className="w-10 h-10 rounded-full"
             />
           </button>
-        } 
+        }
       />
 
-      <ProfileDrawer 
-        isOpen={isProfileOpen} 
-        onOpenChange={setIsProfileOpen} 
+      <ProfileDrawer
+        isOpen={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
       />
     </>
   );

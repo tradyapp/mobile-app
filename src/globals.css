@@ -4,6 +4,13 @@
 @theme {
   --color-brand-primary: #00ff99;
   --color-brand-red: #ff4444;
+  --color-zinc-950: #09090b;
+  --animate-marquee: marquee 6s ease-in-out infinite alternate;
+}
+
+@keyframes marquee {
+  0%, 20% { transform: translateX(0); }
+  80%, 100% { transform: translateX(calc(-100% + var(--marquee-container-width, 200px))); }
 }
 
 .dark {
