@@ -471,12 +471,34 @@ function StrategyDetailView({
   );
 }
 
-function NodesView() {
+interface NodesViewProps {
+  strategyName: string;
+  onClose: () => void;
+}
+
+function NodesView({ strategyName, onClose }: NodesViewProps) {
   return (
-    <div className="mx-auto max-w-xl px-4 pb-24">
-      <div className="mt-6 min-h-[68vh] rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-        <div className="flex h-full min-h-[60vh] items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70">
-          <p className="text-sm text-zinc-400">Node WIP!</p>
+    <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
+      <div className="flex h-full flex-col overflow-hidden">
+        <header className="flex items-center gap-3 border-b border-zinc-800 px-4 pb-3 pt-[max(16px,env(safe-area-inset-top))]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200"
+            aria-label="Close nodes view"
+          >
+            <CloseIcon />
+          </button>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
+            <p className="text-xs text-zinc-500">Nodes Editor</p>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-hidden p-4">
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900">
+            <p className="text-sm text-zinc-400">Node WIP!</p>
+          </div>
         </div>
       </div>
     </div>
@@ -717,61 +739,57 @@ export default function OrionTab() {
 
   return (
     <>
-      <AppNavbar
-        title={isNodesView ? 'Nodes' : (isStrategyDetailView ? (selectedStrategy?.name ?? 'Strategy') : (isMarketplace ? 'Orion Marketplace' : 'Notifications'))}
-        left={
-          isNodesView ? (
-            <button
-              type="button"
-              onClick={() => setMyStrategiesScreen('detail')}
-              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
-              aria-label="Close nodes view"
-            >
-              <CloseIcon />
-            </button>
-          ) : isStrategyDetailView ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMyStrategiesScreen('list');
-                setSelectedStrategyId(null);
-              }}
-              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
-              aria-label="Close strategy view"
-            >
-              <CloseIcon />
-            </button>
-          ) : isMarketplace ? (
-            <button
-              type="button"
-              onClick={() => {
-                setView('notifications');
-                setMarketplaceTab('explore');
-                setMyStrategiesScreen('list');
-                setSelectedStrategyId(null);
-                setCreateDraft(createEmptyDraft());
-                setCreateError(null);
-              }}
-              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
-              aria-label="Close Orion marketplace"
-            >
-              <CloseIcon />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setView('marketplace')}
-              className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
-              aria-label="Open Orion marketplace"
-            >
-              <CogIcon />
-            </button>
-          )
-        }
-      />
+      {!isNodesView && (
+        <AppNavbar
+          title={isStrategyDetailView ? (selectedStrategy?.name ?? 'Strategy') : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
+          left={
+            isStrategyDetailView ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMyStrategiesScreen('list');
+                  setSelectedStrategyId(null);
+                }}
+                className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
+                aria-label="Close strategy view"
+              >
+                <CloseIcon />
+              </button>
+            ) : isMarketplace ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setView('notifications');
+                  setMarketplaceTab('explore');
+                  setMyStrategiesScreen('list');
+                  setSelectedStrategyId(null);
+                  setCreateDraft(createEmptyDraft());
+                  setCreateError(null);
+                }}
+                className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
+                aria-label="Close Orion marketplace"
+              >
+                <CloseIcon />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setView('marketplace')}
+                className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
+                aria-label="Open Orion marketplace"
+              >
+                <CogIcon />
+              </button>
+            )
+          }
+        />
+      )}
 
       {isNodesView && selectedStrategy ? (
-        <NodesView />
+        <NodesView
+          strategyName={selectedStrategy.name}
+          onClose={() => setMyStrategiesScreen('detail')}
+        />
       ) : isStrategyDetailView && selectedStrategy ? (
         <StrategyDetailView
           strategy={selectedStrategy}
