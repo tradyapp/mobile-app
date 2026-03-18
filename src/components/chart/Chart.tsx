@@ -15,7 +15,13 @@ import {
 import { StockDataService, CandleData, RealtimeMeta } from "@/services/StockDataService";
 import { useChartStore } from "@/stores/chartStore";
 import { useChartSettingsStore, type MovingAverageIndicator, type RsiIndicator } from "@/stores/chartSettingsStore";
-import { buildChartPanelLayout, getRequiredSecondaryPanels, type SecondaryPanelId } from "./panels/layout";
+import {
+  buildChartPanelLayout,
+  getRequiredSecondaryPanels,
+  MAX_SECONDARY_PANEL_HEIGHT,
+  MIN_SECONDARY_PANEL_HEIGHT,
+  type SecondaryPanelId,
+} from "./panels/layout";
 import ChartSkeleton from "./ChartSkeleton";
 import DrawingManager from "./DrawingManager";
 
@@ -136,9 +142,10 @@ const Chart = ({ width, height }: ChartProps) => {
   const showMaNameLabels = useChartSettingsStore((s) => s.preferences.showMaNameLabels);
   const showMaPriceLabels = useChartSettingsStore((s) => s.preferences.showMaPriceLabels);
   const showLastPriceLine = useChartSettingsStore((s) => s.preferences.showLastPriceLine);
+  const secondaryPanelHeight = useChartSettingsStore((s) => s.preferences.secondaryPanelHeight);
+  const setPreferences = useChartSettingsStore((s) => s.setPreferences);
   const activeIndicators = useChartSettingsStore((s) => s.preferences.indicators);
   const activeSecondaryPanels = getRequiredSecondaryPanels(activeIndicators, showVolume, symbolType);
-  const hasRsiPanel = activeSecondaryPanels.includes("rsi");
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<any>(null);
@@ -150,6 +157,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const [loading, setLoading] = React.useState(true);
   const [chartVersion, setChartVersion] = useState(0);
   const [hoveredCandle, setHoveredCandle] = useState<HoveredCandle | null>(null);
+  const [panelHeightDraft, setPanelHeightDraft] = useState<number | null>(null);
+  const [isResizingPanels, setIsResizingPanels] = useState(false);
 
   // Post-market price line ref
   const priceLineRef = useRef<any>(null);
@@ -163,6 +172,8 @@ const Chart = ({ width, height }: ChartProps) => {
   const symbolTypeRef = useRef(symbolType);
   const timeframeRef = useRef(timeframe);
   const activeSecondaryPanelsRef = useRef<SecondaryPanelId[]>(activeSecondaryPanels);
+  const secondaryPanelHeightRef = useRef(secondaryPanelHeight);
+  const resizeStartRef = useRef<{ active: boolean }>({ active: false });
 
   // Refs for latest colors/fill (read during chart creation without adding to deps)
   const activeColorsRef = useRef(activeColors);
@@ -179,6 +190,7 @@ const Chart = ({ width, height }: ChartProps) => {
     symbolTypeRef.current = symbolType;
     timeframeRef.current = timeframe;
     activeSecondaryPanelsRef.current = activeSecondaryPanels;
+    secondaryPanelHeightRef.current = panelHeightDraft ?? secondaryPanelHeight;
     activeColorsRef.current = activeColors;
     filledUpRef.current = activeFilledUpCandle;
     filledDownRef.current = activeFilledDownCandle;
@@ -186,12 +198,52 @@ const Chart = ({ width, height }: ChartProps) => {
     showMaNameLabelsRef.current = showMaNameLabels;
     showMaPriceLabelsRef.current = showMaPriceLabels;
     showLastPriceLineRef.current = showLastPriceLine;
-  }, [symbol, symbolType, timeframe, activeSecondaryPanels, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
+  }, [symbol, symbolType, timeframe, activeSecondaryPanels, secondaryPanelHeight, panelHeightDraft, activeColors, activeFilledUpCandle, activeFilledDownCandle, activeIndicators, showMaNameLabels, showMaPriceLabels, showLastPriceLine]);
+
+  const getSecondaryHeightFromPointer = useCallback((clientY: number) => {
+    const container = chartContainerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) return null;
+
+    const raw = (rect.bottom - clientY) / rect.height;
+    const clamped = Math.min(MAX_SECONDARY_PANEL_HEIGHT, Math.max(MIN_SECONDARY_PANEL_HEIGHT, raw));
+    return clamped;
+  }, []);
+
+  const handleResizePointerMove = useCallback((event: PointerEvent) => {
+    if (!resizeStartRef.current.active) return;
+    const value = getSecondaryHeightFromPointer(event.clientY);
+    if (value == null) return;
+    setPanelHeightDraft(value);
+  }, [getSecondaryHeightFromPointer]);
+
+  const stopResizePanels = useCallback(() => {
+    if (!resizeStartRef.current.active) return;
+    resizeStartRef.current.active = false;
+    setIsResizingPanels(false);
+
+    if (panelHeightDraft != null) {
+      setPreferences({ secondaryPanelHeight: panelHeightDraft });
+      setPanelHeightDraft(null);
+    }
+  }, [panelHeightDraft, setPreferences]);
+
+  useEffect(() => {
+    window.addEventListener("pointermove", handleResizePointerMove);
+    window.addEventListener("pointerup", stopResizePanels);
+    window.addEventListener("pointercancel", stopResizePanels);
+    return () => {
+      window.removeEventListener("pointermove", handleResizePointerMove);
+      window.removeEventListener("pointerup", stopResizePanels);
+      window.removeEventListener("pointercancel", stopResizePanels);
+    };
+  }, [handleResizePointerMove, stopResizePanels]);
 
   const applyPanelLayout = useCallback(() => {
     if (!chartRef.current) return;
     const chart = chartRef.current;
-    const layout = buildChartPanelLayout(activeSecondaryPanelsRef.current);
+    const layout = buildChartPanelLayout(activeSecondaryPanelsRef.current, secondaryPanelHeightRef.current);
 
     chart.applyOptions({
       rightPriceScale: {
@@ -571,14 +623,19 @@ const Chart = ({ width, height }: ChartProps) => {
 
     syncMovingAverageSeries();
     syncRsiSeries();
-  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, hasRsiPanel, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
+  }, [activeColors, activeFilledUpCandle, activeFilledDownCandle, showLastPriceLine, showMaNameLabels, showMaPriceLabels, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
 
   // Effect: manage indicator overlays
   useEffect(() => {
     syncMovingAverageSeries();
     syncRsiSeries();
     applyPanelLayout();
-  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, hasRsiPanel, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
+  }, [activeIndicators, showMaNameLabels, showMaPriceLabels, chartVersion, applyPanelLayout, syncMovingAverageSeries, syncRsiSeries]);
+
+  // Effect: react to panel height resize changes
+  useEffect(() => {
+    applyPanelLayout();
+  }, [activeSecondaryPanels, secondaryPanelHeight, panelHeightDraft, chartVersion, applyPanelLayout]);
 
   // Effect: Manage volume histogram series (stocks only)
   useEffect(() => {
@@ -592,7 +649,7 @@ const Chart = ({ width, height }: ChartProps) => {
         priceScaleId: 'volume',
       });
       volSeries.priceScale().applyOptions({
-        scaleMargins: buildChartPanelLayout(activeSecondaryPanelsRef.current).panels.volume ?? { top: 0.8, bottom: 0 },
+        scaleMargins: buildChartPanelLayout(activeSecondaryPanelsRef.current, secondaryPanelHeightRef.current).panels.volume ?? { top: 0.8, bottom: 0 },
       });
       volumeSeriesRef.current = volSeries;
 
@@ -766,9 +823,33 @@ const Chart = ({ width, height }: ChartProps) => {
     };
   }, [symbol, symbolType, timeframe, syncMovingAverageSeries, syncRsiSeries]);
 
+  const effectiveSecondaryPanelHeight = panelHeightDraft ?? secondaryPanelHeight;
+  const currentPanelLayout = buildChartPanelLayout(activeSecondaryPanels, effectiveSecondaryPanelHeight);
+  const dividerTopPercent = `${(1 - currentPanelLayout.main.bottom) * 100}%`;
+
   return (
     <div className="absolute inset-0 ">
       <div ref={chartContainerRef} className="w-full h-full" />
+      {activeSecondaryPanels.length > 0 && (
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault();
+            resizeStartRef.current.active = true;
+            setIsResizingPanels(true);
+            const value = getSecondaryHeightFromPointer(e.clientY);
+            if (value != null) setPanelHeightDraft(value);
+          }}
+          className={[
+            "absolute left-0 right-0 z-30 cursor-row-resize [touch-action:none]",
+            isResizingPanels ? "h-6 -mt-3" : "h-5 -mt-2.5",
+          ].join(" ")}
+          style={{ top: dividerTopPercent }}
+          aria-label="Resize panels"
+          role="separator"
+        >
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-zinc-500/60" />
+        </div>
+      )}
       <DrawingManager
         chartRef={chartRef}
         seriesRef={candleSeriesRef}

@@ -2,6 +2,9 @@ import type { ChartIndicator } from "@/stores/chartSettingsStore";
 import type { SymbolType } from "@/stores/chartStore";
 
 export type SecondaryPanelId = "rsi" | "volume";
+export const DEFAULT_SECONDARY_PANEL_HEIGHT = 0.32;
+export const MIN_SECONDARY_PANEL_HEIGHT = 0.16;
+export const MAX_SECONDARY_PANEL_HEIGHT = 0.65;
 
 interface PanelSpec {
   id: SecondaryPanelId;
@@ -54,27 +57,47 @@ export function getRequiredSecondaryPanels(
   return PANEL_ORDER_FROM_BOTTOM.filter((panel) => required.has(panel));
 }
 
-export function buildChartPanelLayout(activePanels: SecondaryPanelId[]): ChartPanelLayout {
+function clampSecondaryPanelHeight(height: number): number {
+  return Math.min(MAX_SECONDARY_PANEL_HEIGHT, Math.max(MIN_SECONDARY_PANEL_HEIGHT, height));
+}
+
+export function buildChartPanelLayout(
+  activePanels: SecondaryPanelId[],
+  secondaryPanelHeight = DEFAULT_SECONDARY_PANEL_HEIGHT,
+): ChartPanelLayout {
+  const clampedSecondaryHeight = clampSecondaryPanelHeight(secondaryPanelHeight);
   const panels: Partial<Record<SecondaryPanelId, PanelScaleMargins>> = {};
+  const resolvedPanels = PANEL_ORDER_FROM_BOTTOM.filter((panel) => activePanels.includes(panel));
+
+  if (resolvedPanels.length === 0) {
+    return {
+      main: { top: MAIN_TOP_MARGIN, bottom: PANEL_BOTTOM_PADDING },
+      panels,
+    };
+  }
+
+  const totalGap = INTER_PANEL_GAP * (resolvedPanels.length - 1);
+  const normalizedSpace = Math.max(0.02, clampedSecondaryHeight - PANEL_BOTTOM_PADDING - totalGap);
+  const baseHeightSum = resolvedPanels.reduce((sum, panelId) => sum + PANEL_SPECS[panelId].height, 0);
+
   let consumedBottom = PANEL_BOTTOM_PADDING;
 
-  for (const panel of PANEL_ORDER_FROM_BOTTOM) {
-    if (!activePanels.includes(panel)) continue;
+  for (const panel of resolvedPanels) {
+    const baseHeight = PANEL_SPECS[panel].height;
+    const panelHeight = (baseHeight / baseHeightSum) * normalizedSpace;
 
-    const spec = PANEL_SPECS[panel];
     panels[panel] = {
-      top: Math.max(MAIN_TOP_MARGIN, 1 - (consumedBottom + spec.height)),
+      top: Math.max(MAIN_TOP_MARGIN, 1 - (consumedBottom + panelHeight)),
       bottom: consumedBottom,
     };
-    consumedBottom += spec.height + INTER_PANEL_GAP;
+    consumedBottom += panelHeight + INTER_PANEL_GAP;
   }
 
   return {
     main: {
       top: MAIN_TOP_MARGIN,
-      bottom: Math.min(0.9, consumedBottom),
+      bottom: Math.min(0.9, clampedSecondaryHeight),
     },
     panels,
   };
 }
-

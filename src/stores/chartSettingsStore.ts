@@ -28,6 +28,7 @@ export interface ChartPreferences {
   showMaNameLabels: boolean;
   showMaPriceLabels: boolean;
   showLastPriceLine: boolean;
+  secondaryPanelHeight: number;
 }
 
 export interface MovingAverageIndicator {
@@ -133,6 +134,7 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   showMaNameLabels: true,
   showMaPriceLabels: true,
   showLastPriceLine: true,
+  secondaryPanelHeight: 0.32,
 };
 
 function normalizePreferences(prefs: Partial<ChartPreferences> | null | undefined): ChartPreferences {
@@ -143,6 +145,7 @@ function normalizePreferences(prefs: Partial<ChartPreferences> | null | undefine
     showMaNameLabels: prefs?.showMaNameLabels ?? legacyShowMaLabels ?? DEFAULT_PREFERENCES.showMaNameLabels,
     showMaPriceLabels: prefs?.showMaPriceLabels ?? legacyShowMaLabels ?? DEFAULT_PREFERENCES.showMaPriceLabels,
     showLastPriceLine: prefs?.showLastPriceLine ?? DEFAULT_PREFERENCES.showLastPriceLine,
+    secondaryPanelHeight: prefs?.secondaryPanelHeight ?? DEFAULT_PREFERENCES.secondaryPanelHeight,
   };
 }
 
