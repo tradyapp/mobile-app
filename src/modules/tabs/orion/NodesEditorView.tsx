@@ -156,39 +156,12 @@ function SnapshotTree({
   const isArray = Array.isArray(value);
   const isObject = isPlainObject(value);
   const isBranch = isArray || isObject;
-  const tone = depth % 4;
-  const branchToneClass = tone === 0
-    ? 'border-blue-900/70 bg-blue-950/20'
-    : tone === 1
-      ? 'border-emerald-900/70 bg-emerald-950/20'
-      : tone === 2
-        ? 'border-amber-900/70 bg-amber-950/20'
-        : 'border-violet-900/70 bg-violet-950/20';
-  const leafToneClass = tone === 0
-    ? 'border-blue-900/60 bg-blue-950/15'
-    : tone === 1
-      ? 'border-emerald-900/60 bg-emerald-950/15'
-      : tone === 2
-        ? 'border-amber-900/60 bg-amber-950/15'
-        : 'border-violet-900/60 bg-violet-950/15';
-  const keyTextClass = tone === 0
-    ? 'text-blue-200'
-    : tone === 1
-      ? 'text-emerald-200'
-      : tone === 2
-        ? 'text-amber-200'
-        : 'text-violet-200';
-  const typeBadgeClass = tone === 0
-    ? 'border-blue-800/70 bg-blue-900/25 text-blue-300'
-    : tone === 1
-      ? 'border-emerald-800/70 bg-emerald-900/25 text-emerald-300'
-      : tone === 2
-        ? 'border-amber-800/70 bg-amber-900/25 text-amber-300'
-        : 'border-violet-800/70 bg-violet-900/25 text-violet-300';
+  const tone = depth % 3;
+  const keyTextClass = tone === 0 ? 'text-zinc-200' : tone === 1 ? 'text-zinc-300' : 'text-zinc-400';
 
   if (!isBranch) {
     return (
-      <div className={`mt-1.5 flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 ${leafToneClass}`}>
+      <div className="mt-1 flex items-start justify-between gap-3 py-1.5">
         <p className={`min-w-0 shrink text-[11px] font-semibold ${keyTextClass}`}>{label}</p>
         <p className="max-w-[58%] break-words text-right text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
       </div>
@@ -201,19 +174,19 @@ function SnapshotTree({
 
   return (
     <details
-      className={`mt-1.5 rounded-lg border ${branchToneClass}`}
+      className="mt-1"
       open={depth < 2}
     >
-      <summary className="cursor-pointer list-none px-3 py-2.5 text-[11px] font-semibold text-zinc-100">
+      <summary className="cursor-pointer py-1.5 text-[11px] font-semibold text-zinc-100 marker:text-zinc-500">
         <span className="inline-flex items-center gap-2">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] ${typeBadgeClass}`}>{isArray ? 'Array' : 'Object'}</span>
           <span className={keyTextClass}>{label}</span>
           <span className="text-zinc-500">({entries.length})</span>
+          <span className="text-[10px] text-zinc-500">{isArray ? 'array' : 'object'}</span>
         </span>
       </summary>
-      <div className="space-y-1.5 border-t border-zinc-800/70 px-2.5 pb-2.5 pt-1.5">
+      <div className="ml-4 space-y-0.5 pl-2">
         {entries.length === 0 ? (
-          <div className="rounded-md border border-zinc-800/80 bg-zinc-900/70 px-2.5 py-2 text-[11px] text-zinc-500">
+          <div className="py-1.5 text-[11px] text-zinc-500">
             Empty
           </div>
         ) : (
