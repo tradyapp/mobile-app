@@ -1122,81 +1122,84 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               </div>
               <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3">
                 <div className="space-y-2">
-                  {selectedNodeExecutionTrace && nodeDetailsPanel === 'inputs' && (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Inputs</p>
-                      <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.inputSnapshot, null, 2)}</pre>
-                    </div>
-                  )}
-                  {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Output</p>
-                      <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.outputSnapshot, null, 2)}</pre>
-                      {selectedNodeExecutionTrace.error && (
-                        <p className="mt-2 text-[11px] text-red-300">{selectedNodeExecutionTrace.error}</p>
-                      )}
-                    </div>
-                  )}
-                  {nodeDetailsPanel === 'errors' && (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                      <p className="text-[11px] font-semibold text-zinc-300">Execution Error</p>
-                      {selectedNodeExecutionTrace?.error ? (
-                        <pre className="mt-2 overflow-x-auto rounded-md border border-red-900 bg-red-950/30 p-2 text-[10px] text-red-300">{selectedNodeExecutionTrace.error}</pre>
-                      ) : (
-                        <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-400">
-                          No error for this node in the latest execution.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {panelFields.length === 0 ? (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
-                      {nodeDetailsPanel === 'errors'
-                        ? 'Error details are shown above.'
-                        : nodeDetailsPanel === 'attributes'
-                        ? 'No configurable attributes for this node.'
-                        : 'No flow ports in this panel.'}
-                    </div>
-                  ) : (
-                    panelFields.map((field, index) => (
-                      <div key={field.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                        <div className="grid grid-cols-1 gap-2">
-                          <input
-                            type="text"
-                            value={field.name}
-                            readOnly
-                            placeholder="Field name"
-                            className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
-                          />
+                  {nodeDetailsPanel === 'attributes' ? (
+                    panelFields.length === 0 ? (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
+                        No configurable attributes for this node.
+                      </div>
+                    ) : (
+                      panelFields.map((field, index) => (
+                        <div key={field.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
                           <div className="grid grid-cols-1 gap-2">
                             <input
                               type="text"
-                              value={field.type}
+                              value={field.name}
                               readOnly
-                              placeholder="Type"
+                              placeholder="Field name"
                               className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
                             />
-                            {field.required && (
-                              <span className="inline-flex w-fit rounded-full border border-emerald-700/60 bg-emerald-950/30 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                                Required
-                              </span>
-                            )}
+                            <div className="grid grid-cols-1 gap-2">
+                              <input
+                                type="text"
+                                value={field.type}
+                                readOnly
+                                placeholder="Type"
+                                className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
+                              />
+                              {field.required && (
+                                <span className="inline-flex w-fit rounded-full border border-emerald-700/60 bg-emerald-950/30 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                                  Required
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              value={field.value ?? ''}
+                              readOnly={isPreviewMode}
+                              onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], value: event.target.value };
+                                return next;
+                              })}
+                              placeholder="Set value"
+                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                            />
                           </div>
-                          <input
-                            type="text"
-                            value={field.value ?? ''}
-                            readOnly={isPreviewMode || nodeDetailsPanel !== 'attributes'}
-                            onChange={nodeDetailsPanel === 'attributes' ? (event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], value: event.target.value };
-                              return next;
-                            }) : undefined}
-                            placeholder={nodeDetailsPanel === 'attributes' ? 'Set value' : 'Not editable (flow definition)'}
-                            className={`w-full rounded-md border px-2.5 py-1.5 text-xs outline-none ${nodeDetailsPanel === 'attributes' ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-zinc-800 bg-zinc-900/70 text-zinc-400'}`}
-                          />
                         </div>
-                      </div>
-                    ))
+                      ))
+                    )
+                  ) : (
+                    <>
+                      {!selectedNodeExecutionTrace && (
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
+                          Run Play to see execution results for this panel.
+                        </div>
+                      )}
+                      {selectedNodeExecutionTrace && nodeDetailsPanel === 'inputs' && (
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                          <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Inputs</p>
+                          <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.inputSnapshot, null, 2)}</pre>
+                        </div>
+                      )}
+                      {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                          <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Output</p>
+                          <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.outputSnapshot, null, 2)}</pre>
+                        </div>
+                      )}
+                      {nodeDetailsPanel === 'errors' && (
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                          <p className="text-[11px] font-semibold text-zinc-300">Execution Error</p>
+                          {selectedNodeExecutionTrace?.error ? (
+                            <pre className="mt-2 overflow-x-auto rounded-md border border-red-900 bg-red-950/30 p-2 text-[10px] text-red-300">{selectedNodeExecutionTrace.error}</pre>
+                          ) : (
+                            <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-400">
+                              No error for this node in the latest execution.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
