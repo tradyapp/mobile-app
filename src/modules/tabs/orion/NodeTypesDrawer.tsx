@@ -49,9 +49,19 @@ export default function NodeTypesDrawer({
     <AppDrawer
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      title="Add Node"
+      title={selectedNodeTypeCategory?.label ?? 'Add Node'}
       height="full"
       showHeader
+      headerLeft={selectedNodeTypeCategory ? (
+        <button
+          type="button"
+          onClick={onBackToCategories}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300"
+          aria-label="Volver"
+        >
+          <BackIcon />
+        </button>
+      ) : null}
     >
       <div className="pb-4">
         {isNodeTypesLoading ? (
@@ -94,15 +104,6 @@ export default function NodeTypesDrawer({
           </div>
         ) : (
           <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
-            <button
-              type="button"
-              onClick={onBackToCategories}
-              className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
-            >
-              <BackIcon />
-              Categories
-            </button>
-
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
               <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
               <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>

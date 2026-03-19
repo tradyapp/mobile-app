@@ -53,15 +53,21 @@ export function NodeSettingsDrawer({
     <AppDrawer
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      title="Node Settings"
+      title={settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}
       height="full"
       showHeader
+      headerLeft={settingsPanel === 'versions' ? (
+        <button
+          type="button"
+          onClick={() => onSettingsPanelChange('menu')}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300"
+          aria-label="Volver"
+        >
+          <BackIcon />
+        </button>
+      ) : null}
     >
       <div className="pb-4">
-        {settingsPanel === 'versions' && (
-          <h3 className="mb-3 text-sm font-semibold text-white">Versiones anteriores</h3>
-        )}
-
         {settingsPanel === 'menu' ? (
           <div className="space-y-2">
             <button
@@ -109,15 +115,6 @@ export function NodeSettingsDrawer({
           </div>
         ) : (
           <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => onSettingsPanelChange('menu')}
-              className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
-            >
-              <BackIcon />
-              Menú
-            </button>
-
             {isNodeVersionsLoading ? (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
                 Loading versions...

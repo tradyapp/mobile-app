@@ -19,6 +19,8 @@ interface AppDrawerProps {
   screens?: DrawerScreen[];
   /** Extra className on the animated content wrapper (only used with screens) */
   contentClassName?: string;
+  /** Optional element rendered on the left side of the header row. */
+  headerLeft?: ReactNode;
 }
 
 export type { DrawerScreen };
@@ -39,6 +41,7 @@ export default function AppDrawer({
   showHeader = true,
   screens,
   contentClassName,
+  headerLeft,
 }: AppDrawerProps) {
   const useScreenNav = !!screens;
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -145,13 +148,16 @@ export default function AppDrawer({
                 ) : (
                   <>
                     {showHeader ? (
-                      <div className="flex items-center justify-between mb-4 shrink-0">
+                      <div className="mb-4 flex items-center justify-between shrink-0">
+                        <div className="h-10 w-10 shrink-0">
+                          {headerLeft}
+                        </div>
                         <Drawer.Title className="text-white mx-auto">
-                          <span className="ml-6">{title}</span>
+                          {title}
                         </Drawer.Title>
                         <TouchableButton
                           onClick={() => onOpenChange(false)}
-                          className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center"
+                          className="text-zinc-400 text-xl font-light w-10 h-10 flex items-center justify-center shrink-0"
                         >
                           ✕
                         </TouchableButton>
