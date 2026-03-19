@@ -599,7 +599,7 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   const [isNodeTypesLoading, setIsNodeTypesLoading] = useState(false);
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
-  const [openNodeTypeCategories, setOpenNodeTypeCategories] = useState<Record<string, boolean>>({});
+  const [selectedNodeTypeCategoryKey, setSelectedNodeTypeCategoryKey] = useState<string | null>(null);
   const [nodeTypeSearch, setNodeTypeSearch] = useState('');
 
   const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
@@ -621,21 +621,23 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
       }));
   }, [availableNodeTypes]);
 
-  const filteredNodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
-    const query = nodeTypeSearch.trim().toLowerCase();
-    if (!query) return nodeTypeGroups;
+  const selectedNodeTypeCategory = useMemo(
+    () => nodeTypeGroups.find((group) => group.key === selectedNodeTypeCategoryKey) ?? null,
+    [nodeTypeGroups, selectedNodeTypeCategoryKey]
+  );
 
-    return nodeTypeGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => {
-          const name = item.name.toLowerCase();
-          const key = item.key.toLowerCase();
-          return name.includes(query) || key.includes(query);
-        }),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [nodeTypeGroups, nodeTypeSearch]);
+  const filteredSelectedCategoryItems = useMemo<StrategyNodeTypeRecord[]>(() => {
+    if (!selectedNodeTypeCategory) return [];
+
+    const query = nodeTypeSearch.trim().toLowerCase();
+    if (!query) return selectedNodeTypeCategory.items;
+
+    return selectedNodeTypeCategory.items.filter((item) => {
+      const name = item.name.toLowerCase();
+      const key = item.key.toLowerCase();
+      return name.includes(query) || key.includes(query);
+    });
+  }, [selectedNodeTypeCategory, nodeTypeSearch]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
@@ -659,34 +661,10 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   }, [loadNodeTypes]);
 
   useEffect(() => {
-    if (nodeTypeGroups.length === 0) {
-      setOpenNodeTypeCategories({});
-      return;
-    }
-
-    setOpenNodeTypeCategories((prev) => {
-      const next: Record<string, boolean> = {};
-
-      for (const group of nodeTypeGroups) {
-        if (group.key in prev) {
-          next[group.key] = prev[group.key];
-        } else {
-          next[group.key] = group.key === 'trigger';
-        }
-      }
-
-      const hasOpenCategory = Object.values(next).some(Boolean);
-      if (!hasOpenCategory) next[nodeTypeGroups[0].key] = true;
-
-      const prevKeys = Object.keys(prev);
-      const nextKeys = Object.keys(next);
-      const changed =
-        prevKeys.length !== nextKeys.length ||
-        nextKeys.some((key) => prev[key] !== next[key]);
-
-      return changed ? next : prev;
-    });
-  }, [nodeTypeGroups]);
+    if (!selectedNodeTypeCategoryKey) return;
+    const exists = nodeTypeGroups.some((group) => group.key === selectedNodeTypeCategoryKey);
+    if (!exists) setSelectedNodeTypeCategoryKey(null);
+  }, [nodeTypeGroups, selectedNodeTypeCategoryKey]);
 
   const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
     setNodes((prev) => {
@@ -712,6 +690,8 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
       return [...prev, nextNode];
     });
     setIsNodeTypesDrawerOpen(false);
+    setSelectedNodeTypeCategoryKey(null);
+    setNodeTypeSearch('');
   }, [setNodes]);
 
   return (
@@ -736,7 +716,11 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           <div className="ml-auto">
             <button
               type="button"
-              onClick={() => setIsNodeTypesDrawerOpen(true)}
+              onClick={() => {
+                setNodeTypeSearch('');
+                setSelectedNodeTypeCategoryKey(null);
+                setIsNodeTypesDrawerOpen(true);
+              }}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xl text-zinc-100"
               aria-label="Add node"
             >
@@ -788,7 +772,11 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           <button
             type="button"
             className="absolute inset-0 bg-black/60"
-            onClick={() => setIsNodeTypesDrawerOpen(false)}
+            onClick={() => {
+              setIsNodeTypesDrawerOpen(false);
+              setSelectedNodeTypeCategoryKey(null);
+              setNodeTypeSearch('');
+            }}
             aria-label="Close node types drawer"
           />
 
@@ -799,22 +787,15 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
                 <h3 className="text-sm font-semibold text-white">Add Node</h3>
                 <button
                   type="button"
-                  onClick={() => setIsNodeTypesDrawerOpen(false)}
+                  onClick={() => {
+                    setIsNodeTypesDrawerOpen(false);
+                    setSelectedNodeTypeCategoryKey(null);
+                    setNodeTypeSearch('');
+                  }}
                   className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
                 >
                   Close
                 </button>
-              </div>
-
-              <div className="mb-3">
-                <input
-                  type="text"
-                  value={nodeTypeSearch}
-                  onChange={(event) => setNodeTypeSearch(event.target.value)}
-                  placeholder="Search node type..."
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
-                  aria-label="Search node types"
-                />
               </div>
 
               {isNodeTypesLoading ? (
@@ -838,62 +819,84 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
                   No node types available.
                 </div>
-              ) : filteredNodeTypeGroups.length === 0 ? (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                  No node types match your search.
+              ) : !selectedNodeTypeCategory ? (
+                <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+                  {nodeTypeGroups.map((group) => (
+                    <button
+                      key={group.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedNodeTypeCategoryKey(group.key);
+                        setNodeTypeSearch('');
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{group.label}</p>
+                        <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
+                      </div>
+                      <span className="text-xl leading-none text-zinc-400">›</span>
+                    </button>
+                  ))}
                 </div>
               ) : (
                 <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-                  {filteredNodeTypeGroups.map((group) => {
-                    const isOpen = Boolean(openNodeTypeCategories[group.key]);
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedNodeTypeCategoryKey(null);
+                      setNodeTypeSearch('');
+                    }}
+                    className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
+                  >
+                    <BackIcon />
+                    Categories
+                  </button>
 
-                    return (
-                      <section key={group.key} className="rounded-xl border border-zinc-800 bg-zinc-900">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenNodeTypeCategories((prev) => ({ ...prev, [group.key]: !isOpen }));
-                          }}
-                          className="flex w-full items-center justify-between px-3 py-2.5 text-left"
-                          aria-expanded={isOpen}
-                          aria-label={`Toggle ${group.label} category`}
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">{group.label}</p>
-                            <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
-                          </div>
-                          <span className="text-lg leading-none text-zinc-400">{isOpen ? '−' : '+'}</span>
-                        </button>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
+                    <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
+                    <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>
+                  </div>
 
-                        {isOpen && (
-                          <div className="space-y-2 border-t border-zinc-800 p-2">
-                            {group.items.map((item) => (
-                              <button
-                                key={`${item.key}-${item.id}`}
-                                type="button"
-                                onClick={() => handleAddNodeFromType(item)}
-                                className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
-                              >
-                                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                                  {item.icon_url ? (
-                                    <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                                      {item.name.slice(0, 2).toUpperCase()}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
-                                  <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    );
-                  })}
+                  <div className="mb-2">
+                    <input
+                      type="text"
+                      value={nodeTypeSearch}
+                      onChange={(event) => setNodeTypeSearch(event.target.value)}
+                      placeholder={`Search in ${selectedNodeTypeCategory.label}...`}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+                      aria-label="Search node types"
+                    />
+                  </div>
+
+                  {filteredSelectedCategoryItems.length === 0 ? (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+                      No node types match your search.
+                    </div>
+                  ) : (
+                    filteredSelectedCategoryItems.map((item) => (
+                      <button
+                        key={`${item.key}-${item.id}`}
+                        type="button"
+                        onClick={() => handleAddNodeFromType(item)}
+                        className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
+                      >
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                          {item.icon_url ? (
+                            <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+                              {item.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
+                          <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
             </div>
