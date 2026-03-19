@@ -2,8 +2,9 @@
 
 import { createPortal } from 'react-dom';
 import { List, ListItem, Toggle } from 'konsta/react';
+import { useMemo, useState } from 'react';
 import AppDrawer from '@/components/uiux/AppDrawer';
-import { type StrategyNodeVersionRecord } from '@/services/StrategiesService';
+import { type StrategyNodeVersionRecord, type StrategySymbolMarket, type StrategyTrackedSymbol } from '@/services/StrategiesService';
 
 function BackIcon() {
   return (
@@ -13,11 +14,65 @@ function BackIcon() {
   );
 }
 
+function SymbolIcon({ iconUrl, ticker }: { iconUrl: string | null; ticker: string }) {
+  if (iconUrl) {
+    return <img src={iconUrl} alt={ticker} className="h-8 w-8 rounded-md object-cover" />;
+  }
+
+  return (
+    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+      {ticker.slice(0, 3)}
+    </div>
+  );
+}
+
+function SymbolRow({
+  ticker,
+  name,
+  iconUrl,
+  selected,
+  onToggle,
+  disabled,
+}: {
+  ticker: string;
+  name: string;
+  iconUrl: string | null;
+  selected: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
+      <SymbolIcon iconUrl={iconUrl} ticker={ticker} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-zinc-100">{ticker}</p>
+        <p className="truncate text-xs text-zinc-400">{name}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className={`flex h-8 w-8 items-center justify-center rounded-full border text-lg leading-none ${selected ? 'border-red-900 bg-red-950/60 text-red-300' : 'border-emerald-900 bg-emerald-950/40 text-emerald-300'} disabled:opacity-60`}
+        aria-label={selected ? `Remove ${ticker}` : `Add ${ticker}`}
+      >
+        {selected ? '−' : '+'}
+      </button>
+    </div>
+  );
+}
+
+export interface StrategySymbolCatalogItem {
+  ticker: string;
+  name: string;
+  icon_url: string | null;
+  market: StrategySymbolMarket;
+}
+
 interface NodeSettingsDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  settingsPanel: 'menu' | 'versions';
-  onSettingsPanelChange: (panel: 'menu' | 'versions') => void;
+  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library';
+  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library') => void;
   isPreviewMode: boolean;
   isPublishingVersion: boolean;
   previewVersion: StrategyNodeVersionRecord | null;
@@ -30,6 +85,16 @@ interface NodeSettingsDrawerProps {
   isLive: boolean;
   onToggleLive: () => void;
   onOpenBacktesting: () => void;
+  isOwner: boolean;
+  trackedSymbols: StrategyTrackedSymbol[];
+  availableSymbols: StrategySymbolCatalogItem[];
+  isSymbolsLoading: boolean;
+  isSymbolsSaving: boolean;
+  symbolsError: string | null;
+  onOpenSymbols: () => void;
+  onOpenSymbolsLibrary: () => void;
+  onRetryLoadSymbols: () => void;
+  onToggleSymbol: (symbol: StrategySymbolCatalogItem | StrategyTrackedSymbol) => void;
 }
 
 export function NodeSettingsDrawer({
@@ -49,27 +114,58 @@ export function NodeSettingsDrawer({
   isLive,
   onToggleLive,
   onOpenBacktesting,
+  isOwner,
+  trackedSymbols,
+  availableSymbols,
+  isSymbolsLoading,
+  isSymbolsSaving,
+  symbolsError,
+  onOpenSymbols,
+  onOpenSymbolsLibrary,
+  onRetryLoadSymbols,
+  onToggleSymbol,
 }: NodeSettingsDrawerProps) {
+  const [activeMarketFilter, setActiveMarketFilter] = useState<'ALL' | StrategySymbolMarket>('ALL');
+
+  const selectedTickerSet = useMemo(
+    () => new Set(trackedSymbols.map((item) => item.ticker.toUpperCase())),
+    [trackedSymbols]
+  );
+
+  const visibleSymbolCatalog = useMemo(() => {
+    if (activeMarketFilter === 'ALL') return availableSymbols;
+    return availableSymbols.filter((item) => item.market === activeMarketFilter);
+  }, [activeMarketFilter, availableSymbols]);
+
+  const title =
+    settingsPanel === 'menu'
+      ? 'Node Settings'
+      : settingsPanel === 'versions'
+        ? 'Versiones anteriores'
+        : settingsPanel === 'symbols'
+          ? 'Symbols'
+          : 'Add Symbols';
+
   return (
     <AppDrawer
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      title={settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}
+      title={title}
       height="full"
       showHeader
-      headerLeft={settingsPanel === 'versions' ? (
+      headerLeft={settingsPanel === 'menu' ? null : (
         <button
           type="button"
-          onClick={() => onSettingsPanelChange('menu')}
+          onClick={() => onSettingsPanelChange(settingsPanel === 'symbols-library' ? 'symbols' : 'menu')}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300"
           aria-label="Volver"
         >
           <BackIcon />
         </button>
-      ) : null}
+      )}
     >
       <div className="pb-4">
-        {settingsPanel === 'menu' ? (
+        {settingsPanel === 'menu' && (
           <List strong className="overflow-hidden rounded-xl">
             <ListItem
               title="Live"
@@ -85,6 +181,13 @@ export function NodeSettingsDrawer({
               title="Back Testing"
               after={<span className="text-[11px] text-zinc-500">Soon</span>}
               onClick={onOpenBacktesting}
+            />
+            <ListItem
+              link
+              title="Symbols"
+              after={<span className="text-[11px] text-zinc-500">{trackedSymbols.length}</span>}
+              onClick={onOpenSymbols}
+              disabled={!isOwner}
             />
             <ListItem
               link
@@ -107,7 +210,9 @@ export function NodeSettingsDrawer({
               onClick={onOpenVersions}
             />
           </List>
-        ) : (
+        )}
+
+        {settingsPanel === 'versions' && (
           <div>
             {isNodeVersionsLoading ? (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
@@ -138,9 +243,110 @@ export function NodeSettingsDrawer({
           </div>
         )}
 
-        {nodeVersionsError && (
+        {settingsPanel === 'symbols' && (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={onOpenSymbolsLibrary}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
+              disabled={!isOwner}
+            >
+              Add Symbols
+            </button>
+
+            {trackedSymbols.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-4 text-sm text-zinc-400">
+                No symbols configured for this strategy.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {trackedSymbols.map((item) => (
+                  <SymbolRow
+                    key={item.ticker}
+                    ticker={item.ticker}
+                    name={item.name}
+                    iconUrl={item.icon_url}
+                    selected
+                    onToggle={() => onToggleSymbol(item)}
+                    disabled={isSymbolsSaving || !isOwner}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {settingsPanel === 'symbols-library' && (
+          <div className="space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {[
+                { key: 'ALL', label: 'All' },
+                { key: 'STOCKS', label: 'Stocks' },
+                { key: 'FOREX', label: 'Forex' },
+                { key: 'CRYPTO', label: 'Crypto' },
+              ].map((filter) => {
+                const isActive = activeMarketFilter === filter.key;
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setActiveMarketFilter(filter.key as 'ALL' | StrategySymbolMarket)}
+                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${isActive ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-300'}`}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {isSymbolsLoading ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
+                Loading symbols...
+              </div>
+            ) : visibleSymbolCatalog.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
+                No symbols available.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {visibleSymbolCatalog.map((item) => {
+                  const selected = selectedTickerSet.has(item.ticker.toUpperCase());
+                  return (
+                    <SymbolRow
+                      key={`${item.market}-${item.ticker}`}
+                      ticker={item.ticker}
+                      name={item.name}
+                      iconUrl={item.icon_url}
+                      selected={selected}
+                      onToggle={() => onToggleSymbol(item)}
+                      disabled={isSymbolsSaving || !isOwner}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {!isSymbolsLoading && (
+              <button
+                type="button"
+                onClick={onRetryLoadSymbols}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
+              >
+                Reload Symbols
+              </button>
+            )}
+          </div>
+        )}
+
+        {(!isOwner && settingsPanel === 'menu') && (
+          <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
+            Solo el dueño de la estrategia puede editar Symbols.
+          </div>
+        )}
+
+        {(nodeVersionsError || symbolsError) && (
           <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-            {nodeVersionsError}
+            {nodeVersionsError || symbolsError}
           </div>
         )}
       </div>

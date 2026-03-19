@@ -175,6 +175,7 @@ export default function OrionTab() {
               strategyId={selectedStrategyId}
               strategyName={selectedStrategy?.name ?? 'Strategy'}
               strategyPhotoUrl={selectedStrategy?.photo_url ?? null}
+              isOwner={selectedStrategy ? selectedStrategy.user_id === (user?.uid ?? '') : false}
               onClose={() => navigate('/orion/marketplace/my-strategies')}
             />
           ) : isStrategyDetailView && selectedStrategy ? (

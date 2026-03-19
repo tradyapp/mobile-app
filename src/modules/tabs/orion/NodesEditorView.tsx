@@ -22,10 +22,11 @@ import {
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
-import { NodeSettingsDrawer, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
+import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
+import dataService from '@/services/DataService';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
-import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord } from '@/services/StrategiesService';
+import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
 
 function CloseIcon() {
   return (
@@ -38,10 +39,11 @@ interface NodesViewProps {
   strategyId: string;
   strategyName: string;
   strategyPhotoUrl?: string | null;
+  isOwner: boolean;
   onClose: () => void;
 }
 
-function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose }: NodesViewProps) {
+function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onClose }: NodesViewProps) {
   const areSameIds = (prev: string[], next: string[]) => {
     if (prev.length !== next.length) return false;
     for (let i = 0; i < prev.length; i += 1) {
@@ -127,10 +129,15 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose 
   const [isNodeVersionsLoading, setIsNodeVersionsLoading] = useState(false);
   const [nodeVersionsError, setNodeVersionsError] = useState<string | null>(null);
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
-  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions'>('menu');
+  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
   const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  const [trackedSymbols, setTrackedSymbols] = useState<StrategyTrackedSymbol[]>([]);
+  const [availableSymbols, setAvailableSymbols] = useState<StrategySymbolCatalogItem[]>([]);
+  const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
+  const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
+  const [symbolsError, setSymbolsError] = useState<string | null>(null);
   const [versionNameInput, setVersionNameInput] = useState('');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
@@ -230,6 +237,39 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose 
   useEffect(() => {
     void loadNodeTypes();
   }, [loadNodeTypes]);
+
+  const loadStrategySymbols = useCallback(async () => {
+    setSymbolsError(null);
+    try {
+      const rows = await strategiesService.getStrategySymbols(strategyId);
+      setTrackedSymbols(rows);
+    } catch (error) {
+      setSymbolsError(error instanceof Error ? error.message : 'Failed to load strategy symbols');
+    }
+  }, [strategyId]);
+
+  const loadAvailableSymbols = useCallback(async () => {
+    setIsSymbolsLoading(true);
+    setSymbolsError(null);
+    try {
+      const rows = await dataService.loadSymbols();
+      const mapped: StrategySymbolCatalogItem[] = rows.map((item) => ({
+        ticker: String(item.symbol ?? '').toUpperCase(),
+        name: item.name ?? String(item.symbol ?? '').toUpperCase(),
+        icon_url: item.photo ?? null,
+        market: item.type === 'FOREX' || item.type === 'CRYPTO' ? item.type : 'STOCKS',
+      })).filter((item) => item.ticker.length > 0);
+      setAvailableSymbols(mapped);
+    } catch (error) {
+      setSymbolsError(error instanceof Error ? error.message : 'Failed to load symbols catalog');
+    } finally {
+      setIsSymbolsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStrategySymbols();
+  }, [loadStrategySymbols]);
 
   useEffect(() => {
     let active = true;
@@ -367,6 +407,37 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose 
       setIsVersionNameDialogOpen(false);
     }
   }, []);
+
+  const handleToggleSymbol = useCallback(async (symbol: StrategySymbolCatalogItem | StrategyTrackedSymbol) => {
+    if (!isOwner || isSymbolsSaving) return;
+
+    const ticker = symbol.ticker.toUpperCase();
+    const nextCandidate: StrategyTrackedSymbol = {
+      ticker,
+      name: symbol.name || ticker,
+      icon_url: symbol.icon_url ?? null,
+      market: symbol.market === 'FOREX' || symbol.market === 'CRYPTO' ? symbol.market : 'STOCKS',
+    };
+
+    const previous = trackedSymbols;
+    const exists = previous.some((item) => item.ticker.toUpperCase() === ticker);
+    const next = exists
+      ? previous.filter((item) => item.ticker.toUpperCase() !== ticker)
+      : [...previous, nextCandidate];
+
+    setTrackedSymbols(next);
+    setIsSymbolsSaving(true);
+    setSymbolsError(null);
+
+    try {
+      await strategiesService.saveStrategySymbols(strategyId, next);
+    } catch (error) {
+      setTrackedSymbols(previous);
+      setSymbolsError(error instanceof Error ? error.message : 'Failed to save strategy symbols');
+    } finally {
+      setIsSymbolsSaving(false);
+    }
+  }, [isOwner, isSymbolsSaving, strategyId, trackedSymbols]);
 
   const getNextVersionDefaultName = useCallback(() => {
     const maxVersion = nodeVersions.reduce((max, item) => Math.max(max, item.version_number), 0);
@@ -665,6 +736,25 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose 
         onToggleLive={() => setIsLive((prev) => !prev)}
         onOpenBacktesting={() => {
           setIsSettingsDrawerOpen(false);
+        }}
+        isOwner={isOwner}
+        trackedSymbols={trackedSymbols}
+        availableSymbols={availableSymbols}
+        isSymbolsLoading={isSymbolsLoading}
+        isSymbolsSaving={isSymbolsSaving}
+        symbolsError={symbolsError}
+        onOpenSymbols={() => {
+          setSettingsPanel('symbols');
+        }}
+        onOpenSymbolsLibrary={() => {
+          setSettingsPanel('symbols-library');
+          if (availableSymbols.length === 0) {
+            void loadAvailableSymbols();
+          }
+        }}
+        onRetryLoadSymbols={() => void loadAvailableSymbols()}
+        onToggleSymbol={(symbol) => {
+          void handleToggleSymbol(symbol);
         }}
       />
 

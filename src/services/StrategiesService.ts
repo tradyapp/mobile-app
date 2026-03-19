@@ -13,8 +13,18 @@ export interface StrategyRecord {
   name: string;
   description: string | null;
   photo_url: string | null;
+  symbols: StrategyTrackedSymbol[];
   created_at: string;
   updated_at: string;
+}
+
+export type StrategySymbolMarket = "STOCKS" | "FOREX" | "CRYPTO";
+
+export interface StrategyTrackedSymbol {
+  ticker: string;
+  name: string;
+  icon_url: string | null;
+  market: StrategySymbolMarket;
 }
 
 export interface StrategyNodeMap {
@@ -51,6 +61,7 @@ class StrategiesService {
   private hasNodeMapColumn: boolean | null = null;
   private hasNodeVersionsTable: boolean | null = null;
   private hasNodeVersionRpc: boolean | null = null;
+  private hasSymbolsColumn: boolean | null = null;
 
   private async getAuthToken(): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -130,6 +141,17 @@ class StrategiesService {
     );
   }
 
+  private isMissingSymbolsColumn(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    if (!msg.includes("symbols")) return false;
+    return (
+      msg.includes("column") ||
+      msg.includes("schema cache") ||
+      msg.includes("does not exist")
+    );
+  }
+
   private isMissingRpcFunction(error: unknown, functionName: string): boolean {
     if (!(error instanceof Error)) return false;
     const msg = error.message.toLowerCase();
@@ -147,9 +169,32 @@ class StrategiesService {
       name: row.name ?? "",
       description: row.description ?? null,
       photo_url: row.photo_url ?? null,
+      symbols: this.normalizeTrackedSymbols(row.symbols),
       created_at: row.created_at ?? "",
       updated_at: row.updated_at ?? "",
     };
+  }
+
+  private normalizeTrackedSymbols(value: unknown): StrategyTrackedSymbol[] {
+    if (!Array.isArray(value)) return [];
+
+    return value
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const row = item as Partial<StrategyTrackedSymbol>;
+        const ticker = typeof row.ticker === "string" ? row.ticker.toUpperCase() : "";
+        if (!ticker) return null;
+
+        const market = row.market === "FOREX" || row.market === "CRYPTO" ? row.market : "STOCKS";
+
+        return {
+          ticker,
+          name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : ticker,
+          icon_url: typeof row.icon_url === "string" ? row.icon_url : null,
+          market,
+        } satisfies StrategyTrackedSymbol;
+      })
+      .filter((item): item is StrategyTrackedSymbol => item !== null);
   }
 
   private normalizeNodeMap(row: unknown): StrategyNodeMap | null {
@@ -179,6 +224,7 @@ class StrategiesService {
   private getSelectFields(includePhoto: boolean): string {
     const fields = ["id", "user_id", "name", "description"];
     if (includePhoto) fields.push("photo_url");
+    if (this.hasSymbolsColumn !== false) fields.push("symbols");
     fields.push("created_at", "updated_at");
     return fields.join(",");
   }
@@ -198,6 +244,15 @@ class StrategiesService {
       if (includePhoto && this.hasPhotoUrlColumn !== false && this.isMissingPhotoUrlColumn(error)) {
         this.hasPhotoUrlColumn = false;
         const fallbackSelect = this.getSelectFields(false);
+        const rows = await this.request<Partial<StrategyRecord>[]>(
+          `/strategies?select=${fallbackSelect}&order=created_at.desc`,
+          { method: "GET" }
+        );
+        return rows.map((row) => this.normalizeRow(row));
+      }
+      if (this.hasSymbolsColumn !== false && this.isMissingSymbolsColumn(error)) {
+        this.hasSymbolsColumn = false;
+        const fallbackSelect = this.getSelectFields(includePhoto);
         const rows = await this.request<Partial<StrategyRecord>[]>(
           `/strategies?select=${fallbackSelect}&order=created_at.desc`,
           { method: "GET" }
@@ -316,6 +371,48 @@ class StrategiesService {
       if (this.isMissingNodeMapColumn(error)) {
         this.hasNodeMapColumn = false;
         return null;
+      }
+      throw error;
+    }
+  }
+
+  async getStrategySymbols(id: string): Promise<StrategyTrackedSymbol[]> {
+    if (this.hasSymbolsColumn === false) return [];
+
+    try {
+      const rows = await this.request<Array<{ id?: string; symbols?: unknown }>>(
+        `/strategies?id=eq.${encodeURIComponent(id)}&select=id,symbols&limit=1`,
+        { method: "GET" }
+      );
+      if (this.hasSymbolsColumn === null) this.hasSymbolsColumn = true;
+      return this.normalizeTrackedSymbols(rows[0]?.symbols);
+    } catch (error) {
+      if (this.isMissingSymbolsColumn(error)) {
+        this.hasSymbolsColumn = false;
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async saveStrategySymbols(id: string, symbols: StrategyTrackedSymbol[]): Promise<void> {
+    if (this.hasSymbolsColumn === false) {
+      throw new Error("Missing symbols column. Run backend migration first.");
+    }
+
+    const normalized = this.normalizeTrackedSymbols(symbols);
+
+    try {
+      await this.request<void>(`/strategies?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ symbols: normalized }),
+      });
+      if (this.hasSymbolsColumn === null) this.hasSymbolsColumn = true;
+    } catch (error) {
+      if (this.isMissingSymbolsColumn(error)) {
+        this.hasSymbolsColumn = false;
+        throw new Error("Missing symbols column. Run backend migration first.");
       }
       throw error;
     }
