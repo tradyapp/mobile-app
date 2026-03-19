@@ -74,6 +74,35 @@ export interface StrategyNodeVersionRecord {
   updated_at: string;
 }
 
+export interface StrategyNodeExecutionField {
+  id?: string;
+  key?: string;
+  name?: string;
+  type?: string;
+  value?: string;
+}
+
+export interface ExecuteStrategyNodeInput {
+  strategy_id?: string | null;
+  owner_user_id?: string | null;
+  node_type_key: string;
+  node_type_version?: number | null;
+  attributes?: StrategyNodeExecutionField[];
+  input_context?: unknown;
+  mode?: "preview" | "cloud" | "live";
+  execution_time?: string | null;
+}
+
+export interface ExecuteStrategyNodeResult {
+  node_type_key: string;
+  node_type_version: number | null;
+  input_schema: unknown[];
+  output_schema: unknown[];
+  attributes: Record<string, unknown>;
+  output: unknown;
+  execution_time: string;
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -136,6 +165,34 @@ class StrategiesService {
     }
 
     if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  }
+
+  private async invokeFunction<T>(functionName: string, payload: unknown): Promise<T> {
+    const token = await this.getAuthToken();
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let message = `Function ${functionName} error: ${response.status}`;
+      try {
+        const body = await response.json();
+        const parts = [body?.error, body?.message, body?.details]
+          .filter((item): item is string => typeof item === "string" && item.length > 0);
+        if (parts.length > 0) message = parts.join(" | ");
+      } catch {
+        // no-op
+      }
+      throw new Error(message);
+    }
+
     return response.json() as Promise<T>;
   }
 
@@ -733,6 +790,10 @@ class StrategiesService {
       }
       throw error;
     }
+  }
+
+  async executeStrategyNode(input: ExecuteStrategyNodeInput): Promise<ExecuteStrategyNodeResult> {
+    return this.invokeFunction<ExecuteStrategyNodeResult>("node-execute", input);
   }
 }
 

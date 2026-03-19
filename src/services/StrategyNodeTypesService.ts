@@ -18,6 +18,7 @@ export interface StrategyNodePropertyRecord {
 export interface StrategyNodeTypeRecord {
   id: string;
   key: string;
+  version: number;
   name: string;
   category: StrategyNodeCategory;
   icon_url: string | null;
@@ -85,6 +86,7 @@ class StrategyNodeTypesService {
     return {
       id: row.id ?? "",
       key: row.key ?? "",
+      version: typeof row.version === "number" && Number.isFinite(row.version) ? row.version : 1,
       name: row.name ?? "",
       category: (row.category ?? "logic") as StrategyNodeCategory,
       icon_url: row.icon_url ?? null,
@@ -103,7 +105,7 @@ class StrategyNodeTypesService {
     if (withLatest) {
       const { data, error } = await supabase
         .from("strategy_node_types")
-        .select("id,key,name,description,category,icon_url,input_ports,output_ports,properties,is_active,is_latest")
+        .select("id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active,is_latest")
         .eq("is_active", true)
         .eq("is_latest", true)
         .order("category", { ascending: true })
@@ -123,7 +125,7 @@ class StrategyNodeTypesService {
 
     const { data, error } = await supabase
       .from("strategy_node_types")
-      .select("id,key,name,description,category,icon_url,input_ports,output_ports,properties,is_active")
+      .select("id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active")
       .eq("is_active", true)
       .order("category", { ascending: true })
       .order("name", { ascending: true });

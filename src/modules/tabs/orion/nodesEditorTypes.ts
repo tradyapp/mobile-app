@@ -3,6 +3,7 @@ import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService
 export interface EditorNodeData {
   label: string;
   nodeTypeKey?: string;
+  nodeTypeVersion?: number;
   category?: string;
   iconUrl?: string | null;
   inputs?: EditorNodeField[];

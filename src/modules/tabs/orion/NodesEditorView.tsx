@@ -45,6 +45,7 @@ interface LocalExecutionNodeTrace {
   nodeId: string;
   label: string;
   nodeTypeKey: string;
+  nodeTypeVersion: number | null;
   status: LocalExecutionNodeStatus;
   inputSnapshot: unknown;
   outputSnapshot: unknown;
@@ -53,15 +54,6 @@ interface LocalExecutionNodeTrace {
 
 function makeFieldId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function toAttributeKey(field: EditorNodeField): string {
-  if (field.key && field.key.trim().length > 0) return field.key.trim();
-  return field.name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
 }
 
 function toFieldDefaultValue(value: unknown): string {
@@ -570,6 +562,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         data: {
           label: nodeType.name,
           nodeTypeKey: nodeType.key,
+          nodeTypeVersion: nodeType.version,
           category: nodeType.category,
           iconUrl: nodeType.icon_url,
           ...createNodeDefaults(nodeType),
@@ -692,6 +685,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         nodeId,
         label: nodeData.label ?? nodeId,
         nodeTypeKey: nodeData.nodeTypeKey ?? 'custom-node',
+        nodeTypeVersion: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
         status: 'pending',
         inputSnapshot: null,
         outputSnapshot: null,
@@ -709,21 +703,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     const outputsByNodeId = new Map<string, unknown>();
     const stateHistory: Array<{ nodeId: string; nodeTypeKey: string; label: string; output: unknown }> = [];
-    const toAttributeValue = (field: EditorNodeField): unknown => {
-      const raw = field.value ?? '';
-      const normalizedType = (field.type || '').toLowerCase();
-      if (normalizedType === 'number') {
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) ? parsed : null;
-      }
-      if (normalizedType === 'boolean') {
-        const lowered = raw.trim().toLowerCase();
-        if (lowered === 'true' || lowered === '1' || lowered === 'yes') return true;
-        if (lowered === 'false' || lowered === '0' || lowered === 'no') return false;
-        return null;
-      }
-      return raw;
-    };
+    const executionTime = new Date().toISOString();
 
     for (let i = 0; i < orderedNodeIds.length; i += 1) {
       const nodeId = orderedNodeIds[i];
@@ -748,12 +728,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       }
 
       const nodeData = (node.data ?? {}) as EditorNodeData;
-      const attributes = (nodeData.attributes ?? []).reduce<Record<string, unknown>>((acc, field) => {
-        const key = toAttributeKey(field);
-        if (!key) return acc;
-        acc[key] = toAttributeValue(field);
-        return acc;
-      }, {});
 
       trace.inputSnapshot = {
         upstreamCount: incomingIds.length,
@@ -762,32 +736,28 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       };
 
       try {
-        if (nodeData.nodeTypeKey === 'trigger.schedule') {
-          const hour = Number(attributes.hour ?? 9);
-          const minute = Number(attributes.minute ?? 0);
-          const days = String(attributes.days_of_week ?? 'mon,tue,wed,thu,fri');
-          trace.outputSnapshot = {
-            type: 'schedule_event',
-            scheduled_at: new Date().toISOString(),
-            config: { hour, minute, days_of_week: days },
-          };
-        } else if (nodeData.nodeTypeKey === 'output.true') {
-          trace.outputSnapshot = { result: true };
-        } else if (nodeData.nodeTypeKey === 'output.false') {
-          trace.outputSnapshot = { result: false };
-        } else if (nodeData.nodeTypeKey === 'output.percentage') {
-          const percentage = Number(attributes.percentage ?? 0);
-          if (!Number.isFinite(percentage)) {
-            throw new Error('Percentage must be a valid number.');
-          }
-          trace.outputSnapshot = { result: 'rating', rating: percentage };
-        } else {
-          trace.outputSnapshot = {
-            type: nodeData.nodeTypeKey ?? 'custom-node',
-            attributes,
-            passthrough_inputs: inputs,
-          };
-        }
+        const execution = await strategiesService.executeStrategyNode({
+          strategy_id: strategyId,
+          node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
+          node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
+          attributes: nodeData.attributes,
+          input_context: {
+            upstreamCount: incomingIds.length,
+            upstream: inputs,
+            state_history: [...stateHistory],
+          },
+          mode: 'preview',
+          execution_time: executionTime,
+        });
+
+        trace.inputSnapshot = {
+          upstreamCount: incomingIds.length,
+          upstream: inputs,
+          input_schema: execution.input_schema,
+          attributes_used: execution.attributes,
+          state_history: [...stateHistory],
+        };
+        trace.outputSnapshot = execution.output;
 
         outputsByNodeId.set(nodeId, trace.outputSnapshot);
         trace.status = 'success';
@@ -814,7 +784,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     setLocalExecutionStatus('completed');
     setLocalExecutionError(null);
-  }, [edges, localExecutionStatus, nodes]);
+  }, [edges, localExecutionStatus, nodes, strategyId]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1124,7 +1094,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 </button>
                 <div className="ml-2 min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-100">{nodeEditorData?.label ?? 'Node'}</p>
-                  <p className="truncate text-[11px] text-zinc-500">{nodeEditorData?.nodeTypeKey ?? 'custom-node'}</p>
+                  <p className="truncate text-[11px] text-zinc-500">
+                    {nodeEditorData?.nodeTypeKey ?? 'custom-node'}
+                    {typeof nodeEditorData?.nodeTypeVersion === 'number' ? ` @v${nodeEditorData.nodeTypeVersion}` : ''}
+                  </p>
                 </div>
               </div>
               <div className="grid border-b border-zinc-800 px-3 py-2" style={{ gridTemplateColumns: `repeat(${nodeDetailsPanelItems.length || 1}, minmax(0, 1fr))` }}>
