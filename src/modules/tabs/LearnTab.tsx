@@ -328,11 +328,17 @@ export default function LearnTab() {
     }
   }, [courseId, selectedCourse, courses]);
 
-  // Auto-mark text lessons and scroll to top on lesson view
+  // Scroll to top whenever we enter a lesson (or the lesson changes)
+  useEffect(() => {
+    if (view === "lesson") {
+      window.scrollTo({ top: 0 });
+    }
+  }, [view, lessonId]);
+
+  // Auto-mark text lessons as completed
   useEffect(() => {
     if (view === "lesson" && selectedLesson) {
       markedCompleteRef.current = false;
-      window.scrollTo({ top: 0 });
       if (selectedLesson.content_type === "text") {
         void markLessonComplete(selectedLesson);
       }
