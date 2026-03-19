@@ -1,0 +1,75 @@
+import { type MarketplaceTab, type MyStrategiesScreen } from '@/modules/tabs/orion/shared';
+
+export interface OrionRouteState {
+  view: 'notifications' | 'marketplace';
+  marketplaceTab: MarketplaceTab;
+  myStrategiesScreen: MyStrategiesScreen;
+  selectedStrategyId: string | null;
+}
+
+export function parseOrionRoute(pathname: string): OrionRouteState {
+  const normalized = pathname.replace(/\/+$/, '');
+
+  if (normalized === '/orion' || normalized === '') {
+    return {
+      view: 'notifications',
+      marketplaceTab: 'explore',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'explore',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace/my-strategies') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace/my-strategies/create') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'create',
+      selectedStrategyId: null,
+    };
+  }
+
+  const nodesMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes$/);
+  if (nodesMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'nodes',
+      selectedStrategyId: decodeURIComponent(nodesMatch[1]),
+    };
+  }
+
+  const detailMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)$/);
+  if (detailMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'detail',
+      selectedStrategyId: decodeURIComponent(detailMatch[1]),
+    };
+  }
+
+  return {
+    view: 'notifications',
+    marketplaceTab: 'explore',
+    myStrategiesScreen: 'list',
+    selectedStrategyId: null,
+  };
+}
