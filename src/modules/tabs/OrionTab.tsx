@@ -3,6 +3,7 @@
 import { BlockTitle, List, ListItem, Toggle } from 'konsta/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   addEdge,
@@ -1622,6 +1623,7 @@ export default function OrionTab() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
+  const orionRouteKey = useMemo(() => location.pathname, [location.pathname]);
   const view = routeState.view;
   const marketplaceTab = routeState.marketplaceTab;
   const myStrategiesScreen = routeState.myStrategiesScreen;
@@ -1735,71 +1737,81 @@ export default function OrionTab() {
         />
       )}
 
-      {isNodesView && selectedStrategy ? (
-        <NodesView
-          strategyId={selectedStrategy.id}
-          strategyName={selectedStrategy.name}
-          onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}`)}
-        />
-      ) : isStrategyDetailView && selectedStrategy ? (
-        <StrategyDetailView
-          strategy={selectedStrategy}
-          onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
-        />
-      ) : isMarketplace ? (
-        <MarketplaceScreen
-          tab={marketplaceTab}
-          myStrategiesScreen={myStrategiesScreen === 'detail' || myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
-          onChangeTab={(tab) => {
-            navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
-          }}
-          onChangeMyStrategiesScreen={(screen) => {
-            if (screen === 'create') {
-              setCreateDraft(createEmptyDraft());
-              setCreateError(null);
-              navigate('/orion/marketplace/my-strategies/create');
-            }
-            if (screen === 'list') navigate('/orion/marketplace/my-strategies');
-          }}
-          strategies={strategies}
-          isLoadingStrategies={isStrategiesLoading}
-          strategiesError={strategiesError}
-          onOpenStrategy={handleOpenStrategy}
-          createDraft={createDraft}
-          onChangeCreateDraft={(updater) => setCreateDraft((prev) => updater(prev))}
-          isCreatingStrategy={isCreatingStrategy}
-          createError={createError}
-          onCreate={handleCreateStrategy}
-        />
-      ) : (
-        <div className="space-y-2 max-w-xl mx-auto pb-24">
-          {isClient && Object.entries(groupedNotifications).map(([dateLabel, items]) => (
-            <div key={dateLabel}>
-              <BlockTitle className="mt-4">{dateLabel}</BlockTitle>
-              <List strong inset>
-                {items.map((notification) => (
-                  <ListItem
-                    key={notification.id}
-                    title={notification.ticker}
-                    after={
-                      <div className="flex items-center gap-2">
-                        <StarRating stars={notification.stars} />
-                        <span className={`text-2xl ${notification.direction === 'up' ? 'text-green-500' : 'text-red-500'}`}>
-                          {notification.direction === 'up' ? '▲' : '▼'}
-                        </span>
-                      </div>
-                    }
-                    subtitle={notification.timestamp.toLocaleTimeString('en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  />
-                ))}
-              </List>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={orionRouteKey}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+        >
+          {isNodesView && selectedStrategy ? (
+            <NodesView
+              strategyId={selectedStrategy.id}
+              strategyName={selectedStrategy.name}
+              onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}`)}
+            />
+          ) : isStrategyDetailView && selectedStrategy ? (
+            <StrategyDetailView
+              strategy={selectedStrategy}
+              onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
+            />
+          ) : isMarketplace ? (
+            <MarketplaceScreen
+              tab={marketplaceTab}
+              myStrategiesScreen={myStrategiesScreen === 'detail' || myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
+              onChangeTab={(tab) => {
+                navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
+              }}
+              onChangeMyStrategiesScreen={(screen) => {
+                if (screen === 'create') {
+                  setCreateDraft(createEmptyDraft());
+                  setCreateError(null);
+                  navigate('/orion/marketplace/my-strategies/create');
+                }
+                if (screen === 'list') navigate('/orion/marketplace/my-strategies');
+              }}
+              strategies={strategies}
+              isLoadingStrategies={isStrategiesLoading}
+              strategiesError={strategiesError}
+              onOpenStrategy={handleOpenStrategy}
+              createDraft={createDraft}
+              onChangeCreateDraft={(updater) => setCreateDraft((prev) => updater(prev))}
+              isCreatingStrategy={isCreatingStrategy}
+              createError={createError}
+              onCreate={handleCreateStrategy}
+            />
+          ) : (
+            <div className="space-y-2 max-w-xl mx-auto pb-24">
+              {isClient && Object.entries(groupedNotifications).map(([dateLabel, items]) => (
+                <div key={dateLabel}>
+                  <BlockTitle className="mt-4">{dateLabel}</BlockTitle>
+                  <List strong inset>
+                    {items.map((notification) => (
+                      <ListItem
+                        key={notification.id}
+                        title={notification.ticker}
+                        after={
+                          <div className="flex items-center gap-2">
+                            <StarRating stars={notification.stars} />
+                            <span className={`text-2xl ${notification.direction === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+                              {notification.direction === 'up' ? '▲' : '▼'}
+                            </span>
+                          </div>
+                        }
+                        subtitle={notification.timestamp.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      />
+                    ))}
+                  </List>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </motion.div>
+      </AnimatePresence>
     </>
   );
 }
