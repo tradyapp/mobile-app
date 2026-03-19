@@ -314,6 +314,32 @@ export default function LearnTab() {
     });
   };
 
+  // Flat ordered list of all lessons across modules (for prev/next navigation)
+  const allLessons = useMemo(
+    () => modules.flatMap((mod) => mod.lessons),
+    [modules]
+  );
+
+  const currentLessonIndex = useMemo(
+    () => (selectedLesson ? allLessons.findIndex((l) => l.id === selectedLesson.id) : -1),
+    [allLessons, selectedLesson]
+  );
+
+  const prevLesson = currentLessonIndex > 0 ? allLessons[currentLessonIndex - 1] : null;
+  const nextLesson = currentLessonIndex >= 0 && currentLessonIndex < allLessons.length - 1
+    ? allLessons[currentLessonIndex + 1]
+    : null;
+
+  const navigateToLesson = (lesson: LmsLesson) => {
+    setSelectedLesson(lesson);
+    markedCompleteRef.current = false;
+    if (lesson.content_type === "text") {
+      void markLessonComplete(lesson);
+    }
+    // Scroll to top
+    window.scrollTo({ top: 0 });
+  };
+
   // Helper: count completed lessons in a module
   const getModuleProgress = (mod: LmsModuleWithLessons) => {
     let done = 0;
@@ -545,22 +571,16 @@ export default function LearnTab() {
     const textContent = getLessonTextContent(selectedLesson);
     const poster = getLessonThumbnail(selectedLesson);
     const isCompleted = progressMap.get(selectedLesson.id)?.completed === true;
+    const lessonPosition = currentLessonIndex >= 0 ? `${currentLessonIndex + 1}/${allLessons.length}` : "";
 
     return (
-      <Block className="pt-2 pb-24">
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-zinc-400 text-xs">
+      <Block className="pt-2 pb-32">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-zinc-500 text-xs">
+            {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
             {selectedLesson.content_type.toUpperCase()}
             {selectedLesson.duration_minutes ? ` • ${selectedLesson.duration_minutes} min` : ""}
           </p>
-          {isCompleted && (
-            <span className="flex items-center gap-1 text-emerald-400 text-xs font-medium">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              Completed
-            </span>
-          )}
         </div>
 
         {videoUrl && (
@@ -585,18 +605,48 @@ export default function LearnTab() {
           !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
         )}
 
-        {/* Manual mark complete button for video lessons not yet completed */}
-        {!isCompleted && selectedLesson.content_type === "video" && (
-          <button
-            onClick={() => void markLessonComplete(selectedLesson)}
-            className="mt-4 w-full py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-300 text-sm font-medium active:bg-zinc-700 transition-colors"
-          >
-            Mark as completed
-          </button>
-        )}
+        {/* Prev / Next navigation bar */}
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+56px)] left-0 right-0 z-20 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            {/* Previous */}
+            <button
+              onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
+              disabled={!prevLesson}
+              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                prevLesson ? "active:bg-zinc-800" : "opacity-30"
+              }`}
+            >
+              <span className="text-zinc-400 text-lg">‹</span>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Anterior</p>
+                <p className="text-xs text-zinc-300 truncate">{prevLesson?.title ?? "—"}</p>
+              </div>
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-8 bg-zinc-800 shrink-0" />
+
+            {/* Next */}
+            <button
+              onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
+              disabled={!nextLesson}
+              className={`flex-1 flex items-center justify-end gap-2 px-3 py-2 rounded-lg transition-colors ${
+                nextLesson ? "active:bg-zinc-800" : "opacity-30"
+              }`}
+            >
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Siguiente</p>
+                <p className="text-xs text-zinc-300 truncate">{nextLesson?.title ?? "—"}</p>
+              </div>
+              <span className="text-zinc-400 text-lg">›</span>
+            </button>
+          </div>
+        </div>
       </Block>
     );
   };
+
+  const lessonCompleted = selectedLesson ? progressMap.get(selectedLesson.id)?.completed === true : false;
 
   return (
     <>
@@ -610,6 +660,30 @@ export default function LearnTab() {
           </button>
         }
         title={navbarTitle}
+        right={
+          view === "lesson" ? (
+            <button
+              className="w-10 h-10 flex items-center justify-center"
+              onClick={
+                !lessonCompleted && selectedLesson
+                  ? () => void markLessonComplete(selectedLesson)
+                  : undefined
+              }
+            >
+              <svg
+                className={`w-6 h-6 transition-colors duration-300 ${
+                  lessonCompleted ? "text-emerald-400" : "text-zinc-600"
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          ) : undefined
+        }
       />
       {view === "catalog" && renderCatalog()}
       {view === "course" && renderCourse()}
