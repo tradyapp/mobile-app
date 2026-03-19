@@ -37,6 +37,7 @@ function CloseIcon() {
 }
 
 type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
+type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
 
 function makeFieldId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -672,6 +673,35 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [previewVersion, isPublishingVersion, strategyId]);
 
   const nodeEditorData = selectedNodeForEditor?.data as EditorNodeData | undefined;
+  const nodeDetailsPanelItems = useMemo<NodeDetailsPanelItem[]>(() => {
+    const category = normalizeNodeCategory(nodeEditorData?.category);
+
+    if (category === 'trigger') {
+      return [
+        { key: 'attributes', label: 'Attributes' },
+        { key: 'outputs', label: 'Outputs' },
+      ];
+    }
+
+    if (category === 'output') {
+      return [
+        { key: 'inputs', label: 'Inputs' },
+        { key: 'attributes', label: 'Attributes' },
+      ];
+    }
+
+    return [
+      { key: 'inputs', label: 'Inputs' },
+      { key: 'attributes', label: 'Attributes' },
+      { key: 'outputs', label: 'Outputs' },
+    ];
+  }, [nodeEditorData?.category]);
+
+  useEffect(() => {
+    if (nodeDetailsPanelItems.some((item) => item.key === nodeDetailsPanel)) return;
+    setNodeDetailsPanel(nodeDetailsPanelItems[0]?.key ?? 'inputs');
+  }, [nodeDetailsPanel, nodeDetailsPanelItems]);
+
   const panelFields = nodeEditorData
     ? (Array.isArray(nodeEditorData[nodeDetailsPanel]) ? nodeEditorData[nodeDetailsPanel] as EditorNodeField[] : [])
     : [];
@@ -753,21 +783,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 <button
                   type="button"
                   onClick={() => setNodeEditorNodeId(null)}
-                  className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-300"
+                  aria-label="Back to node editor"
                 >
-                  Back
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                 </button>
                 <div className="ml-2 min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-100">{nodeEditorData?.label ?? 'Node'}</p>
                   <p className="truncate text-[11px] text-zinc-500">{nodeEditorData?.nodeTypeKey ?? 'custom-node'}</p>
                 </div>
               </div>
-              <div className="flex gap-2 border-b border-zinc-800 px-3 py-2">
-                {([
-                  { key: 'inputs', label: 'Inputs' },
-                  { key: 'attributes', label: 'Atributos' },
-                  { key: 'outputs', label: 'Outputs' },
-                ] as Array<{ key: NodeDetailsPanel; label: string }>).map((item) => {
+              <div className="grid border-b border-zinc-800 px-3 py-2" style={{ gridTemplateColumns: `repeat(${nodeDetailsPanelItems.length || 1}, minmax(0, 1fr))` }}>
+                {nodeDetailsPanelItems.map((item) => {
                   const active = nodeDetailsPanel === item.key;
                   return (
                     <button
