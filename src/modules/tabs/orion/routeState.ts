@@ -56,6 +56,16 @@ export function parseOrionRoute(pathname: string): OrionRouteState {
     };
   }
 
+  const symbolsMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/symbols$/);
+  if (symbolsMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'symbols',
+      selectedStrategyId: decodeURIComponent(symbolsMatch[1]),
+    };
+  }
+
   const detailMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)$/);
   if (detailMatch) {
     return {

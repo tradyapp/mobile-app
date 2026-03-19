@@ -7,6 +7,7 @@ import { type StrategyRecord } from '@/services/StrategiesService';
 interface StrategyDetailViewProps {
   strategy: StrategyRecord;
   onOpenNodes: () => void;
+  onOpenSymbols: () => void;
   activeVersionLabel: string | null;
   isOwner: boolean;
 }
@@ -35,7 +36,7 @@ function DetailRow({
   );
 }
 
-export default function StrategyDetailView({ strategy, onOpenNodes, activeVersionLabel, isOwner }: StrategyDetailViewProps) {
+export default function StrategyDetailView({ strategy, onOpenNodes, onOpenSymbols, activeVersionLabel, isOwner }: StrategyDetailViewProps) {
   const [isLive, setIsLive] = useState(false);
   const initials = strategy.name
     .split(' ')
@@ -71,7 +72,7 @@ export default function StrategyDetailView({ strategy, onOpenNodes, activeVersio
       </div>
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
-        <DetailRow label="Symbols" after="Soon" />
+        <DetailRow label="Symbols" onClick={onOpenSymbols} />
         <div className="border-t border-zinc-800" />
         <DetailRow label="WebHook" after="Soon" />
         {isOwner && (

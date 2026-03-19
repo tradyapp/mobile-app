@@ -62,6 +62,7 @@ class StrategiesService {
   private hasNodeVersionsTable: boolean | null = null;
   private hasNodeVersionRpc: boolean | null = null;
   private hasSymbolsColumn: boolean | null = null;
+  private hasStrategyUserSettingsTable: boolean | null = null;
 
   private async getAuthToken(): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -162,6 +163,17 @@ class StrategiesService {
     );
   }
 
+  private isMissingStrategyUserSettingsTable(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    if (!msg.includes("strategy_user_settings")) return false;
+    return (
+      msg.includes("relation") ||
+      msg.includes("does not exist") ||
+      msg.includes("schema cache")
+    );
+  }
+
   private normalizeRow(row: Partial<StrategyRecord>): StrategyRecord {
     return {
       id: row.id ?? "",
@@ -195,6 +207,13 @@ class StrategiesService {
         } satisfies StrategyTrackedSymbol;
       })
       .filter((item): item is StrategyTrackedSymbol => item !== null);
+  }
+
+  private normalizeTickerList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => (typeof item === "string" ? item.toUpperCase() : ""))
+      .filter((item) => item.length > 0);
   }
 
   private normalizeNodeMap(row: unknown): StrategyNodeMap | null {
@@ -413,6 +432,60 @@ class StrategiesService {
       if (this.isMissingSymbolsColumn(error)) {
         this.hasSymbolsColumn = false;
         throw new Error("Missing symbols column. Run backend migration first.");
+      }
+      throw error;
+    }
+  }
+
+  async getStrategyUserEnabledSymbols(strategyId: string): Promise<string[] | null> {
+    if (this.hasStrategyUserSettingsTable === false) return null;
+    const userId = await this.getUserId();
+
+    try {
+      const rows = await this.request<Array<{ enabled_symbols?: unknown }>>(
+        `/strategy_user_settings?strategy_id=eq.${encodeURIComponent(strategyId)}&user_id=eq.${encodeURIComponent(userId)}&select=enabled_symbols&limit=1`,
+        { method: "GET" }
+      );
+      if (this.hasStrategyUserSettingsTable === null) this.hasStrategyUserSettingsTable = true;
+      if (!rows[0]) return null;
+      return this.normalizeTickerList(rows[0].enabled_symbols);
+    } catch (error) {
+      if (this.isMissingStrategyUserSettingsTable(error)) {
+        this.hasStrategyUserSettingsTable = false;
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async upsertStrategyUserEnabledSymbols(strategyId: string, enabledSymbols: string[]): Promise<string[]> {
+    if (this.hasStrategyUserSettingsTable === false) {
+      throw new Error("Missing strategy_user_settings table. Run backend migration first.");
+    }
+    const userId = await this.getUserId();
+    const normalized = this.normalizeTickerList(enabledSymbols);
+
+    try {
+      const rows = await this.request<Array<{ enabled_symbols?: unknown }>>(
+        `/strategy_user_settings?on_conflict=strategy_id,user_id&select=enabled_symbols`,
+        {
+          method: "POST",
+          headers: {
+            Prefer: "resolution=merge-duplicates,return=representation",
+          },
+          body: JSON.stringify([{
+            strategy_id: strategyId,
+            user_id: userId,
+            enabled_symbols: normalized,
+          }]),
+        }
+      );
+      if (this.hasStrategyUserSettingsTable === null) this.hasStrategyUserSettingsTable = true;
+      return this.normalizeTickerList(rows[0]?.enabled_symbols ?? normalized);
+    } catch (error) {
+      if (this.isMissingStrategyUserSettingsTable(error)) {
+        this.hasStrategyUserSettingsTable = false;
+        throw new Error("Missing strategy_user_settings table. Run backend migration first.");
       }
       throw error;
     }

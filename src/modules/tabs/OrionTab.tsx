@@ -10,6 +10,7 @@ import MarketplaceScreen from '@/modules/tabs/orion/MarketplaceScreen';
 import NodesEditorView from '@/modules/tabs/orion/NodesEditorView';
 import NotificationsScreen from '@/modules/tabs/orion/NotificationsScreen';
 import StrategyDetailView from '@/modules/tabs/orion/StrategyDetailView';
+import StrategySymbolsView from '@/modules/tabs/orion/StrategySymbolsView';
 import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
@@ -35,6 +36,10 @@ export default function OrionTab() {
   const [createDraft, setCreateDraft] = useState<StrategyDraft>(createEmptyDraft);
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [enabledSymbols, setEnabledSymbols] = useState<string[]>([]);
+  const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
+  const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
+  const [symbolsError, setSymbolsError] = useState<string | null>(null);
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
   const orionRouteKey = useMemo(() => location.pathname, [location.pathname]);
@@ -73,6 +78,7 @@ export default function OrionTab() {
     [strategies, selectedStrategyId]
   );
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
+  const isSymbolsView = isMarketplace && myStrategiesScreen === 'symbols';
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
   const isCreateStrategyView = isMarketplace && myStrategiesScreen === 'create';
   const isMyStrategiesListView = isMarketplace && marketplaceTab === 'my-strategies' && myStrategiesScreen === 'list';
@@ -102,11 +108,61 @@ export default function OrionTab() {
     }
   };
 
+  const loadUserSymbols = useCallback(async (strategy: StrategyRecord) => {
+    if (!user?.uid) return;
+    const ownerTickers = strategy.symbols.map((item) => item.ticker.toUpperCase());
+    const ownerTickerSet = new Set(ownerTickers);
+
+    setIsSymbolsLoading(true);
+    setSymbolsError(null);
+    try {
+      const result = await strategiesService.getStrategyUserEnabledSymbols(strategy.id);
+      const next = (result ?? ownerTickers).filter((ticker) => ownerTickerSet.has(ticker.toUpperCase()));
+      setEnabledSymbols(next);
+    } catch (error) {
+      setSymbolsError(error instanceof Error ? error.message : 'Failed to load symbols');
+      setEnabledSymbols(ownerTickers);
+    } finally {
+      setIsSymbolsLoading(false);
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!isSymbolsView || !selectedStrategy) return;
+    void loadUserSymbols(selectedStrategy);
+  }, [isSymbolsView, selectedStrategy, loadUserSymbols]);
+
+  const handleToggleSymbolEnabled = useCallback(async (ticker: string) => {
+    if (!selectedStrategy || !user?.uid || isSymbolsSaving) return;
+
+    const ownerTickerSet = new Set(selectedStrategy.symbols.map((item) => item.ticker.toUpperCase()));
+    const normalized = ticker.toUpperCase();
+    if (!ownerTickerSet.has(normalized)) return;
+
+    const previous = enabledSymbols;
+    const exists = previous.some((item) => item.toUpperCase() === normalized);
+    const next = exists
+      ? previous.filter((item) => item.toUpperCase() !== normalized)
+      : [...previous, normalized];
+
+    setEnabledSymbols(next);
+    setIsSymbolsSaving(true);
+    setSymbolsError(null);
+    try {
+      await strategiesService.upsertStrategyUserEnabledSymbols(selectedStrategy.id, next);
+    } catch (error) {
+      setEnabledSymbols(previous);
+      setSymbolsError(error instanceof Error ? error.message : 'Failed to save symbols');
+    } finally {
+      setIsSymbolsSaving(false);
+    }
+  }, [enabledSymbols, isSymbolsSaving, selectedStrategy, user?.uid]);
+
   return (
     <>
       {!isNodesView && (
         <AppNavbar
-          title={isCreateStrategyView ? 'New Strategy' : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
+          title={isCreateStrategyView ? 'New Strategy' : isSymbolsView ? 'Strategy Symbols' : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
           left={
             isMarketplace ? (
               <button
@@ -121,10 +177,14 @@ export default function OrionTab() {
                     navigate('/orion/marketplace/my-strategies');
                     return;
                   }
+                  if (isSymbolsView && selectedStrategyId) {
+                    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}`);
+                    return;
+                  }
                   navigate('/orion');
                 }}
                 className="flex h-10 w-10 items-center justify-center text-2xl text-zinc-200"
-                aria-label={isCreateStrategyView ? 'Close new strategy' : isStrategyDetailView ? 'Close strategy detail' : 'Close Orion marketplace'}
+                aria-label={isCreateStrategyView ? 'Close new strategy' : isStrategyDetailView ? 'Close strategy detail' : isSymbolsView ? 'Close symbols' : 'Close Orion marketplace'}
               >
                 <CloseIcon />
               </button>
@@ -141,7 +201,7 @@ export default function OrionTab() {
           }
           right={
             isMarketplace
-              ? (isCreateStrategyView || isStrategyDetailView || !isMyStrategiesListView
+              ? (isCreateStrategyView || isStrategyDetailView || isSymbolsView || !isMyStrategiesListView
                 ? null
                 : (
                   <button
@@ -183,12 +243,27 @@ export default function OrionTab() {
               strategy={selectedStrategy}
               activeVersionLabel={null}
               isOwner={selectedStrategy.user_id === (user?.uid ?? '')}
+              onOpenSymbols={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/symbols`)}
               onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
+            />
+          ) : isSymbolsView && selectedStrategy ? (
+            <StrategySymbolsView
+              strategy={selectedStrategy}
+              enabledTickers={enabledSymbols}
+              isLoading={isSymbolsLoading}
+              isSaving={isSymbolsSaving}
+              error={symbolsError}
+              onToggleTicker={(ticker) => {
+                void handleToggleSymbolEnabled(ticker);
+              }}
+              onRetry={() => {
+                void loadUserSymbols(selectedStrategy);
+              }}
             />
           ) : isMarketplace ? (
             <MarketplaceScreen
               tab={marketplaceTab}
-              myStrategiesScreen={myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
+              myStrategiesScreen={myStrategiesScreen === 'nodes' || myStrategiesScreen === 'symbols' ? 'list' : myStrategiesScreen}
               onChangeTab={(tab) => {
                 navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
               }}
