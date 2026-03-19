@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton } from 'konsta/react';
+import { Dialog, DialogButton, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -36,7 +36,7 @@ function CloseIcon() {
   );
 }
 
-type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs' | 'errors';
+type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
 type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
 type LocalExecutionStatus = 'idle' | 'running' | 'completed' | 'failed';
 type LocalExecutionNodeStatus = 'pending' | 'running' | 'success' | 'error';
@@ -1076,27 +1076,24 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     if (category === 'trigger') {
       baseItems.push(
         { key: 'attributes', label: 'Attributes' },
-        { key: 'outputs', label: 'Outputs' },
+        { key: 'outputs', label: 'Result' },
       );
     } else if (category === 'output') {
       baseItems.push(
         { key: 'inputs', label: 'Inputs' },
         { key: 'attributes', label: 'Attributes' },
+        { key: 'outputs', label: 'Result' },
       );
     } else {
       baseItems.push(
         { key: 'inputs', label: 'Inputs' },
         { key: 'attributes', label: 'Attributes' },
-        { key: 'outputs', label: 'Outputs' },
+        { key: 'outputs', label: 'Result' },
       );
     }
 
-    if (selectedNodeExecutionTrace) {
-      baseItems.push({ key: 'errors', label: 'Error' });
-    }
-
     return baseItems;
-  }, [nodeEditorData?.category, selectedNodeExecutionTrace]);
+  }, [nodeEditorData?.category]);
 
   useEffect(() => {
     if (nodeDetailsPanelItems.some((item) => item.key === nodeDetailsPanel)) return;
@@ -1204,20 +1201,24 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                   </p>
                 </div>
               </div>
-              <div className="grid border-b border-zinc-800 px-3 py-2" style={{ gridTemplateColumns: `repeat(${nodeDetailsPanelItems.length || 1}, minmax(0, 1fr))` }}>
+              <div className="border-b border-zinc-800 px-3 py-2">
+                <Segmented
+                  strong
+                  className="w-full [&_button]:flex-1 [&_button]:py-1.5 [&_button]:text-[11px]"
+                >
                 {nodeDetailsPanelItems.map((item) => {
                   const active = nodeDetailsPanel === item.key;
                   return (
-                    <button
+                    <SegmentedButton
                       key={item.key}
-                      type="button"
+                      active={active}
                       onClick={() => setNodeDetailsPanel(item.key)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${active ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-300'}`}
                     >
                       {item.label}
-                    </button>
+                    </SegmentedButton>
                   );
                 })}
+                </Segmented>
               </div>
               <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3">
                 <div className="space-y-2">
@@ -1284,24 +1285,15 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       )}
                       {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
                         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                          <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Output</p>
+                          <p className={`text-[11px] font-semibold ${selectedNodeExecutionTrace.error ? 'text-red-300' : 'text-zinc-300'}`}>
+                            {selectedNodeExecutionTrace.error ? 'Execution Snapshot · Error' : 'Execution Snapshot · Output'}
+                          </p>
                           <div className="mt-2">
-                            <SnapshotTree label="output" value={selectedNodeExecutionTrace.outputSnapshot} />
+                            <SnapshotTree
+                              label={selectedNodeExecutionTrace.error ? 'error' : 'output'}
+                              value={selectedNodeExecutionTrace.error ?? selectedNodeExecutionTrace.outputSnapshot}
+                            />
                           </div>
-                        </div>
-                      )}
-                      {nodeDetailsPanel === 'errors' && (
-                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                          <p className="text-[11px] font-semibold text-zinc-300">Execution Error</p>
-                          {selectedNodeExecutionTrace?.error ? (
-                            <div className="mt-2">
-                              <SnapshotTree label="error" value={selectedNodeExecutionTrace.error} />
-                            </div>
-                          ) : (
-                            <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-400">
-                              No error for this node in the latest execution.
-                            </div>
-                          )}
                         </div>
                       )}
                     </>
