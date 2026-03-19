@@ -183,7 +183,7 @@ function SnapshotTree({
     return (
       <div className="mt-1 flex flex-wrap items-start gap-2 py-1.5">
         <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700/60 bg-zinc-950/60 px-1 text-[9px] font-semibold text-zinc-200">
+          <span className="inline-flex h-4 min-w-4 items-center justify-center px-0.5 text-[9px] font-semibold opacity-80">
             {token.icon}
           </span>
           <span>
@@ -207,7 +207,7 @@ function SnapshotTree({
       <summary className="cursor-pointer py-1.5 text-[11px] font-semibold text-zinc-100 marker:text-zinc-500">
         <span className="inline-flex items-center gap-2">
           <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700/60 bg-zinc-950/60 px-1 text-[9px] font-semibold text-zinc-200">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center px-0.5 text-[9px] font-semibold opacity-80">
               {token.icon}
             </span>
             {label}
