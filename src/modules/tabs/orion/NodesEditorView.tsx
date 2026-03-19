@@ -131,6 +131,71 @@ function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeDa
       : [{ id: makeFieldId('out'), name: 'result', type: 'number' }],
   };
 }
+
+function formatScalarValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return Object.prototype.toString.call(value);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function SnapshotTree({
+  label,
+  value,
+  depth = 0,
+}: {
+  label: string;
+  value: unknown;
+  depth?: number;
+}) {
+  const isArray = Array.isArray(value);
+  const isObject = isPlainObject(value);
+  const isBranch = isArray || isObject;
+
+  if (!isBranch) {
+    return (
+      <div className="flex items-start justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-2">
+        <p className="min-w-0 shrink text-[11px] font-medium text-zinc-300">{label}</p>
+        <p className="max-w-[58%] break-words text-right text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
+      </div>
+    );
+  }
+
+  const entries = isArray
+    ? value.map((item, index) => [`[${index}]`, item] as const)
+    : Object.entries(value);
+
+  return (
+    <details
+      className="rounded-md border border-zinc-800 bg-zinc-900/60"
+      open={depth < 2}
+    >
+      <summary className="cursor-pointer list-none px-2.5 py-2 text-[11px] font-semibold text-zinc-200">
+        <span className="inline-flex items-center gap-1">
+          <span className="text-zinc-400">{isArray ? '[]' : '{}'}</span>
+          <span>{label}</span>
+          <span className="text-zinc-500">({entries.length})</span>
+        </span>
+      </summary>
+      <div className="space-y-1.5 border-t border-zinc-800 px-2 py-2">
+        {entries.length === 0 ? (
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-2 text-[11px] text-zinc-500">
+            Empty
+          </div>
+        ) : (
+          entries.map(([entryKey, entryValue]) => (
+            <SnapshotTree key={`${label}-${entryKey}`} label={entryKey} value={entryValue} depth={depth + 1} />
+          ))
+        )}
+      </div>
+    </details>
+  );
+}
 interface NodesViewProps {
   strategyId: string;
   strategyName: string;
@@ -1178,20 +1243,26 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       {selectedNodeExecutionTrace && nodeDetailsPanel === 'inputs' && (
                         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
                           <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Inputs</p>
-                          <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.inputSnapshot, null, 2)}</pre>
+                          <div className="mt-2">
+                            <SnapshotTree label="inputs" value={selectedNodeExecutionTrace.inputSnapshot} />
+                          </div>
                         </div>
                       )}
                       {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
                         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
                           <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Output</p>
-                          <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.outputSnapshot, null, 2)}</pre>
+                          <div className="mt-2">
+                            <SnapshotTree label="output" value={selectedNodeExecutionTrace.outputSnapshot} />
+                          </div>
                         </div>
                       )}
                       {nodeDetailsPanel === 'errors' && (
                         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
                           <p className="text-[11px] font-semibold text-zinc-300">Execution Error</p>
                           {selectedNodeExecutionTrace?.error ? (
-                            <pre className="mt-2 overflow-x-auto rounded-md border border-red-900 bg-red-950/30 p-2 text-[10px] text-red-300">{selectedNodeExecutionTrace.error}</pre>
+                            <div className="mt-2">
+                              <SnapshotTree label="error" value={selectedNodeExecutionTrace.error} />
+                            </div>
                           ) : (
                             <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-400">
                               No error for this node in the latest execution.
