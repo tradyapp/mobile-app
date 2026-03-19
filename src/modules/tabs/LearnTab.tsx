@@ -331,6 +331,11 @@ export default function LearnTab() {
   // Scroll to top whenever we enter a lesson (or the lesson changes)
   useEffect(() => {
     if (view === "lesson") {
+      // Konsta Page uses .page-content as scroll container, not window
+      const pageContent = document.querySelector(".page-content");
+      if (pageContent) {
+        pageContent.scrollTop = 0;
+      }
       window.scrollTo({ top: 0 });
     }
   }, [view, lessonId]);
