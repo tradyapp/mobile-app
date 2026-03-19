@@ -38,9 +38,30 @@ function CloseIcon() {
 
 type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
 type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
+type LocalExecutionStatus = 'idle' | 'running' | 'completed' | 'failed';
+type LocalExecutionNodeStatus = 'pending' | 'running' | 'success' | 'error';
+
+interface LocalExecutionNodeTrace {
+  nodeId: string;
+  label: string;
+  nodeTypeKey: string;
+  status: LocalExecutionNodeStatus;
+  inputSnapshot: unknown;
+  outputSnapshot: unknown;
+  error: string | null;
+}
 
 function makeFieldId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toAttributeKey(field: EditorNodeField): string {
+  if (field.key && field.key.trim().length > 0) return field.key.trim();
+  return field.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function toFieldDefaultValue(value: unknown): string {
@@ -57,6 +78,7 @@ function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefi
   if (!Array.isArray(properties)) return [];
   return properties.map((item, index) => ({
     id: makeFieldId('input'),
+    key: item.key?.trim() || undefined,
     name: item.label?.trim() || item.key?.trim() || `Input ${index + 1}`,
     type: item.type || 'text',
     value: toFieldDefaultValue(item.default),
@@ -72,6 +94,7 @@ function mapPortsToFlowFields(
   if (!Array.isArray(ports)) return [];
   const mapped = ports.map((item, index) => ({
     id: makeFieldId(prefix),
+    key: item.key?.trim() || undefined,
     name: item.label?.trim() || item.key?.trim() || `${fallbackLabel} ${index + 1}`,
     type: item.type || 'any',
     required: true,
@@ -230,6 +253,12 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
+  const [isLocalExecutionOpen, setIsLocalExecutionOpen] = useState(false);
+  const [localExecutionStatus, setLocalExecutionStatus] = useState<LocalExecutionStatus>('idle');
+  const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
+  const [localExecutionStartedAt, setLocalExecutionStartedAt] = useState<string | null>(null);
+  const [localExecutionFinishedAt, setLocalExecutionFinishedAt] = useState<string | null>(null);
+  const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -571,6 +600,194 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       };
     }));
   }, [setNodes]);
+
+  const runLocalExecution = useCallback(async () => {
+    if (nodes.length === 0) {
+      setLocalExecutionStatus('failed');
+      setLocalExecutionError('Add at least one node before running local execution.');
+      setLocalExecutionTraces([]);
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    setLocalExecutionStartedAt(startedAt);
+    setLocalExecutionFinishedAt(null);
+    setLocalExecutionStatus('running');
+    setLocalExecutionError(null);
+
+    const nodeById = new Map<string, RFNode>();
+    const incomingByNodeId = new Map<string, string[]>();
+    const outgoingByNodeId = new Map<string, string[]>();
+    const indegree = new Map<string, number>();
+
+    for (const node of nodes) {
+      nodeById.set(node.id, node);
+      incomingByNodeId.set(node.id, []);
+      outgoingByNodeId.set(node.id, []);
+      indegree.set(node.id, 0);
+    }
+
+    for (const edge of edges) {
+      if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
+      incomingByNodeId.set(edge.target, [...(incomingByNodeId.get(edge.target) ?? []), edge.source]);
+      outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
+      indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+    }
+
+    const queue: string[] = [];
+    for (const node of nodes) {
+      if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
+    }
+    queue.sort((a, b) => {
+      const nodeA = nodeById.get(a);
+      const nodeB = nodeById.get(b);
+      const categoryA = normalizeNodeCategory((nodeA?.data as EditorNodeData | undefined)?.category);
+      const categoryB = normalizeNodeCategory((nodeB?.data as EditorNodeData | undefined)?.category);
+      if (categoryA === categoryB) return a.localeCompare(b);
+      if (categoryA === 'trigger') return -1;
+      if (categoryB === 'trigger') return 1;
+      return categoryA.localeCompare(categoryB);
+    });
+
+    const orderedNodeIds: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      orderedNodeIds.push(current);
+      for (const next of outgoingByNodeId.get(current) ?? []) {
+        const remaining = (indegree.get(next) ?? 0) - 1;
+        indegree.set(next, remaining);
+        if (remaining === 0) {
+          queue.push(next);
+        }
+      }
+    }
+
+    for (const node of nodes) {
+      if (!orderedNodeIds.includes(node.id)) {
+        orderedNodeIds.push(node.id);
+      }
+    }
+
+    const tracesById = new Map<string, LocalExecutionNodeTrace>();
+    for (const nodeId of orderedNodeIds) {
+      const node = nodeById.get(nodeId)!;
+      const nodeData = (node.data ?? {}) as EditorNodeData;
+      tracesById.set(nodeId, {
+        nodeId,
+        label: nodeData.label ?? nodeId,
+        nodeTypeKey: nodeData.nodeTypeKey ?? 'custom-node',
+        status: 'pending',
+        inputSnapshot: null,
+        outputSnapshot: null,
+        error: null,
+      });
+    }
+
+    const syncTracesState = () => {
+      setLocalExecutionTraces(orderedNodeIds.map((nodeId) => tracesById.get(nodeId)!));
+    };
+
+    syncTracesState();
+
+    const outputsByNodeId = new Map<string, unknown>();
+    const toAttributeValue = (field: EditorNodeField): unknown => {
+      const raw = field.value ?? '';
+      const normalizedType = (field.type || '').toLowerCase();
+      if (normalizedType === 'number') {
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      if (normalizedType === 'boolean') {
+        const lowered = raw.trim().toLowerCase();
+        if (lowered === 'true' || lowered === '1' || lowered === 'yes') return true;
+        if (lowered === 'false' || lowered === '0' || lowered === 'no') return false;
+        return null;
+      }
+      return raw;
+    };
+
+    for (let i = 0; i < orderedNodeIds.length; i += 1) {
+      const nodeId = orderedNodeIds[i];
+      const trace = tracesById.get(nodeId);
+      const node = nodeById.get(nodeId);
+      if (!trace || !node) continue;
+
+      trace.status = 'running';
+      syncTracesState();
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+      const incomingIds = incomingByNodeId.get(nodeId) ?? [];
+      const inputs: Record<string, unknown> = {};
+      for (const incomingId of incomingIds) {
+        if (outputsByNodeId.has(incomingId)) {
+          const incomingNode = nodeById.get(incomingId);
+          const incomingData = (incomingNode?.data ?? {}) as EditorNodeData;
+          const key = incomingData.nodeTypeKey || incomingData.label || incomingId;
+          inputs[`${incomingId}:${key}`] = outputsByNodeId.get(incomingId);
+        }
+      }
+
+      const nodeData = (node.data ?? {}) as EditorNodeData;
+      const attributes = (nodeData.attributes ?? []).reduce<Record<string, unknown>>((acc, field) => {
+        const key = toAttributeKey(field);
+        if (!key) return acc;
+        acc[key] = toAttributeValue(field);
+        return acc;
+      }, {});
+
+      trace.inputSnapshot = {
+        upstreamCount: incomingIds.length,
+        upstream: inputs,
+      };
+
+      try {
+        if (nodeData.nodeTypeKey === 'trigger.schedule') {
+          const hour = Number(attributes.hour ?? 9);
+          const minute = Number(attributes.minute ?? 0);
+          const days = String(attributes.days_of_week ?? 'mon,tue,wed,thu,fri');
+          trace.outputSnapshot = {
+            type: 'schedule_event',
+            scheduled_at: new Date().toISOString(),
+            config: { hour, minute, days_of_week: days },
+          };
+        } else if (nodeData.nodeTypeKey === 'output.true') {
+          trace.outputSnapshot = { result: true };
+        } else if (nodeData.nodeTypeKey === 'output.false') {
+          trace.outputSnapshot = { result: false };
+        } else if (nodeData.nodeTypeKey === 'output.percentage') {
+          const percentage = Number(attributes.percentage ?? 0);
+          if (!Number.isFinite(percentage)) {
+            throw new Error('Percentage must be a valid number.');
+          }
+          trace.outputSnapshot = { result: 'rating', rating: percentage };
+        } else {
+          trace.outputSnapshot = {
+            type: nodeData.nodeTypeKey ?? 'custom-node',
+            attributes,
+            passthrough_inputs: inputs,
+          };
+        }
+
+        outputsByNodeId.set(nodeId, trace.outputSnapshot);
+        trace.status = 'success';
+        trace.error = null;
+      } catch (error) {
+        trace.status = 'error';
+        trace.error = error instanceof Error ? error.message : 'Execution error';
+        setLocalExecutionStatus('failed');
+        setLocalExecutionError(`Node failed: ${trace.label}`);
+        setLocalExecutionFinishedAt(new Date().toISOString());
+        syncTracesState();
+        return;
+      }
+
+      syncTracesState();
+    }
+
+    setLocalExecutionStatus('completed');
+    setLocalExecutionError(null);
+    setLocalExecutionFinishedAt(new Date().toISOString());
+  }, [edges, nodes]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1072,6 +1289,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         onToggleLive={() => setIsLive((prev) => !prev)}
         onOpenBacktesting={() => {
           setIsSettingsDrawerOpen(false);
+          setIsLocalExecutionOpen(true);
         }}
         isOwner={isOwner}
         trackedSymbols={trackedSymbols}
@@ -1114,6 +1332,116 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         }}
         isPublishingVersion={isPublishingVersion}
       />
+
+      {typeof window !== 'undefined' && isLocalExecutionOpen && createPortal(
+        <div className="fixed inset-0 z-[10055] pointer-events-none">
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/70"
+              onClick={() => {
+                if (localExecutionStatus === 'running') return;
+                setIsLocalExecutionOpen(false);
+              }}
+              aria-label="Close local execution dialog"
+            />
+            <div className="absolute left-1/2 top-1/2 h-[min(84vh,760px)] w-[min(94vw,960px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">Local Execution</h3>
+                  <p className="text-xs text-zinc-500">
+                    {localExecutionStatus === 'idle'
+                      ? 'Ready to run'
+                      : localExecutionStatus === 'running'
+                        ? 'Running strategy nodes...'
+                        : localExecutionStatus === 'completed'
+                          ? 'Execution completed'
+                          : 'Execution failed'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runLocalExecution()}
+                    disabled={localExecutionStatus === 'running'}
+                    className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-60"
+                  >
+                    {localExecutionStatus === 'running' ? 'Running...' : 'Run Local'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLocalExecutionOpen(false)}
+                    disabled={localExecutionStatus === 'running'}
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-60"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid h-[calc(100%-61px)] grid-cols-1 gap-0 md:grid-cols-[380px_1fr]">
+                <div className="overflow-y-auto border-b border-zinc-800 p-3 md:border-b-0 md:border-r">
+                  <div className="space-y-2">
+                    {localExecutionTraces.length === 0 ? (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-xs text-zinc-500">
+                        Run execution to see per-node status.
+                      </div>
+                    ) : (
+                      localExecutionTraces.map((trace) => (
+                        <div key={trace.nodeId} className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-semibold text-zinc-100">{trace.label}</p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              trace.status === 'success'
+                                ? 'bg-emerald-950/40 text-emerald-300'
+                                : trace.status === 'running'
+                                  ? 'bg-blue-950/40 text-blue-300'
+                                  : trace.status === 'error'
+                                    ? 'bg-red-950/40 text-red-300'
+                                    : 'bg-zinc-800 text-zinc-400'
+                            }`}>
+                              {trace.status}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">{trace.nodeTypeKey}</p>
+                          {trace.error && (
+                            <p className="mt-1 text-[10px] text-red-300">{trace.error}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto p-3">
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                      <p className="text-xs font-semibold text-zinc-100">Run Summary</p>
+                      <p className="mt-1 text-[11px] text-zinc-400">Started: {localExecutionStartedAt ? new Date(localExecutionStartedAt).toLocaleString('en-US') : '—'}</p>
+                      <p className="text-[11px] text-zinc-400">Finished: {localExecutionFinishedAt ? new Date(localExecutionFinishedAt).toLocaleString('en-US') : '—'}</p>
+                      <p className="text-[11px] text-zinc-400">Nodes: {localExecutionTraces.length}</p>
+                      {localExecutionError && (
+                        <p className="mt-1 text-[11px] text-red-300">{localExecutionError}</p>
+                      )}
+                    </div>
+
+                    {localExecutionTraces.map((trace) => (
+                      <div key={`detail-${trace.nodeId}`} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                        <p className="text-xs font-semibold text-zinc-100">{trace.label}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500">Inputs</p>
+                        <pre className="mt-1 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-300">{JSON.stringify(trace.inputSnapshot, null, 2)}</pre>
+                        <p className="mt-2 text-[11px] text-zinc-500">Output</p>
+                        <pre className="mt-1 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-300">{JSON.stringify(trace.outputSnapshot, null, 2)}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {typeof window !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[10040] pointer-events-none">

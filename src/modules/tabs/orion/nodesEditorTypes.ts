@@ -12,6 +12,7 @@ export interface EditorNodeData {
 
 export interface EditorNodeField {
   id: string;
+  key?: string;
   name: string;
   type: string;
   required?: boolean;
