@@ -585,6 +585,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                 border-color: #34d399 !important;
                 box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6), 0 10px 28px rgba(0, 0, 0, 0.45) !important;
               }
+              .react-flow__edge.selected .react-flow__edge-path {
+                stroke: #34d399 !important;
+                filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.45));
+              }
             `}</style>
 
             {!isPreviewMode && hasSelection && (
