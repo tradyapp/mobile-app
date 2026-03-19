@@ -12,6 +12,7 @@ import {
 import {
   lmsProgressService,
   type LessonProgress,
+  type CourseProgressSummary,
 } from "@/services/LmsProgressService";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
@@ -26,6 +27,51 @@ const localeToLanguage: Record<string, LmsCourse["language"]> = {
 };
 
 const NEAR_END_THRESHOLD = 15; // seconds before end to mark as completed
+
+/** Small SVG donut chart for course progress */
+function ProgressPie({ completed, total, size = 36 }: { completed: number; total: number; size?: number }) {
+  const radius = (size - 4) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = total > 0 ? completed / total : 0;
+  const offset = circumference * (1 - pct);
+  const isComplete = total > 0 && completed === total;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          className="text-zinc-800"
+          strokeWidth={3}
+        />
+        {/* Progress arc */}
+        {pct > 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            className={isComplete ? "text-emerald-400" : "text-emerald-500/70"}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.3s ease" }}
+          />
+        )}
+      </svg>
+      <span className={`absolute text-[9px] font-bold ${isComplete ? "text-emerald-400" : "text-zinc-400"}`}>
+        {Math.round(pct * 100)}%
+      </span>
+    </div>
+  );
+}
 
 function getMuxStreamUrl(muxId: string): string {
   return `https://stream.mux.com/${muxId}.m3u8`;
@@ -74,6 +120,7 @@ export default function LearnTab() {
 
   // Progress state
   const [progressMap, setProgressMap] = useState<Map<string, LessonProgress>>(new Map());
+  const [courseSummaries, setCourseSummaries] = useState<Map<string, CourseProgressSummary>>(new Map());
   const videoRef = useRef<HTMLVideoElement>(null);
   const markedCompleteRef = useRef(false);
 
@@ -110,9 +157,15 @@ export default function LearnTab() {
           }
         }
 
-        const data = await lmsService.getPublishedCourses();
+        const [data, summaries] = await Promise.all([
+          lmsService.getPublishedCourses(),
+          user?.uid
+            ? lmsProgressService.getCourseSummaries(user.uid)
+            : Promise.resolve(new Map<string, CourseProgressSummary>()),
+        ]);
         if (!active) return;
         setCourses(data.filter((c) => c.language === storeLocale));
+        setCourseSummaries(summaries);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "No se pudieron cargar los cursos");
@@ -202,6 +255,15 @@ export default function LearnTab() {
             progress_seconds: progressSeconds ?? prev.get(lesson.id)?.progress_seconds ?? 0,
             completed_at: new Date().toISOString(),
           });
+          return next;
+        });
+        // Update catalog summary optimistically
+        setCourseSummaries((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(selectedCourse.id);
+          if (existing) {
+            next.set(selectedCourse.id, { ...existing, completed: existing.completed + 1 });
+          }
           return next;
         });
       } catch {
@@ -311,27 +373,41 @@ export default function LearnTab() {
       )}
 
       <div className="space-y-3">
-        {courses.map((course) => (
-          <button
-            key={course.id}
-            onClick={() => void openCourse(course)}
-            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
-          >
-            <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800">
-              {course.thumbnail_url ? (
-                <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
-              )}
-            </div>
-            <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
-              <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
-              {course.description && (
-                <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
-              )}
-            </div>
-          </button>
-        ))}
+        {courses.map((course) => {
+          const summary = courseSummaries.get(course.id);
+          return (
+            <button
+              key={course.id}
+              onClick={() => void openCourse(course)}
+              className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
+            >
+              <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
+                {course.thumbnail_url ? (
+                  <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
+                )}
+                {/* Pie chart overlay */}
+                {summary && summary.total > 0 && (
+                  <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
+                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
+                <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
+                {course.description && (
+                  <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
+                )}
+                {summary && summary.total > 0 && (
+                  <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
+                    {summary.completed}/{summary.total} lessons completed
+                  </p>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </Block>
   );

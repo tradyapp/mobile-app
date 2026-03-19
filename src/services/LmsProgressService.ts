@@ -1,5 +1,11 @@
 import { supabase } from "@/lib/supabase";
 
+export interface CourseProgressSummary {
+  course_id: string;
+  completed: number;
+  total: number;
+}
+
 export interface LessonProgress {
   id: string;
   user_id: string;
@@ -11,6 +17,26 @@ export interface LessonProgress {
 }
 
 class LmsProgressService {
+  /**
+   * Fetch per-course progress summary for the catalog view.
+   * Returns a map keyed by course_id.
+   */
+  async getCourseSummaries(
+    userId: string
+  ): Promise<Map<string, CourseProgressSummary>> {
+    const { data, error } = await supabase.rpc("get_course_progress_summary", {
+      p_user_id: userId,
+    });
+
+    if (error) throw error;
+
+    const map = new Map<string, CourseProgressSummary>();
+    for (const row of (data ?? []) as CourseProgressSummary[]) {
+      map.set(row.course_id, row);
+    }
+    return map;
+  }
+
   /**
    * Fetch all progress rows for a user in a given course.
    * Returns a map keyed by lesson_id for quick lookup.
