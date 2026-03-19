@@ -34,6 +34,26 @@ class DataService {
   private symbolsCache: Symbol[] | null = null;
   private isLoading = false;
 
+  private isBlobUrl(value: string | null | undefined): boolean {
+    return typeof value === "string" && value.startsWith("blob:");
+  }
+
+  private normalizeSymbolRecord(value: Partial<Symbol>): Symbol {
+    const photo = typeof value.photo === "string" ? value.photo : null;
+    const iconUrl = typeof value.icon_url === "string" ? value.icon_url : null;
+    const canonicalIconUrl = !this.isBlobUrl(iconUrl)
+      ? iconUrl
+      : (!this.isBlobUrl(photo) ? photo : null);
+
+    return {
+      symbol: typeof value.symbol === "string" ? value.symbol : "",
+      type: value.type ?? null,
+      name: typeof value.name === "string" ? value.name : null,
+      photo: photo ?? canonicalIconUrl,
+      icon_url: canonicalIconUrl,
+    };
+  }
+
   private async getDB(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
 
@@ -212,22 +232,3 @@ class DataService {
 
 const dataService = new DataService();
 export default dataService;
-  private isBlobUrl(value: string | null | undefined): boolean {
-    return typeof value === "string" && value.startsWith("blob:");
-  }
-
-  private normalizeSymbolRecord(value: Partial<Symbol>): Symbol {
-    const photo = typeof value.photo === "string" ? value.photo : null;
-    const iconUrl = typeof value.icon_url === "string" ? value.icon_url : null;
-    const canonicalIconUrl = !this.isBlobUrl(iconUrl)
-      ? iconUrl
-      : (!this.isBlobUrl(photo) ? photo : null);
-
-    return {
-      symbol: typeof value.symbol === "string" ? value.symbol : "",
-      type: value.type ?? null,
-      name: typeof value.name === "string" ? value.name : null,
-      photo: photo ?? canonicalIconUrl,
-      icon_url: canonicalIconUrl,
-    };
-  }
