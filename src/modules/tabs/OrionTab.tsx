@@ -54,6 +54,42 @@ interface EditorNodeData {
   iconUrl?: string | null;
 }
 
+interface NodeTypeCategoryGroup {
+  key: string;
+  label: string;
+  items: StrategyNodeTypeRecord[];
+}
+
+const NODE_CATEGORY_SORT_WEIGHT: Record<string, number> = {
+  trigger: 0,
+  condition: 1,
+  logic: 2,
+  action: 3,
+  output: 4,
+  uncategorized: 99,
+};
+
+function normalizeNodeCategory(value?: string | null): string {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : 'uncategorized';
+}
+
+function formatNodeCategoryLabel(key: string): string {
+  if (key === 'uncategorized') return 'Uncategorized';
+  return key
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function compareNodeCategory(a: string, b: string): number {
+  const weightA = NODE_CATEGORY_SORT_WEIGHT[a] ?? 50;
+  const weightB = NODE_CATEGORY_SORT_WEIGHT[b] ?? 50;
+  if (weightA !== weightB) return weightA - weightB;
+  return a.localeCompare(b);
+}
+
 const MARKETPLACE_APPS: StrategyApp[] = [
   { id: 'breakout-hunter', name: 'Breakout Hunter', subtitle: 'Detecta rupturas con volumen', category: 'Momentum', icon: 'BH', accent: '#22c55e' },
   { id: 'mean-revert-pro', name: 'Mean Revert Pro', subtitle: 'Señales de reversión intradía', category: 'Mean Reversion', icon: 'MR', accent: '#60a5fa' },
@@ -563,6 +599,43 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   const [isNodeTypesLoading, setIsNodeTypesLoading] = useState(false);
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
+  const [openNodeTypeCategories, setOpenNodeTypeCategories] = useState<Record<string, boolean>>({});
+  const [nodeTypeSearch, setNodeTypeSearch] = useState('');
+
+  const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
+    const grouped = new Map<string, StrategyNodeTypeRecord[]>();
+
+    for (const item of availableNodeTypes) {
+      const categoryKey = normalizeNodeCategory(item.category);
+      const existing = grouped.get(categoryKey) ?? [];
+      existing.push(item);
+      grouped.set(categoryKey, existing);
+    }
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => compareNodeCategory(a, b))
+      .map(([key, items]) => ({
+        key,
+        label: formatNodeCategoryLabel(key),
+        items: [...items].sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+  }, [availableNodeTypes]);
+
+  const filteredNodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
+    const query = nodeTypeSearch.trim().toLowerCase();
+    if (!query) return nodeTypeGroups;
+
+    return nodeTypeGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          const name = item.name.toLowerCase();
+          const key = item.key.toLowerCase();
+          return name.includes(query) || key.includes(query);
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [nodeTypeGroups, nodeTypeSearch]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
@@ -584,6 +657,36 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   useEffect(() => {
     void loadNodeTypes();
   }, [loadNodeTypes]);
+
+  useEffect(() => {
+    if (nodeTypeGroups.length === 0) {
+      setOpenNodeTypeCategories({});
+      return;
+    }
+
+    setOpenNodeTypeCategories((prev) => {
+      const next: Record<string, boolean> = {};
+
+      for (const group of nodeTypeGroups) {
+        if (group.key in prev) {
+          next[group.key] = prev[group.key];
+        } else {
+          next[group.key] = group.key === 'trigger';
+        }
+      }
+
+      const hasOpenCategory = Object.values(next).some(Boolean);
+      if (!hasOpenCategory) next[nodeTypeGroups[0].key] = true;
+
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      const changed =
+        prevKeys.length !== nextKeys.length ||
+        nextKeys.some((key) => prev[key] !== next[key]);
+
+      return changed ? next : prev;
+    });
+  }, [nodeTypeGroups]);
 
   const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
     setNodes((prev) => {
@@ -703,6 +806,17 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
                 </button>
               </div>
 
+              <div className="mb-3">
+                <input
+                  type="text"
+                  value={nodeTypeSearch}
+                  onChange={(event) => setNodeTypeSearch(event.target.value)}
+                  placeholder="Search node type..."
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+                  aria-label="Search node types"
+                />
+              </div>
+
               {isNodeTypesLoading ? (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
                   Loading node types...
@@ -724,30 +838,62 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
                   No node types available.
                 </div>
+              ) : filteredNodeTypeGroups.length === 0 ? (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+                  No node types match your search.
+                </div>
               ) : (
                 <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-                  {availableNodeTypes.map((item) => (
-                    <button
-                      key={`${item.key}-${item.id}`}
-                      type="button"
-                      onClick={() => handleAddNodeFromType(item)}
-                      className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-left"
-                    >
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                        {item.icon_url ? (
-                          <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                            {item.name.slice(0, 2).toUpperCase()}
+                  {filteredNodeTypeGroups.map((group) => {
+                    const isOpen = Boolean(openNodeTypeCategories[group.key]);
+
+                    return (
+                      <section key={group.key} className="rounded-xl border border-zinc-800 bg-zinc-900">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenNodeTypeCategories((prev) => ({ ...prev, [group.key]: !isOpen }));
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2.5 text-left"
+                          aria-expanded={isOpen}
+                          aria-label={`Toggle ${group.label} category`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">{group.label}</p>
+                            <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
+                          </div>
+                          <span className="text-lg leading-none text-zinc-400">{isOpen ? '−' : '+'}</span>
+                        </button>
+
+                        {isOpen && (
+                          <div className="space-y-2 border-t border-zinc-800 p-2">
+                            {group.items.map((item) => (
+                              <button
+                                key={`${item.key}-${item.id}`}
+                                type="button"
+                                onClick={() => handleAddNodeFromType(item)}
+                                className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
+                              >
+                                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                                  {item.icon_url ? (
+                                    <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+                                      {item.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
+                                  <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
+                                </div>
+                              </button>
+                            ))}
                           </div>
                         )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
-                        <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category}</p>
-                      </div>
-                    </button>
-                  ))}
+                      </section>
+                    );
+                  })}
                 </div>
               )}
             </div>
