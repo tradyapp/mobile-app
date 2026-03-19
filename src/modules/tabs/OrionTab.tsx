@@ -1739,9 +1739,9 @@ export default function OrionTab() {
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={orionRouteKey}
-          initial={isNodesView ? { opacity: 0, x: 28 } : { opacity: 0, y: 14 }}
-          animate={isNodesView ? { opacity: 1, x: 0 } : { opacity: 1, y: 0 }}
-          exit={isNodesView ? { opacity: 0, x: 28 } : { opacity: 0, y: -10 }}
+          initial={isNodesView ? { opacity: 0, scale: 0.96 } : { opacity: 0, y: 14 }}
+          animate={isNodesView ? { opacity: 1, scale: 1 } : { opacity: 1, y: 0 }}
+          exit={isNodesView ? { opacity: 0, scale: 0.96 } : { opacity: 0, y: -10 }}
           transition={{ duration: isNodesView ? 0.22 : 0.18, ease: 'easeOut' }}
         >
           {isNodesView && selectedStrategyId ? (
