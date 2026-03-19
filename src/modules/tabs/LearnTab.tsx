@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Block } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
@@ -577,8 +578,8 @@ export default function LearnTab() {
         )}
 
         {textContent ? (
-          <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3">
-            <p className="text-zinc-200 text-sm whitespace-pre-wrap">{textContent}</p>
+          <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
+            <ReactMarkdown>{textContent}</ReactMarkdown>
           </div>
         ) : (
           !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
