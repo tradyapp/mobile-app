@@ -432,6 +432,52 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [nodeEditorNodeId, nodes]);
 
   useEffect(() => {
+    if (availableNodeTypes.length === 0) return;
+
+    const byKey = new Map<string, StrategyNodeTypeRecord>();
+    for (const nodeType of availableNodeTypes) {
+      byKey.set(nodeType.key, nodeType);
+    }
+
+    setNodes((prev) => {
+      let changed = false;
+      const next = prev.map((node) => {
+        const data = (node.data ?? {}) as EditorNodeData;
+        if (!data.nodeTypeKey) return node;
+
+        const nodeType = byKey.get(data.nodeTypeKey);
+        if (!nodeType) return node;
+
+        const defaults = createNodeDefaults(nodeType);
+        const currentInputs = Array.isArray(data.inputs) ? data.inputs : [];
+        const currentAttributes = Array.isArray(data.attributes) ? data.attributes : [];
+        const currentOutputs = Array.isArray(data.outputs) ? data.outputs : [];
+
+        const shouldHydrateInputs = currentInputs.length === 0 && defaults.inputs.length > 0;
+        const shouldHydrateAttributes = currentAttributes.length === 0 && defaults.attributes.length > 0;
+        const shouldHydrateOutputs = currentOutputs.length === 0 && defaults.outputs.length > 0;
+
+        if (!shouldHydrateInputs && !shouldHydrateAttributes && !shouldHydrateOutputs) {
+          return node;
+        }
+
+        changed = true;
+        return {
+          ...node,
+          data: {
+            ...data,
+            ...(shouldHydrateInputs ? { inputs: defaults.inputs } : {}),
+            ...(shouldHydrateAttributes ? { attributes: defaults.attributes } : {}),
+            ...(shouldHydrateOutputs ? { outputs: defaults.outputs } : {}),
+          } satisfies EditorNodeData,
+        };
+      });
+
+      return changed ? next : prev;
+    });
+  }, [availableNodeTypes, setNodes]);
+
+  useEffect(() => {
     if (!hasHydratedNodeMapRef.current) return;
     if (isPreviewMode) return;
 
@@ -497,7 +543,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
   const openNodeEditor = useCallback((nodeId: string) => {
     setNodeEditorNodeId(nodeId);
-    setNodeDetailsPanel('inputs');
+    setNodeDetailsPanel('attributes');
   }, []);
 
   const handleNodeClick = useCallback((_event: unknown, node: RFNode) => {
