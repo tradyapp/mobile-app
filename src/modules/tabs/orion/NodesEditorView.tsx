@@ -176,23 +176,21 @@ function SnapshotTree({
   const isArray = Array.isArray(value);
   const isObject = isPlainObject(value);
   const isBranch = isArray || isObject;
-  const tone = depth % 3;
-  const keyTextClass = tone === 0 ? 'text-zinc-200' : tone === 1 ? 'text-zinc-300' : 'text-zinc-400';
   const valueType = getValueType(value);
   const token = getTypeToken(valueType);
 
   if (!isBranch) {
     return (
-      <div className="mt-1 flex items-start justify-between gap-3 py-1.5">
-        <div className="flex min-w-0 shrink items-center gap-1.5">
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700 bg-zinc-900 px-1 text-[9px] font-semibold text-zinc-300">
+      <div className="mt-1 flex flex-wrap items-start gap-2 py-1.5">
+        <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700/60 bg-zinc-950/60 px-1 text-[9px] font-semibold text-zinc-200">
             {token.icon}
           </span>
-          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+          <span>
             {label}
           </span>
-        </div>
-        <p className="max-w-[58%] break-words text-right text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
+        </span>
+        <p className="min-w-0 max-w-full break-words text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
       </div>
     );
   }
@@ -208,10 +206,10 @@ function SnapshotTree({
     >
       <summary className="cursor-pointer py-1.5 text-[11px] font-semibold text-zinc-100 marker:text-zinc-500">
         <span className="inline-flex items-center gap-2">
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700 bg-zinc-900 px-1 text-[9px] font-semibold text-zinc-300">
-            {token.icon}
-          </span>
-          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+          <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700/60 bg-zinc-950/60 px-1 text-[9px] font-semibold text-zinc-200">
+              {token.icon}
+            </span>
             {label}
           </span>
           <span className="text-zinc-500">({entries.length})</span>
