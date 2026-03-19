@@ -52,43 +52,47 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
 
   const nodeTypes = useMemo<NodeTypes>(() => ({
     editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => {
-      const category = (data?.category ?? 'logic').toLowerCase();
-      const showLeftHandle = category !== 'trigger';
-      const showRightHandle = category !== 'output';
+      const category = normalizeNodeCategory(data?.category);
+      const isTrigger = category === 'trigger';
+      const isOutput = category === 'output';
+      const showLeftHandle = !isTrigger;
+      const showRightHandle = !isOutput;
 
       return (
-        <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <div
+          className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${isTrigger ? 'rounded-l-full rounded-r-[20px]' : isOutput ? 'rounded-r-full rounded-l-[20px]' : 'rounded-[20px]'}`}
+        >
           {showLeftHandle && (
             <Handle
               id="left"
               type="target"
               position={Position.Left}
-              className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+              className="!h-4 !w-4 !border !border-emerald-400 !bg-zinc-950"
+              style={{ left: -8 }}
             />
           )}
-          <div className="flex items-center gap-2 pr-2">
-            <div className="h-6 w-6 overflow-hidden rounded-md border border-zinc-600 bg-zinc-800">
-              {data?.iconUrl ? (
-                <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-zinc-300">
-                  {(data?.label ?? 'N').slice(0, 1).toUpperCase()}
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-zinc-100">{data?.label ?? 'Node'}</p>
-              {data?.category && (
-                <p className="truncate text-[10px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
-              )}
-            </div>
+          <div className="h-8 w-8 overflow-hidden rounded-lg border border-zinc-600 bg-zinc-800">
+            {data?.iconUrl ? (
+              <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-zinc-300">
+                {(data?.label ?? 'N').slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 text-center">
+            <p className="line-clamp-2 text-[11px] font-semibold leading-tight text-zinc-100">{data?.label ?? 'Node'}</p>
+            {data?.category && (
+              <p className="mt-0.5 truncate text-[9px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
+            )}
           </div>
           {showRightHandle && (
             <Handle
               id="right"
               type="source"
               position={Position.Right}
-              className="!h-6 !w-6 !border-2 !border-emerald-400 !bg-black"
+              className="!h-4 !w-4 !border !border-emerald-400 !bg-zinc-950"
+              style={{ right: -8 }}
             />
           )}
         </div>
