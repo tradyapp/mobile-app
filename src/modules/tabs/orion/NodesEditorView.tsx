@@ -36,7 +36,7 @@ function CloseIcon() {
   );
 }
 
-type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
+type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs' | 'errors';
 type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
 type LocalExecutionStatus = 'idle' | 'running' | 'completed' | 'failed';
 type LocalExecutionNodeStatus = 'pending' | 'running' | 'success' | 'error';
@@ -967,29 +967,37 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [previewVersion, isPublishingVersion, strategyId]);
 
   const nodeEditorData = selectedNodeForEditor?.data as EditorNodeData | undefined;
+  const selectedNodeExecutionTrace = selectedNodeForEditor
+    ? localExecutionTraces.find((item) => item.nodeId === selectedNodeForEditor.id) ?? null
+    : null;
   const nodeDetailsPanelItems = useMemo<NodeDetailsPanelItem[]>(() => {
     const category = normalizeNodeCategory(nodeEditorData?.category);
+    const baseItems: NodeDetailsPanelItem[] = [];
 
     if (category === 'trigger') {
-      return [
+      baseItems.push(
         { key: 'attributes', label: 'Attributes' },
         { key: 'outputs', label: 'Outputs' },
-      ];
-    }
-
-    if (category === 'output') {
-      return [
+      );
+    } else if (category === 'output') {
+      baseItems.push(
         { key: 'inputs', label: 'Inputs' },
         { key: 'attributes', label: 'Attributes' },
-      ];
+      );
+    } else {
+      baseItems.push(
+        { key: 'inputs', label: 'Inputs' },
+        { key: 'attributes', label: 'Attributes' },
+        { key: 'outputs', label: 'Outputs' },
+      );
     }
 
-    return [
-      { key: 'inputs', label: 'Inputs' },
-      { key: 'attributes', label: 'Attributes' },
-      { key: 'outputs', label: 'Outputs' },
-    ];
-  }, [nodeEditorData?.category]);
+    if (selectedNodeExecutionTrace) {
+      baseItems.push({ key: 'errors', label: 'Error' });
+    }
+
+    return baseItems;
+  }, [nodeEditorData?.category, selectedNodeExecutionTrace]);
 
   useEffect(() => {
     if (nodeDetailsPanelItems.some((item) => item.key === nodeDetailsPanel)) return;
@@ -999,9 +1007,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const panelFields = nodeEditorData
     ? (Array.isArray(nodeEditorData[nodeDetailsPanel]) ? nodeEditorData[nodeDetailsPanel] as EditorNodeField[] : [])
     : [];
-  const selectedNodeExecutionTrace = selectedNodeForEditor
-    ? localExecutionTraces.find((item) => item.nodeId === selectedNodeForEditor.id) ?? null
-    : null;
 
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
@@ -1132,9 +1137,23 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       )}
                     </div>
                   )}
+                  {nodeDetailsPanel === 'errors' && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-300">Execution Error</p>
+                      {selectedNodeExecutionTrace?.error ? (
+                        <pre className="mt-2 overflow-x-auto rounded-md border border-red-900 bg-red-950/30 p-2 text-[10px] text-red-300">{selectedNodeExecutionTrace.error}</pre>
+                      ) : (
+                        <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-400">
+                          No error for this node in the latest execution.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {panelFields.length === 0 ? (
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
-                      {nodeDetailsPanel === 'attributes'
+                      {nodeDetailsPanel === 'errors'
+                        ? 'Error details are shown above.'
+                        : nodeDetailsPanel === 'attributes'
                         ? 'No configurable attributes for this node.'
                         : 'No flow ports in this panel.'}
                     </div>
