@@ -5,7 +5,7 @@ export interface StrategyDraft {
 }
 
 export type MarketplaceTab = 'explore' | 'my-strategies';
-export type MyStrategiesScreen = 'list' | 'create' | 'detail' | 'symbols' | 'nodes';
+export type MyStrategiesScreen = 'list' | 'create' | 'detail' | 'symbols' | 'webhook' | 'nodes';
 
 export interface StrategyApp {
   id: string;

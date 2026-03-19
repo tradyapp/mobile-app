@@ -11,10 +11,11 @@ import NodesEditorView from '@/modules/tabs/orion/NodesEditorView';
 import NotificationsScreen from '@/modules/tabs/orion/NotificationsScreen';
 import StrategyDetailView from '@/modules/tabs/orion/StrategyDetailView';
 import StrategySymbolsView from '@/modules/tabs/orion/StrategySymbolsView';
+import StrategyWebhookView from '@/modules/tabs/orion/StrategyWebhookView';
 import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
 import dataService from '@/services/DataService';
-import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
+import { strategiesService, type StrategyRecord, type StrategyUserWebhookConfig } from '@/services/StrategiesService';
 import { userService } from '@/services/UserService';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -43,6 +44,25 @@ export default function OrionTab() {
   const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
   const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
   const [symbolsError, setSymbolsError] = useState<string | null>(null);
+  const [webhookConfig, setWebhookConfig] = useState<StrategyUserWebhookConfig>({
+    enabled: false,
+    endpoint_url: '',
+    auth_type: 'none',
+    api_key_header_name: 'x-api-key',
+    api_key_value: '',
+    bearer_token: '',
+    basic_username: '',
+    basic_password: '',
+    custom_headers: [],
+    auth0_token_url: '',
+    auth0_client_id: '',
+    auth0_client_secret: '',
+    auth0_audience: '',
+    auth0_scope: '',
+  });
+  const [isWebhookLoading, setIsWebhookLoading] = useState(false);
+  const [isWebhookSaving, setIsWebhookSaving] = useState(false);
+  const [webhookError, setWebhookError] = useState<string | null>(null);
   const [strategyAuthors, setStrategyAuthors] = useState<Record<string, { displayName: string; avatarUrl: string | null }>>({});
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
@@ -116,6 +136,7 @@ export default function OrionTab() {
   );
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
   const isSymbolsView = isMarketplace && myStrategiesScreen === 'symbols';
+  const isWebhookView = isMarketplace && myStrategiesScreen === 'webhook';
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
   const isCreateStrategyView = isMarketplace && myStrategiesScreen === 'create';
   const isMyStrategiesListView = isMarketplace && marketplaceTab === 'my-strategies' && myStrategiesScreen === 'list';
@@ -168,6 +189,44 @@ export default function OrionTab() {
     if (!isSymbolsView || !selectedStrategy) return;
     void loadUserSymbols(selectedStrategy);
   }, [isSymbolsView, selectedStrategy, loadUserSymbols]);
+
+  const loadWebhookConfig = useCallback(async (strategy: StrategyRecord) => {
+    if (!user?.uid) return;
+    setIsWebhookLoading(true);
+    setWebhookError(null);
+    try {
+      const result = await strategiesService.getStrategyUserWebhookConfig(strategy.id);
+      if (result) {
+        setWebhookConfig(result);
+      } else {
+        setWebhookConfig({
+          enabled: false,
+          endpoint_url: '',
+          auth_type: 'none',
+          api_key_header_name: 'x-api-key',
+          api_key_value: '',
+          bearer_token: '',
+          basic_username: '',
+          basic_password: '',
+          custom_headers: [],
+          auth0_token_url: '',
+          auth0_client_id: '',
+          auth0_client_secret: '',
+          auth0_audience: '',
+          auth0_scope: '',
+        });
+      }
+    } catch (error) {
+      setWebhookError(error instanceof Error ? error.message : 'Failed to load webhook settings');
+    } finally {
+      setIsWebhookLoading(false);
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!isWebhookView || !selectedStrategy) return;
+    void loadWebhookConfig(selectedStrategy);
+  }, [isWebhookView, selectedStrategy, loadWebhookConfig]);
 
   useEffect(() => {
     if (!isSymbolsView) return;
@@ -226,6 +285,8 @@ export default function OrionTab() {
           title={
             isCreateStrategyView
               ? 'New Strategy'
+              : isWebhookView && selectedStrategy
+                ? `WebHook · ${selectedStrategy.name}`
               : isSymbolsView && selectedStrategy
                 ? `${selectedStrategy.name} · ${enabledSymbols.length}/${selectedStrategy.symbols.length}`
                 : (isMarketplace ? 'Orion Marketplace' : 'Notifications')
@@ -248,10 +309,14 @@ export default function OrionTab() {
                     navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}`);
                     return;
                   }
+                  if (isWebhookView && selectedStrategyId) {
+                    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}`);
+                    return;
+                  }
                   navigate('/orion');
                 }}
                 className="flex h-10 w-10 items-center justify-center text-2xl text-zinc-200"
-                aria-label={isCreateStrategyView ? 'Close new strategy' : isStrategyDetailView ? 'Close strategy detail' : isSymbolsView ? 'Close symbols' : 'Close Orion marketplace'}
+                aria-label={isCreateStrategyView ? 'Close new strategy' : isStrategyDetailView ? 'Close strategy detail' : isSymbolsView ? 'Close symbols' : isWebhookView ? 'Close webhook' : 'Close Orion marketplace'}
               >
                 <CloseIcon />
               </button>
@@ -268,7 +333,7 @@ export default function OrionTab() {
           }
           right={
             isMarketplace
-              ? (isCreateStrategyView || isStrategyDetailView || isSymbolsView || !isMyStrategiesListView
+              ? (isCreateStrategyView || isStrategyDetailView || isSymbolsView || isWebhookView || !isMyStrategiesListView
                 ? null
                 : (
                   <button
@@ -314,6 +379,7 @@ export default function OrionTab() {
               activeVersionLabel={null}
               isOwner={selectedStrategy.user_id === (user?.uid ?? '')}
               onOpenSymbols={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/symbols`)}
+              onOpenWebhook={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/webhook`)}
               onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
             />
           ) : isSymbolsView && selectedStrategy ? (
@@ -331,10 +397,36 @@ export default function OrionTab() {
                 void loadUserSymbols(selectedStrategy);
               }}
             />
+          ) : isWebhookView && selectedStrategy ? (
+            <StrategyWebhookView
+              config={webhookConfig}
+              isLoading={isWebhookLoading}
+              isSaving={isWebhookSaving}
+              error={webhookError}
+              onChange={setWebhookConfig}
+              onSave={() => {
+                if (isWebhookSaving) return;
+                setIsWebhookSaving(true);
+                setWebhookError(null);
+                void strategiesService.upsertStrategyUserWebhookConfig(selectedStrategy.id, webhookConfig)
+                  .then((saved) => {
+                    setWebhookConfig(saved);
+                  })
+                  .catch((error) => {
+                    setWebhookError(error instanceof Error ? error.message : 'Failed to save webhook settings');
+                  })
+                  .finally(() => {
+                    setIsWebhookSaving(false);
+                  });
+              }}
+              onRetry={() => {
+                void loadWebhookConfig(selectedStrategy);
+              }}
+            />
           ) : isMarketplace ? (
             <MarketplaceScreen
               tab={marketplaceTab}
-              myStrategiesScreen={myStrategiesScreen === 'nodes' || myStrategiesScreen === 'symbols' ? 'list' : myStrategiesScreen}
+              myStrategiesScreen={myStrategiesScreen === 'nodes' || myStrategiesScreen === 'symbols' || myStrategiesScreen === 'webhook' ? 'list' : myStrategiesScreen}
               onChangeTab={(tab) => {
                 navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
               }}

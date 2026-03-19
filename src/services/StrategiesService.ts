@@ -27,6 +27,36 @@ export interface StrategyTrackedSymbol {
   market: StrategySymbolMarket;
 }
 
+export type StrategyWebhookAuthType =
+  | "none"
+  | "api_key_header"
+  | "bearer_token"
+  | "basic_auth"
+  | "custom_headers"
+  | "auth0_client_credentials";
+
+export interface StrategyWebhookHeader {
+  key: string;
+  value: string;
+}
+
+export interface StrategyUserWebhookConfig {
+  enabled: boolean;
+  endpoint_url: string;
+  auth_type: StrategyWebhookAuthType;
+  api_key_header_name: string;
+  api_key_value: string;
+  bearer_token: string;
+  basic_username: string;
+  basic_password: string;
+  custom_headers: StrategyWebhookHeader[];
+  auth0_token_url: string;
+  auth0_client_id: string;
+  auth0_client_secret: string;
+  auth0_audience: string;
+  auth0_scope: string;
+}
+
 export interface StrategyNodeMap {
   version: number;
   nodes: unknown[];
@@ -217,6 +247,74 @@ class StrategiesService {
     return value
       .map((item) => (typeof item === "string" ? item.toUpperCase() : ""))
       .filter((item) => item.length > 0);
+  }
+
+  private defaultWebhookConfig(): StrategyUserWebhookConfig {
+    return {
+      enabled: false,
+      endpoint_url: "",
+      auth_type: "none",
+      api_key_header_name: "x-api-key",
+      api_key_value: "",
+      bearer_token: "",
+      basic_username: "",
+      basic_password: "",
+      custom_headers: [],
+      auth0_token_url: "",
+      auth0_client_id: "",
+      auth0_client_secret: "",
+      auth0_audience: "",
+      auth0_scope: "",
+    };
+  }
+
+  private normalizeWebhookHeaders(value: unknown): StrategyWebhookHeader[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const row = item as Partial<StrategyWebhookHeader>;
+        const key = typeof row.key === "string" ? row.key.trim() : "";
+        const val = typeof row.value === "string" ? row.value : "";
+        if (!key) return null;
+        return { key, value: val } satisfies StrategyWebhookHeader;
+      })
+      .filter((item): item is StrategyWebhookHeader => item !== null);
+  }
+
+  private normalizeWebhookConfig(value: unknown): StrategyUserWebhookConfig {
+    const base = this.defaultWebhookConfig();
+    if (!value || typeof value !== "object") return base;
+
+    const payload = value as Partial<StrategyUserWebhookConfig>;
+    const authType = payload.auth_type;
+    const normalizedAuthType: StrategyWebhookAuthType =
+      authType === "api_key_header"
+      || authType === "bearer_token"
+      || authType === "basic_auth"
+      || authType === "custom_headers"
+      || authType === "auth0_client_credentials"
+        ? authType
+        : "none";
+
+    return {
+      enabled: Boolean(payload.enabled),
+      endpoint_url: typeof payload.endpoint_url === "string" ? payload.endpoint_url.trim() : "",
+      auth_type: normalizedAuthType,
+      api_key_header_name: typeof payload.api_key_header_name === "string" && payload.api_key_header_name.trim().length > 0
+        ? payload.api_key_header_name.trim()
+        : "x-api-key",
+      api_key_value: typeof payload.api_key_value === "string" ? payload.api_key_value : "",
+      bearer_token: typeof payload.bearer_token === "string" ? payload.bearer_token : "",
+      basic_username: typeof payload.basic_username === "string" ? payload.basic_username : "",
+      basic_password: typeof payload.basic_password === "string" ? payload.basic_password : "",
+      custom_headers: this.normalizeWebhookHeaders(payload.custom_headers),
+      auth0_token_url: typeof payload.auth0_token_url === "string" ? payload.auth0_token_url : "",
+      auth0_client_id: typeof payload.auth0_client_id === "string" ? payload.auth0_client_id : "",
+      auth0_client_secret: typeof payload.auth0_client_secret === "string" ? payload.auth0_client_secret : "",
+      auth0_audience: typeof payload.auth0_audience === "string" ? payload.auth0_audience : "",
+      auth0_scope: typeof payload.auth0_scope === "string" ? payload.auth0_scope : "",
+    };
   }
 
   private normalizeNodeMap(row: unknown): StrategyNodeMap | null {
@@ -485,6 +583,60 @@ class StrategiesService {
       );
       if (this.hasStrategyUserSettingsTable === null) this.hasStrategyUserSettingsTable = true;
       return this.normalizeTickerList(rows[0]?.enabled_symbols ?? normalized);
+    } catch (error) {
+      if (this.isMissingStrategyUserSettingsTable(error)) {
+        this.hasStrategyUserSettingsTable = false;
+        throw new Error("Missing strategy_user_settings table. Run backend migration first.");
+      }
+      throw error;
+    }
+  }
+
+  async getStrategyUserWebhookConfig(strategyId: string): Promise<StrategyUserWebhookConfig | null> {
+    if (this.hasStrategyUserSettingsTable === false) return null;
+    const userId = await this.getUserId();
+
+    try {
+      const rows = await this.request<Array<{ webhook_config?: unknown }>>(
+        `/strategy_user_settings?strategy_id=eq.${encodeURIComponent(strategyId)}&user_id=eq.${encodeURIComponent(userId)}&select=webhook_config&limit=1`,
+        { method: "GET" }
+      );
+      if (this.hasStrategyUserSettingsTable === null) this.hasStrategyUserSettingsTable = true;
+      if (!rows[0]) return null;
+      return this.normalizeWebhookConfig(rows[0].webhook_config);
+    } catch (error) {
+      if (this.isMissingStrategyUserSettingsTable(error)) {
+        this.hasStrategyUserSettingsTable = false;
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async upsertStrategyUserWebhookConfig(strategyId: string, config: StrategyUserWebhookConfig): Promise<StrategyUserWebhookConfig> {
+    if (this.hasStrategyUserSettingsTable === false) {
+      throw new Error("Missing strategy_user_settings table. Run backend migration first.");
+    }
+    const userId = await this.getUserId();
+    const normalized = this.normalizeWebhookConfig(config);
+
+    try {
+      const rows = await this.request<Array<{ webhook_config?: unknown }>>(
+        `/strategy_user_settings?on_conflict=strategy_id,user_id&select=webhook_config`,
+        {
+          method: "POST",
+          headers: {
+            Prefer: "resolution=merge-duplicates,return=representation",
+          },
+          body: JSON.stringify([{
+            strategy_id: strategyId,
+            user_id: userId,
+            webhook_config: normalized,
+          }]),
+        }
+      );
+      if (this.hasStrategyUserSettingsTable === null) this.hasStrategyUserSettingsTable = true;
+      return this.normalizeWebhookConfig(rows[0]?.webhook_config ?? normalized);
     } catch (error) {
       if (this.isMissingStrategyUserSettingsTable(error)) {
         this.hasStrategyUserSettingsTable = false;
