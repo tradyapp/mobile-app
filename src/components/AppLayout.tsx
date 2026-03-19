@@ -76,7 +76,7 @@ const AppLayout = () => {
             exit={{ y: 72, opacity: 0 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
           >
-            <Tabbar labels={true} icons={true}>
+            <Tabbar labels={true} icons={true} className="no-safe-areas-bottom">
               <ToolbarPane>
                 {tabs.map((tab) => (
                   <TabbarLink
