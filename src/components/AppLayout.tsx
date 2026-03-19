@@ -41,7 +41,7 @@ const AppLayout = () => {
       <div className="pb-16">
         <AnimatePresence mode="wait">
           <motion.div
-            key={location.pathname}
+            key={activeTab.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
