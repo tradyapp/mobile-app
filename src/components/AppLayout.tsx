@@ -1,7 +1,7 @@
 "use client";
 import { Page, Tabbar, TabbarLink, ToolbarPane } from "konsta/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo } from "react";
 import { useNavigationStore } from "@/stores/navigationStore";
 import OrionTab from "@/modules/tabs/OrionTab";
@@ -25,10 +25,21 @@ const AppLayout = () => {
     { id: "search" as const, label: "Search", path: "/search", icon: <SearchIcon />, component: SearchTab },
   ]), []);
 
+  const isKnownTabPath = useMemo(
+    () => tabs.some((tab) => location.pathname.startsWith(tab.path)),
+    [tabs, location.pathname]
+  );
   const activeTab = useMemo(
     () => tabs.find((tab) => location.pathname.startsWith(tab.path)) ?? tabs[0],
     [tabs, location.pathname]
   );
+  const ActiveTabComponent = activeTab.component;
+
+  useEffect(() => {
+    if (!isKnownTabPath) {
+      navigate("/orion", { replace: true });
+    }
+  }, [isKnownTabPath, navigate]);
 
   useEffect(() => {
     if (currentTab !== activeTab.id) {
@@ -47,13 +58,7 @@ const AppLayout = () => {
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.2 }}
           >
-            <Routes>
-              {tabs.map((tab) => (
-                <Route key={tab.id} path={`${tab.path}/*`} element={<tab.component />} />
-              ))}
-              <Route path="/" element={<Navigate to="/orion" replace />} />
-              <Route path="*" element={<Navigate to="/orion" replace />} />
-            </Routes>
+            <ActiveTabComponent />
           </motion.div>
         </AnimatePresence>
       </div>
