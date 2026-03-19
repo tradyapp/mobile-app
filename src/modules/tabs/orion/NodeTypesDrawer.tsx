@@ -146,7 +146,7 @@ export default function NodeTypesDrawer({
                 No node types in this category.
               </div>
             ) : (
-              <div className={`grid gap-5 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2'}`}>
+              <div className={`grid gap-8 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2'}`}>
                 {visibleNodeTypes.map((item) => (
                   <NodeTypeCard
                     key={`${item.key}-${item.id}`}
