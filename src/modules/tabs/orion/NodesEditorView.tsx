@@ -2,6 +2,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Dialog, DialogButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -118,7 +120,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
   const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
+  const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
   const [versionNameInput, setVersionNameInput] = useState('');
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
@@ -150,6 +155,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     [nodeVersions]
   );
   const isPreviewMode = previewVersion !== null;
+  const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
 
   const getCurrentNodeMap = useCallback((): StrategyNodeMap => ({
     version: 1,
@@ -224,10 +230,14 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         lastSavedNodeMapRef.current = serialized;
         setLastSavedNodeMapSnapshot(serialized);
         hasHydratedNodeMapRef.current = true;
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
       } catch (error) {
         if (!active) return;
         setNodeMapError(error instanceof Error ? error.message : 'Failed to load strategy node map');
         hasHydratedNodeMapRef.current = true;
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([]);
       } finally {
         if (active) setIsNodeMapLoading(false);
       }
@@ -302,6 +312,26 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
     setIsNodeTypesDrawerOpen(open);
   }, []);
+
+  const handleDeleteSelection = useCallback(() => {
+    if (!hasSelection) return;
+
+    const nodeIdSet = new Set(selectedNodeIds);
+    const edgeIdSet = new Set(selectedEdgeIds);
+
+    setNodes((prev) => prev.filter((node) => !nodeIdSet.has(node.id)));
+    setEdges((prev) =>
+      prev.filter((edge) =>
+        !edgeIdSet.has(edge.id) &&
+        !nodeIdSet.has(edge.source) &&
+        !nodeIdSet.has(edge.target)
+      )
+    );
+
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+    setIsDeleteSelectionDialogOpen(false);
+  }, [hasSelection, selectedNodeIds, selectedEdgeIds, setEdges, setNodes]);
 
   const handleSettingsDrawerOpenChange = useCallback((open: boolean) => {
     setIsSettingsDrawerOpen(open);
@@ -506,6 +536,14 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               nodesConnectable={!isPreviewMode}
               elementsSelectable={!isPreviewMode}
               edgesUpdatable={!isPreviewMode}
+              onSelectionChange={
+                isPreviewMode
+                  ? undefined
+                  : ({ nodes: selectedNodes, edges: selectedEdges }) => {
+                    setSelectedNodeIds(selectedNodes.map((node) => node.id));
+                    setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
+                  }
+              }
               proOptions={{ hideAttribution: true }}
               fitView
             >
@@ -528,6 +566,19 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                 background: #18181b !important;
               }
             `}</style>
+
+            {!isPreviewMode && hasSelection && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteSelectionDialogOpen(true)}
+                className="absolute right-3 top-3 z-[240] flex h-10 w-10 items-center justify-center rounded-full border border-red-900 bg-red-950/70 text-red-300"
+                aria-label="Delete selected elements"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18M8 6V4h8v2m-7 4v8m4-8v8M6 6l1 14h10l1-14" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       {isPreviewMode ? (
@@ -608,6 +659,46 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         }}
         isPublishingVersion={isPublishingVersion}
       />
+
+      {typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[10040] pointer-events-none">
+          <div className="pointer-events-auto">
+            <Dialog
+              backdrop
+              opened={isDeleteSelectionDialogOpen}
+              onBackdropClick={(event) => {
+                event?.stopPropagation?.();
+                setIsDeleteSelectionDialogOpen(false);
+              }}
+              title="Eliminar selección"
+              content="Se eliminarán los nodos o conexiones seleccionadas. ¿Deseas continuar?"
+              buttons={(
+                <>
+                  <DialogButton
+                    onClick={(event) => {
+                      event?.stopPropagation?.();
+                      setIsDeleteSelectionDialogOpen(false);
+                    }}
+                  >
+                    Cancelar
+                  </DialogButton>
+                  <DialogButton
+                    strong
+                    className="text-red-400"
+                    onClick={(event) => {
+                      event?.stopPropagation?.();
+                      handleDeleteSelection();
+                    }}
+                  >
+                    Eliminar
+                  </DialogButton>
+                </>
+              )}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
