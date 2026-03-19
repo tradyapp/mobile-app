@@ -20,6 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import AppNavbar from '@/components/AppNavbar';
 import CogIcon from '@/components/icons/CogIcon';
+import AppDrawer from '@/components/uiux/AppDrawer';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
@@ -788,6 +789,18 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     setNodeTypeSearch('');
   }, [setNodes]);
 
+  const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
+    setIsNodeTypesDrawerOpen(open);
+    if (!open) {
+      setSelectedNodeTypeCategoryKey(null);
+      setNodeTypeSearch('');
+    }
+  }, []);
+
+  const handleSettingsDrawerOpenChange = useCallback((open: boolean) => {
+    setIsSettingsDrawerOpen(open);
+  }, []);
+
   const handleSaveNodeMap = useCallback(async () => {
     const requestId = saveRequestIdRef.current + 1;
     saveRequestIdRef.current = requestId;
@@ -907,192 +920,172 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         +
       </button>
 
-      {isNodeTypesDrawerOpen && (
-        <div className="absolute inset-0 z-[240]">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            onClick={() => {
-              setIsNodeTypesDrawerOpen(false);
-              setSelectedNodeTypeCategoryKey(null);
-              setNodeTypeSearch('');
-            }}
-            aria-label="Close node types drawer"
-          />
+      <AppDrawer
+        isOpen={isNodeTypesDrawerOpen}
+        onOpenChange={handleNodeTypesDrawerOpenChange}
+        title="Add Node"
+        height="auto"
+        showHeader={false}
+      >
+        <div className="pb-4" style={safeDrawerInsetStyle}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Add Node</h3>
+            <button
+              type="button"
+              onClick={() => handleNodeTypesDrawerOpenChange(false)}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
+            >
+              Close
+            </button>
+          </div>
 
-          <div className="absolute bottom-0 left-0 right-0 max-h-[72vh] rounded-t-2xl border-t border-zinc-700 bg-zinc-950">
-            <div className="pb-4 pt-3" style={safeDrawerInsetStyle}>
-              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-700" />
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Add Node</h3>
+          {isNodeTypesLoading ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+              Loading node types...
+            </div>
+          ) : nodeTypesError ? (
+            <div className="space-y-2">
+              <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                {nodeTypesError}
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadNodeTypes()}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
+              >
+                Retry
+              </button>
+            </div>
+          ) : availableNodeTypes.length === 0 ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+              No node types available.
+            </div>
+          ) : !selectedNodeTypeCategory ? (
+            <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+              {nodeTypeGroups.map((group) => (
                 <button
+                  key={group.key}
                   type="button"
                   onClick={() => {
-                    setIsNodeTypesDrawerOpen(false);
-                    setSelectedNodeTypeCategoryKey(null);
+                    setSelectedNodeTypeCategoryKey(group.key);
                     setNodeTypeSearch('');
                   }}
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-                >
-                  Close
-                </button>
-              </div>
-
-              {isNodeTypesLoading ? (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                  Loading node types...
-                </div>
-              ) : nodeTypesError ? (
-                <div className="space-y-2">
-                  <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-                    {nodeTypesError}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadNodeTypes()}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : availableNodeTypes.length === 0 ? (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                  No node types available.
-                </div>
-              ) : !selectedNodeTypeCategory ? (
-                <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-                  {nodeTypeGroups.map((group) => (
-                    <button
-                      key={group.key}
-                      type="button"
-                      onClick={() => {
-                        setSelectedNodeTypeCategoryKey(group.key);
-                        setNodeTypeSearch('');
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{group.label}</p>
-                        <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
-                      </div>
-                      <span className="text-xl leading-none text-zinc-400">›</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedNodeTypeCategoryKey(null);
-                      setNodeTypeSearch('');
-                    }}
-                    className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
-                  >
-                    <BackIcon />
-                    Categories
-                  </button>
-
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
-                    <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
-                    <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>
-                  </div>
-
-                  <div className="mb-2">
-                    <input
-                      type="text"
-                      value={nodeTypeSearch}
-                      onChange={(event) => setNodeTypeSearch(event.target.value)}
-                      placeholder={`Search in ${selectedNodeTypeCategory.label}...`}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
-                      aria-label="Search node types"
-                    />
-                  </div>
-
-                  {filteredSelectedCategoryItems.length === 0 ? (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                      No node types match your search.
-                    </div>
-                  ) : (
-                    filteredSelectedCategoryItems.map((item) => (
-                      <button
-                        key={`${item.key}-${item.id}`}
-                        type="button"
-                        onClick={() => handleAddNodeFromType(item)}
-                        className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
-                      >
-                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                          {item.icon_url ? (
-                            <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                              {item.name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
-                          <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isSettingsDrawerOpen && (
-        <div className="absolute inset-0 z-[245]">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setIsSettingsDrawerOpen(false)}
-            aria-label="Close node settings drawer"
-          />
-
-          <div className="absolute bottom-0 left-0 right-0 max-h-[52vh] rounded-t-2xl border-t border-zinc-700 bg-zinc-950">
-            <div className="pb-4 pt-3" style={safeDrawerInsetStyle}>
-              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-700" />
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Node Settings</h3>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsDrawerOpen(false)}
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSaveNodeMap()}
-                  disabled={saveStatus === 'saving'}
-                  className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-                >
-                  <span className="text-sm font-medium text-zinc-100">Guardar</span>
-                  <span className="text-xs text-zinc-400">{saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsStrategyActive((prev) => !prev)}
                   className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
                 >
-                  <span className="text-sm font-medium text-zinc-100">{isStrategyActive ? 'Desactivar' : 'Activar'}</span>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isStrategyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
-                    {isStrategyActive ? 'Activo' : 'Inactivo'}
-                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{group.label}</p>
+                    <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
+                  </div>
+                  <span className="text-xl leading-none text-zinc-400">›</span>
                 </button>
-              </div>
+              ))}
             </div>
+          ) : (
+            <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNodeTypeCategoryKey(null);
+                  setNodeTypeSearch('');
+                }}
+                className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
+              >
+                <BackIcon />
+                Categories
+              </button>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
+                <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
+                <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>
+              </div>
+
+              <div className="mb-2">
+                <input
+                  type="text"
+                  value={nodeTypeSearch}
+                  onChange={(event) => setNodeTypeSearch(event.target.value)}
+                  placeholder={`Search in ${selectedNodeTypeCategory.label}...`}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+                  aria-label="Search node types"
+                />
+              </div>
+
+              {filteredSelectedCategoryItems.length === 0 ? (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
+                  No node types match your search.
+                </div>
+              ) : (
+                filteredSelectedCategoryItems.map((item) => (
+                  <button
+                    key={`${item.key}-${item.id}`}
+                    type="button"
+                    onClick={() => handleAddNodeFromType(item)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                      {item.icon_url ? (
+                        <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
+                      <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </AppDrawer>
+
+      <AppDrawer
+        isOpen={isSettingsDrawerOpen}
+        onOpenChange={handleSettingsDrawerOpenChange}
+        title="Node Settings"
+        height="auto"
+        showHeader={false}
+      >
+        <div className="pb-4" style={safeDrawerInsetStyle}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Node Settings</h3>
+            <button
+              type="button"
+              onClick={() => handleSettingsDrawerOpenChange(false)}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => void handleSaveNodeMap()}
+              disabled={saveStatus === 'saving'}
+              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
+            >
+              <span className="text-sm font-medium text-zinc-100">Guardar</span>
+              <span className="text-xs text-zinc-400">{saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsStrategyActive((prev) => !prev)}
+              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
+            >
+              <span className="text-sm font-medium text-zinc-100">{isStrategyActive ? 'Desactivar' : 'Activar'}</span>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isStrategyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
+                {isStrategyActive ? 'Activo' : 'Inactivo'}
+              </span>
+            </button>
           </div>
         </div>
-      )}
+      </AppDrawer>
     </div>
   );
 }
