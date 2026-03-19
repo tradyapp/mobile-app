@@ -64,21 +64,32 @@ function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefi
   }));
 }
 
+function mapPortsToFlowFields(
+  ports: Array<{ label?: string; key?: string; type?: string }> | undefined,
+  prefix: 'in' | 'out',
+  fallbackLabel: string
+): EditorNodeField[] {
+  if (!Array.isArray(ports)) return [];
+  const mapped = ports.map((item, index) => ({
+    id: makeFieldId(prefix),
+    name: item.label?.trim() || item.key?.trim() || `${fallbackLabel} ${index + 1}`,
+    type: item.type || 'any',
+    required: true,
+  }));
+  return mapped;
+}
+
 function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
   const { category } = nodeType;
   const normalized = normalizeNodeCategory(category);
-  const inputsFromProperties = mapPropertiesToInputs(nodeType.properties);
-  const outputsFromNodeType = (nodeType.output_ports ?? []).map((port, index) => ({
-    id: makeFieldId('out'),
-    name: port.label?.trim() || port.key?.trim() || `Output ${index + 1}`,
-    type: port.type || 'any',
-    required: false,
-  }));
+  const attributesFromProperties = mapPropertiesToInputs(nodeType.properties);
+  const inputsFromNodeType = mapPortsToFlowFields(nodeType.input_ports, 'in', 'Input');
+  const outputsFromNodeType = mapPortsToFlowFields(nodeType.output_ports, 'out', 'Output');
 
   if (normalized === 'trigger') {
     return {
-      inputs: inputsFromProperties,
-      attributes: [],
+      inputs: [],
+      attributes: attributesFromProperties,
       outputs: outputsFromNodeType.length > 0
         ? outputsFromNodeType
         : [{ id: makeFieldId('out'), name: 'event', type: 'signal' }],
@@ -87,19 +98,19 @@ function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeDa
 
   if (normalized === 'output') {
     return {
-      inputs: inputsFromProperties.length > 0
-        ? inputsFromProperties
+      inputs: inputsFromNodeType.length > 0
+        ? inputsFromNodeType
         : [{ id: makeFieldId('in'), name: 'signal', type: 'signal', required: true }],
-      attributes: [],
+      attributes: attributesFromProperties,
       outputs: [],
     };
   }
 
   return {
-    inputs: inputsFromProperties.length > 0
-      ? inputsFromProperties
+    inputs: inputsFromNodeType.length > 0
+      ? inputsFromNodeType
       : [{ id: makeFieldId('in'), name: 'input', type: 'number', required: true }],
-    attributes: [],
+    attributes: attributesFromProperties,
     outputs: outputsFromNodeType.length > 0
       ? outputsFromNodeType
       : [{ id: makeFieldId('out'), name: 'result', type: 'number' }],
@@ -701,7 +712,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     if (category === 'trigger') {
       return [
-        { key: 'inputs', label: 'Inputs' },
+        { key: 'attributes', label: 'Attributes' },
         { key: 'outputs', label: 'Outputs' },
       ];
     }
@@ -837,7 +848,9 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 <div className="space-y-2">
                   {panelFields.length === 0 ? (
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
-                      No items yet in this panel.
+                      {nodeDetailsPanel === 'attributes'
+                        ? 'No configurable attributes for this node.'
+                        : 'No flow ports in this panel.'}
                     </div>
                   ) : (
                     panelFields.map((field, index) => (
@@ -846,76 +859,39 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                           <input
                             type="text"
                             value={field.name}
-                            readOnly={isPreviewMode}
-                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], name: event.target.value };
-                              return next;
-                            })}
+                            readOnly
                             placeholder="Field name"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                            className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
                           />
-                          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                          <div className="grid grid-cols-1 gap-2">
                             <input
                               type="text"
                               value={field.type}
-                              readOnly={isPreviewMode}
-                              onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                const next = [...prev];
-                                next[index] = { ...next[index], type: event.target.value };
-                                return next;
-                              })}
+                              readOnly
                               placeholder="Type"
-                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                              className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
                             />
-                            <button
-                              type="button"
-                              disabled={isPreviewMode}
-                              onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                const next = [...prev];
-                                next[index] = { ...next[index], required: !next[index]?.required };
-                                return next;
-                              })}
-                              className={`rounded-md border px-2 py-1 text-[11px] ${field.required ? 'border-emerald-600 bg-emerald-950/40 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} disabled:opacity-60`}
-                            >
-                              Req
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isPreviewMode}
-                              onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => prev.filter((item) => item.id !== field.id))}
-                              className="rounded-md border border-red-900 bg-red-950/30 px-2 py-1 text-[11px] text-red-300 disabled:opacity-60"
-                            >
-                              Del
-                            </button>
+                            {field.required && (
+                              <span className="inline-flex w-fit rounded-full border border-emerald-700/60 bg-emerald-950/30 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                                Required
+                              </span>
+                            )}
                           </div>
                           <input
                             type="text"
                             value={field.value ?? ''}
-                            readOnly={isPreviewMode}
-                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                            readOnly={isPreviewMode || nodeDetailsPanel !== 'attributes'}
+                            onChange={nodeDetailsPanel === 'attributes' ? (event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
                               const next = [...prev];
                               next[index] = { ...next[index], value: event.target.value };
                               return next;
-                            })}
-                            placeholder="Default value"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                            }) : undefined}
+                            placeholder={nodeDetailsPanel === 'attributes' ? 'Set value' : 'Not editable (flow definition)'}
+                            className={`w-full rounded-md border px-2.5 py-1.5 text-xs outline-none ${nodeDetailsPanel === 'attributes' ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-zinc-800 bg-zinc-900/70 text-zinc-400'}`}
                           />
                         </div>
                       </div>
                     ))
-                  )}
-                  {!isPreviewMode && (
-                    <button
-                      type="button"
-                      onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => [
-                        ...prev,
-                        { id: makeFieldId('field'), name: '', type: 'string', value: '', required: false },
-                      ])}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-                    >
-                      Add {nodeDetailsPanel.slice(0, 1).toUpperCase() + nodeDetailsPanel.slice(1, -1)}
-                    </button>
                   )}
                 </div>
               </div>
