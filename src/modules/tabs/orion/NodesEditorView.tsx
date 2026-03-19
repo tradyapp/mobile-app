@@ -241,8 +241,21 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const loadStrategySymbols = useCallback(async () => {
     setSymbolsError(null);
     try {
-      const rows = await strategiesService.getStrategySymbols(strategyId);
-      setTrackedSymbols(rows);
+      const [rows, catalog] = await Promise.all([
+        strategiesService.getStrategySymbols(strategyId),
+        dataService.loadSymbols(),
+      ]);
+      const iconByTicker = new Map<string, string | null>();
+      for (const item of catalog) {
+        const ticker = String(item.symbol ?? '').toUpperCase();
+        if (!ticker) continue;
+        iconByTicker.set(ticker, item.icon_url ?? item.photo ?? null);
+      }
+      const hydrated = rows.map((item) => ({
+        ...item,
+        icon_url: item.icon_url ?? iconByTicker.get(item.ticker.toUpperCase()) ?? null,
+      }));
+      setTrackedSymbols(hydrated);
     } catch (error) {
       setSymbolsError(error instanceof Error ? error.message : 'Failed to load strategy symbols');
     }

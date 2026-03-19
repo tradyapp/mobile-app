@@ -20,6 +20,7 @@ function SymbolIcon({ iconUrl, ticker }: { iconUrl: string | null; ticker: strin
 interface StrategySymbolsViewProps {
   strategy: StrategyRecord;
   enabledTickers: string[];
+  symbolIconByTicker?: Record<string, string | null>;
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
@@ -30,6 +31,7 @@ interface StrategySymbolsViewProps {
 export default function StrategySymbolsView({
   strategy,
   enabledTickers,
+  symbolIconByTicker = {},
   isLoading,
   isSaving,
   error,
@@ -84,9 +86,10 @@ export default function StrategySymbolsView({
         ) : (
           visibleSymbols.map((item) => {
             const selected = enabledSet.has(item.ticker.toUpperCase());
+            const fallbackIcon = symbolIconByTicker[item.ticker.toUpperCase()] ?? null;
             return (
               <div key={`${item.market}-${item.ticker}`} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
-                <SymbolIcon iconUrl={item.icon_url} ticker={item.ticker} />
+                <SymbolIcon iconUrl={item.icon_url ?? fallbackIcon} ticker={item.ticker} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-zinc-100">{item.ticker}</p>
                   <p className="truncate text-xs text-zinc-400">{item.name}</p>

@@ -13,6 +13,7 @@ import StrategyDetailView from '@/modules/tabs/orion/StrategyDetailView';
 import StrategySymbolsView from '@/modules/tabs/orion/StrategySymbolsView';
 import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
+import dataService from '@/services/DataService';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -37,6 +38,7 @@ export default function OrionTab() {
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [enabledSymbols, setEnabledSymbols] = useState<string[]>([]);
+  const [symbolIconByTicker, setSymbolIconByTicker] = useState<Record<string, string | null>>({});
   const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
   const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
   const [symbolsError, setSymbolsError] = useState<string | null>(null);
@@ -131,6 +133,30 @@ export default function OrionTab() {
     if (!isSymbolsView || !selectedStrategy) return;
     void loadUserSymbols(selectedStrategy);
   }, [isSymbolsView, selectedStrategy, loadUserSymbols]);
+
+  useEffect(() => {
+    if (!isSymbolsView) return;
+    let active = true;
+    const loadCatalog = async () => {
+      try {
+        const rows = await dataService.loadSymbols();
+        if (!active) return;
+        const map: Record<string, string | null> = {};
+        for (const item of rows) {
+          const ticker = String(item.symbol ?? '').toUpperCase();
+          if (!ticker) continue;
+          map[ticker] = item.photo ?? item.icon_url ?? null;
+        }
+        setSymbolIconByTicker(map);
+      } catch {
+        if (active) setSymbolIconByTicker({});
+      }
+    };
+    void loadCatalog();
+    return () => {
+      active = false;
+    };
+  }, [isSymbolsView]);
 
   const handleToggleSymbolEnabled = useCallback(async (ticker: string) => {
     if (!selectedStrategy || !user?.uid || isSymbolsSaving) return;
@@ -250,6 +276,7 @@ export default function OrionTab() {
             <StrategySymbolsView
               strategy={selectedStrategy}
               enabledTickers={enabledSymbols}
+              symbolIconByTicker={symbolIconByTicker}
               isLoading={isSymbolsLoading}
               isSaving={isSymbolsSaving}
               error={symbolsError}

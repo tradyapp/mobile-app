@@ -102,22 +102,25 @@ class DataService {
   private async loadCachedImages(symbols: Symbol[]): Promise<Symbol[]> {
     return await Promise.all(
       symbols.map(async (symbol) => {
-        if (symbol.photo) {
+        const normalized = this.normalizeSymbolRecord(symbol);
+
+        if (normalized.icon_url) {
           const cachedImage = await this.getImage(symbol.symbol);
           return {
-            ...symbol,
-            photo: cachedImage || symbol.photo,
+            ...normalized,
+            photo: cachedImage || normalized.icon_url,
           };
         }
-        return symbol;
+
+        return normalized;
       })
     );
   }
 
   private async downloadAllImages(symbols: Symbol[]): Promise<void> {
     const downloadPromises = symbols
-      .filter((symbol) => symbol.photo)
-      .map((symbol) => this.downloadAndCacheImage(symbol.photo as string, symbol.symbol));
+      .filter((symbol) => symbol.icon_url)
+      .map((symbol) => this.downloadAndCacheImage(symbol.icon_url as string, symbol.symbol));
 
     await Promise.all(downloadPromises);
   }
@@ -157,7 +160,7 @@ class DataService {
       const currentLastUpdate = await this.getLastUpdate();
 
       if (cachedData && cachedLastUpdate === currentLastUpdate) {
-        const symbols = JSON.parse(cachedData) as Symbol[];
+        const symbols = (JSON.parse(cachedData) as Partial<Symbol>[]).map((item) => this.normalizeSymbolRecord(item));
         this.symbolsCache = await this.loadCachedImages(symbols);
         return this.symbolsCache;
       }
@@ -169,7 +172,7 @@ class DataService {
 
       if (error) throw error;
 
-      const symbols = (data as DbSymbol[]).map((item) => ({
+      const symbols = (data as DbSymbol[]).map((item) => this.normalizeSymbolRecord({
         symbol: item.ticker,
         type: mapMarket(item.market),
         name: item.name,
@@ -187,7 +190,7 @@ class DataService {
     } catch (error) {
       const cachedData = localStorage.getItem(SYMBOLS_CACHE_KEY);
       if (cachedData) {
-        const symbols = JSON.parse(cachedData) as Symbol[];
+        const symbols = (JSON.parse(cachedData) as Partial<Symbol>[]).map((item) => this.normalizeSymbolRecord(item));
         this.symbolsCache = await this.loadCachedImages(symbols);
         return this.symbolsCache;
       }
@@ -209,3 +212,22 @@ class DataService {
 
 const dataService = new DataService();
 export default dataService;
+  private isBlobUrl(value: string | null | undefined): boolean {
+    return typeof value === "string" && value.startsWith("blob:");
+  }
+
+  private normalizeSymbolRecord(value: Partial<Symbol>): Symbol {
+    const photo = typeof value.photo === "string" ? value.photo : null;
+    const iconUrl = typeof value.icon_url === "string" ? value.icon_url : null;
+    const canonicalIconUrl = !this.isBlobUrl(iconUrl)
+      ? iconUrl
+      : (!this.isBlobUrl(photo) ? photo : null);
+
+    return {
+      symbol: typeof value.symbol === "string" ? value.symbol : "",
+      type: value.type ?? null,
+      name: typeof value.name === "string" ? value.name : null,
+      photo: photo ?? canonicalIconUrl,
+      icon_url: canonicalIconUrl,
+    };
+  }
