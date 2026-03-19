@@ -21,7 +21,7 @@ import '@xyflow/react/dist/style.css';
 import AppNavbar from '@/components/AppNavbar';
 import CogIcon from '@/components/icons/CogIcon';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
-import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
+import { strategiesService, type StrategyNodeMap, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Notification {
@@ -524,11 +524,12 @@ function StrategyDetailView({
 }
 
 interface NodesViewProps {
+  strategyId: string;
   strategyName: string;
   onClose: () => void;
 }
 
-function NodesView({ strategyName, onClose }: NodesViewProps) {
+function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const safeHorizontalInsetStyle = {
     paddingLeft: 'max(16px, env(safe-area-inset-left))',
     paddingRight: 'max(16px, env(safe-area-inset-right))',
@@ -601,6 +602,13 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
   const [selectedNodeTypeCategoryKey, setSelectedNodeTypeCategoryKey] = useState<string | null>(null);
   const [nodeTypeSearch, setNodeTypeSearch] = useState('');
+  const [isNodeMapLoading, setIsNodeMapLoading] = useState(true);
+  const [nodeMapError, setNodeMapError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const hasHydratedNodeMapRef = useRef(false);
+  const lastSavedNodeMapRef = useRef('');
+  const saveRequestIdRef = useRef(0);
 
   const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
     const grouped = new Map<string, StrategyNodeTypeRecord[]>();
@@ -661,6 +669,90 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
   }, [loadNodeTypes]);
 
   useEffect(() => {
+    let active = true;
+
+    const loadNodeMap = async () => {
+      setIsNodeMapLoading(true);
+      setNodeMapError(null);
+      setSaveError(null);
+      setSaveStatus('idle');
+
+      try {
+        const payload = await strategiesService.getStrategyNodeMap(strategyId);
+        if (!active) return;
+
+        const nextNodes = (payload?.nodes ?? []) as RFNode[];
+        const nextEdges = (payload?.edges ?? []) as RFEdge[];
+        setNodes(nextNodes);
+        setEdges(nextEdges);
+
+        const maxNodeIndex = nextNodes.reduce((max, node) => {
+          const match = /^node-(\d+)$/.exec(node.id);
+          if (!match) return max;
+          const value = Number(match[1]);
+          return Number.isFinite(value) ? Math.max(max, value) : max;
+        }, 0);
+        nodeCounterRef.current = maxNodeIndex + 1;
+
+        const serialized = JSON.stringify({
+          version: payload?.version ?? 1,
+          nodes: nextNodes,
+          edges: nextEdges,
+        } satisfies StrategyNodeMap);
+        lastSavedNodeMapRef.current = serialized;
+        hasHydratedNodeMapRef.current = true;
+      } catch (error) {
+        if (!active) return;
+        setNodeMapError(error instanceof Error ? error.message : 'Failed to load strategy node map');
+        hasHydratedNodeMapRef.current = true;
+      } finally {
+        if (active) setIsNodeMapLoading(false);
+      }
+    };
+
+    void loadNodeMap();
+
+    return () => {
+      active = false;
+    };
+  }, [strategyId, setEdges, setNodes]);
+
+  useEffect(() => {
+    if (!hasHydratedNodeMapRef.current) return;
+
+    const payload: StrategyNodeMap = {
+      version: 1,
+      nodes: nodes as unknown[],
+      edges: edges as unknown[],
+    };
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedNodeMapRef.current) return;
+
+    const requestId = saveRequestIdRef.current + 1;
+    saveRequestIdRef.current = requestId;
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    const timeoutId = window.setTimeout(() => {
+      void strategiesService.saveStrategyNodeMap(strategyId, payload)
+        .then(() => {
+          if (saveRequestIdRef.current !== requestId) return;
+          lastSavedNodeMapRef.current = serialized;
+          setSaveStatus('saved');
+        })
+        .catch((error) => {
+          if (saveRequestIdRef.current !== requestId) return;
+          setSaveStatus('error');
+          setSaveError(error instanceof Error ? error.message : 'Failed to save node map');
+        });
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [strategyId, nodes, edges]);
+
+  useEffect(() => {
     if (!selectedNodeTypeCategoryKey) return;
     const exists = nodeTypeGroups.some((group) => group.key === selectedNodeTypeCategoryKey);
     if (!exists) setSelectedNodeTypeCategoryKey(null);
@@ -711,7 +803,9 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           </button>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
-            <p className="text-xs text-zinc-500">Nodes Editor</p>
+            <p className="text-xs text-zinc-500">
+              {isNodeMapLoading ? 'Loading map...' : saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Save error' : 'Nodes Editor'}
+            </p>
           </div>
           <div className="ml-auto">
             <button
@@ -733,6 +827,16 @@ function NodesView({ strategyName, onClose }: NodesViewProps) {
           className="flex-1 overflow-hidden pb-4 pt-4"
           style={safeCanvasInsetStyle}
         >
+          {nodeMapError && (
+            <div className="mb-3 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {nodeMapError}
+            </div>
+          )}
+          {saveError && (
+            <div className="mb-3 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {saveError}
+            </div>
+          )}
           <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
             <ReactFlow
               nodes={nodes}
@@ -1189,6 +1293,7 @@ export default function OrionTab() {
 
       {isNodesView && selectedStrategy ? (
         <NodesView
+          strategyId={selectedStrategy.id}
           strategyName={selectedStrategy.name}
           onClose={() => setMyStrategiesScreen('detail')}
         />

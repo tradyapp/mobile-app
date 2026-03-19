@@ -17,6 +17,12 @@ export interface StrategyRecord {
   updated_at: string;
 }
 
+export interface StrategyNodeMap {
+  version: number;
+  nodes: unknown[];
+  edges: unknown[];
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -31,6 +37,7 @@ interface UpdateStrategyInput {
 
 class StrategiesService {
   private hasPhotoUrlColumn: boolean | null = null;
+  private hasNodeMapColumn: boolean | null = null;
 
   private async getAuthToken(): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -81,6 +88,17 @@ class StrategiesService {
     if (!(error instanceof Error)) return false;
     const msg = error.message.toLowerCase();
     if (!msg.includes("photo_url")) return false;
+    return (
+      msg.includes("column") ||
+      msg.includes("schema cache") ||
+      msg.includes("does not exist")
+    );
+  }
+
+  private isMissingNodeMapColumn(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    if (!msg.includes("node_map")) return false;
     return (
       msg.includes("column") ||
       msg.includes("schema cache") ||
@@ -218,6 +236,58 @@ class StrategiesService {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
     });
+  }
+
+  async getStrategyNodeMap(id: string): Promise<StrategyNodeMap | null> {
+    const includeNodeMap = this.hasNodeMapColumn !== false;
+    if (!includeNodeMap) return null;
+
+    try {
+      const rows = await this.request<Array<{ id?: string; node_map?: unknown }>>(
+        `/strategies?id=eq.${encodeURIComponent(id)}&select=id,node_map&limit=1`,
+        { method: "GET" }
+      );
+
+      const raw = rows[0]?.node_map;
+      if (!raw || typeof raw !== "object") return null;
+
+      const payload = raw as Partial<StrategyNodeMap>;
+      if (!Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) return null;
+
+      if (this.hasNodeMapColumn === null) this.hasNodeMapColumn = true;
+      return {
+        version: typeof payload.version === "number" ? payload.version : 1,
+        nodes: payload.nodes,
+        edges: payload.edges,
+      };
+    } catch (error) {
+      if (this.isMissingNodeMapColumn(error)) {
+        this.hasNodeMapColumn = false;
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async saveStrategyNodeMap(id: string, nodeMap: StrategyNodeMap): Promise<void> {
+    if (this.hasNodeMapColumn === false) {
+      throw new Error("Missing node_map column. Run backend migration first.");
+    }
+
+    try {
+      await this.request<void>(`/strategies?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ node_map: nodeMap }),
+      });
+      if (this.hasNodeMapColumn === null) this.hasNodeMapColumn = true;
+    } catch (error) {
+      if (this.isMissingNodeMapColumn(error)) {
+        this.hasNodeMapColumn = false;
+        throw new Error("Missing node_map column. Run backend migration first.");
+      }
+      throw error;
+    }
   }
 }
 
