@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Block } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
@@ -19,7 +20,46 @@ import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
 
-type LearnView = "catalog" | "course" | "lesson";
+// ---------------------------------------------------------------------------
+// Route parsing
+// ---------------------------------------------------------------------------
+
+interface LearnRouteState {
+  view: "catalog" | "course" | "lesson";
+  courseId: string | null;
+  lessonId: string | null;
+}
+
+function parseLearnRoute(pathname: string): LearnRouteState {
+  const normalized = pathname.replace(/\/+$/, "");
+
+  // /learn/:courseId/:lessonId
+  const lessonMatch = normalized.match(/^\/learn\/([^/]+)\/([^/]+)$/);
+  if (lessonMatch) {
+    return {
+      view: "lesson",
+      courseId: decodeURIComponent(lessonMatch[1]),
+      lessonId: decodeURIComponent(lessonMatch[2]),
+    };
+  }
+
+  // /learn/:courseId
+  const courseMatch = normalized.match(/^\/learn\/([^/]+)$/);
+  if (courseMatch) {
+    return {
+      view: "course",
+      courseId: decodeURIComponent(courseMatch[1]),
+      lessonId: null,
+    };
+  }
+
+  // /learn
+  return { view: "catalog", courseId: null, lessonId: null };
+}
+
+// ---------------------------------------------------------------------------
+// Constants & helpers
+// ---------------------------------------------------------------------------
 
 const localeToLanguage: Record<string, LmsCourse["language"]> = {
   es: "es",
@@ -27,9 +67,8 @@ const localeToLanguage: Record<string, LmsCourse["language"]> = {
   pt: "pt",
 };
 
-const NEAR_END_THRESHOLD = 15; // seconds before end to mark as completed
+const NEAR_END_THRESHOLD = 15;
 
-/** Small SVG donut chart for course progress */
 function ProgressPie({ completed, total, size = 36 }: { completed: number; total: number; size?: number }) {
   const radius = (size - 4) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -40,29 +79,13 @@ function ProgressPie({ completed, total, size = 36 }: { completed: number; total
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        {/* Background circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          className="text-zinc-800"
-          strokeWidth={3}
-        />
-        {/* Progress arc */}
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" className="text-zinc-800" strokeWidth={3} />
         {pct > 0 && (
           <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="currentColor"
+            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor"
             className={isComplete ? "text-emerald-400" : "text-emerald-500/70"}
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
+            strokeWidth={3} strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={offset}
             style={{ transition: "stroke-dashoffset 0.3s ease" }}
           />
         )}
@@ -86,15 +109,8 @@ function getLessonThumbnail(lesson: LmsLesson): string | null {
 
 function getLessonVideoUrl(lesson: LmsLesson): string | null {
   if (lesson.mux_id) return getMuxStreamUrl(lesson.mux_id);
-
   const content = lesson.content ?? {};
-  const candidates = [
-    content.url,
-    content.video_url,
-    content.videoUrl,
-    content.stream_url,
-    content.streamUrl,
-  ];
+  const candidates = [content.url, content.video_url, content.videoUrl, content.stream_url, content.streamUrl];
   const direct = candidates.find((value) => typeof value === "string" && value.trim().length > 0);
   return (direct as string | undefined) ?? null;
 }
@@ -106,7 +122,6 @@ function getLessonTextContent(lesson: LmsLesson): string {
   return (value as string | undefined) ?? "";
 }
 
-/** Lesson title in nav bar — truncates with marquee animation if overflowing */
 function NavLessonTitle({ title, align = "left" }: { title: string; align?: "left" | "right" }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
@@ -129,10 +144,7 @@ function NavLessonTitle({ title, align = "left" }: { title: string; align?: "lef
   }, [title]);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative overflow-hidden"
-    >
+    <div ref={containerRef} className="relative overflow-hidden">
       {overflows && (
         <>
           <div className={`absolute top-0 bottom-0 w-4 z-10 pointer-events-none ${align === "right" ? "right-0 bg-gradient-to-l" : "left-0 bg-gradient-to-r"} from-zinc-950 to-transparent`} />
@@ -150,12 +162,18 @@ function NavLessonTitle({ title, align = "left" }: { title: string; align?: "lef
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export default function LearnTab() {
-  const [view, setView] = useState<LearnView>("catalog");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeState = useMemo(() => parseLearnRoute(location.pathname), [location.pathname]);
+
   const [courses, setCourses] = useState<LmsCourse[]>([]);
   const [modules, setModules] = useState<LmsModuleWithLessons[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<LmsCourse | null>(null);
-  const [selectedLesson, setSelectedLesson] = useState<LmsLesson | null>(null);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,20 +187,55 @@ export default function LearnTab() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const markedCompleteRef = useRef(false);
 
-  // Reset to catalog when locale changes
+  // Track which courseId we've loaded modules for
+  const loadedCourseIdRef = useRef<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Derived state from route
+  // ---------------------------------------------------------------------------
+
+  const { view, courseId, lessonId } = routeState;
+
+  // Flat ordered list of all lessons across modules
+  const allLessons = useMemo(() => modules.flatMap((mod) => mod.lessons), [modules]);
+
+  // Find selected lesson from route
+  const selectedLesson = useMemo(
+    () => (lessonId ? allLessons.find((l) => l.id === lessonId) ?? null : null),
+    [allLessons, lessonId]
+  );
+
+  const currentLessonIndex = useMemo(
+    () => (selectedLesson ? allLessons.findIndex((l) => l.id === selectedLesson.id) : -1),
+    [allLessons, selectedLesson]
+  );
+
+  const prevLesson = currentLessonIndex > 0 ? allLessons[currentLessonIndex - 1] : null;
+  const nextLesson =
+    currentLessonIndex >= 0 && currentLessonIndex < allLessons.length - 1
+      ? allLessons[currentLessonIndex + 1]
+      : null;
+
+  // ---------------------------------------------------------------------------
+  // Reset when locale changes
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (view !== "catalog") {
-      setView("catalog");
+      navigate("/learn", { replace: true });
       setSelectedCourse(null);
-      setSelectedLesson(null);
       setModules([]);
       setExpandedModules(new Set());
       setProgressMap(new Map());
+      loadedCourseIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeLocale]);
 
-  // Fetch courses filtered by locale
+  // ---------------------------------------------------------------------------
+  // Fetch courses (catalog)
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     let active = true;
 
@@ -190,7 +243,6 @@ export default function LearnTab() {
       setLoading(true);
       setError(null);
       try {
-        // On first load, sync store locale from profile
         if (user?.uid) {
           const profile = await userService.getUserProfile(user.uid);
           if (!active) return;
@@ -198,7 +250,7 @@ export default function LearnTab() {
           const resolved = localeToLanguage[loc] ?? "es";
           if (resolved !== storeLocale) {
             setStoreLocale(resolved);
-            return; // will re-run via storeLocale change
+            return;
           }
         }
 
@@ -220,11 +272,88 @@ export default function LearnTab() {
     };
 
     void run();
-
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [user?.uid, storeLocale, setStoreLocale]);
+
+  // ---------------------------------------------------------------------------
+  // Fetch course content when courseId changes in route
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!courseId || courseId === loadedCourseIdRef.current) return;
+
+    let active = true;
+
+    const run = async () => {
+      // Find course from already-loaded list, or fetch it
+      let course = courses.find((c) => c.id === courseId) ?? null;
+      if (!course) {
+        // Course might not be in the list yet (direct link)
+        // We still load the content; selectedCourse might stay null until courses load
+        course = courses.find((c) => c.id === courseId) ?? null;
+      }
+      setSelectedCourse(course);
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [content, progress] = await Promise.all([
+          lmsService.getCourseContent(courseId),
+          user?.uid
+            ? lmsProgressService.getCourseProgress(user.uid, courseId)
+            : Promise.resolve(new Map<string, LessonProgress>()),
+        ]);
+        if (!active) return;
+        setModules(content);
+        setProgressMap(progress);
+        setExpandedModules(new Set(content.map((m) => m.id)));
+        loadedCourseIdRef.current = courseId;
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "No se pudo cargar el curso");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void run();
+    return () => { active = false; };
+  }, [courseId, courses, user?.uid]);
+
+  // Update selectedCourse when courses list loads (for direct link)
+  useEffect(() => {
+    if (courseId && !selectedCourse && courses.length > 0) {
+      const found = courses.find((c) => c.id === courseId) ?? null;
+      if (found) setSelectedCourse(found);
+    }
+  }, [courseId, selectedCourse, courses]);
+
+  // Auto-mark text lessons and scroll to top on lesson view
+  useEffect(() => {
+    if (view === "lesson" && selectedLesson) {
+      markedCompleteRef.current = false;
+      window.scrollTo({ top: 0 });
+      if (selectedLesson.content_type === "text") {
+        void markLessonComplete(selectedLesson);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, lessonId]);
+
+  // Clear course state when going back to catalog
+  useEffect(() => {
+    if (view === "catalog") {
+      setSelectedCourse(null);
+      setModules([]);
+      setExpandedModules(new Set());
+      setProgressMap(new Map());
+      loadedCourseIdRef.current = null;
+    }
+  }, [view]);
+
+  // ---------------------------------------------------------------------------
+  // Computed
+  // ---------------------------------------------------------------------------
 
   const lessonCount = useMemo(
     () => modules.reduce((sum, module) => sum + module.lessons.length, 0),
@@ -242,101 +371,82 @@ export default function LearnTab() {
   const moduleCount = modules.length;
 
   const navbarTitle =
-    view === "catalog" ? "Learn" : view === "course" ? selectedCourse?.title ?? "Course" : selectedLesson?.title ?? "Lesson";
+    view === "catalog"
+      ? "Learn"
+      : view === "course"
+        ? selectedCourse?.title ?? "Course"
+        : selectedLesson?.title ?? "Lesson";
+
+  // ---------------------------------------------------------------------------
+  // Navigation handlers
+  // ---------------------------------------------------------------------------
 
   const handleBack = () => {
-    if (view === "lesson") {
-      setView("course");
-      return;
-    }
-    if (view === "course") {
-      setView("catalog");
-      setSelectedCourse(null);
-      setSelectedLesson(null);
-      setModules([]);
-      setExpandedModules(new Set());
-      setProgressMap(new Map());
+    if (view === "lesson" && courseId) {
+      navigate(`/learn/${courseId}`);
+    } else if (view === "course") {
+      navigate("/learn");
     }
   };
 
-  const openCourse = async (course: LmsCourse) => {
-    setSelectedCourse(course);
-    setSelectedLesson(null);
-    setView("course");
-    setLoading(true);
-    setError(null);
-    try {
-      const [content, progress] = await Promise.all([
-        lmsService.getCourseContent(course.id),
-        user?.uid
-          ? lmsProgressService.getCourseProgress(user.uid, course.id)
-          : Promise.resolve(new Map<string, LessonProgress>()),
-      ]);
-      setModules(content);
-      setProgressMap(progress);
-      setExpandedModules(new Set(content.map((module) => module.id)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el curso");
-    } finally {
-      setLoading(false);
-    }
+  const openCourse = (course: LmsCourse) => {
+    navigate(`/learn/${course.id}`);
   };
+
+  const openLesson = (lesson: LmsLesson) => {
+    if (!courseId) return;
+    navigate(`/learn/${courseId}/${lesson.id}`);
+  };
+
+  const navigateToLesson = (lesson: LmsLesson) => {
+    if (!courseId) return;
+    navigate(`/learn/${courseId}/${lesson.id}`);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Progress
+  // ---------------------------------------------------------------------------
 
   const markLessonComplete = useCallback(
     async (lesson: LmsLesson, progressSeconds?: number) => {
-      if (!user?.uid || !selectedCourse) return;
+      if (!user?.uid || !courseId) return;
       if (progressMap.get(lesson.id)?.completed) return;
 
       try {
-        await lmsProgressService.markCompleted(user.uid, lesson.id, selectedCourse.id, progressSeconds);
+        await lmsProgressService.markCompleted(user.uid, lesson.id, courseId, progressSeconds);
         setProgressMap((prev) => {
           const next = new Map(prev);
           next.set(lesson.id, {
             id: prev.get(lesson.id)?.id ?? "",
             user_id: user.uid,
             lesson_id: lesson.id,
-            course_id: selectedCourse.id,
+            course_id: courseId,
             completed: true,
             progress_seconds: progressSeconds ?? prev.get(lesson.id)?.progress_seconds ?? 0,
             completed_at: new Date().toISOString(),
           });
           return next;
         });
-        // Update catalog summary optimistically
         setCourseSummaries((prev) => {
           const next = new Map(prev);
-          const existing = next.get(selectedCourse.id);
+          const existing = next.get(courseId);
           if (existing) {
-            next.set(selectedCourse.id, { ...existing, completed: existing.completed + 1 });
+            next.set(courseId, { ...existing, completed: existing.completed + 1 });
           }
           return next;
         });
       } catch {
-        // silent fail — progress is non-critical
+        // silent fail
       }
     },
-    [user?.uid, selectedCourse, progressMap]
+    [user?.uid, courseId, progressMap]
   );
-
-  const openLesson = (lesson: LmsLesson) => {
-    setSelectedLesson(lesson);
-    setView("lesson");
-    markedCompleteRef.current = false;
-    window.scrollTo({ top: 0 });
-
-    // Auto-mark text lessons as completed on open
-    if (lesson.content_type === "text") {
-      void markLessonComplete(lesson);
-    }
-  };
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
     if (!video || !selectedLesson || markedCompleteRef.current) return;
-
     const { currentTime, duration } = video;
     if (!duration || !isFinite(duration)) return;
-
     if (duration - currentTime <= NEAR_END_THRESHOLD) {
       markedCompleteRef.current = true;
       void markLessonComplete(selectedLesson, Math.floor(currentTime));
@@ -359,33 +469,6 @@ export default function LearnTab() {
     });
   };
 
-  // Flat ordered list of all lessons across modules (for prev/next navigation)
-  const allLessons = useMemo(
-    () => modules.flatMap((mod) => mod.lessons),
-    [modules]
-  );
-
-  const currentLessonIndex = useMemo(
-    () => (selectedLesson ? allLessons.findIndex((l) => l.id === selectedLesson.id) : -1),
-    [allLessons, selectedLesson]
-  );
-
-  const prevLesson = currentLessonIndex > 0 ? allLessons[currentLessonIndex - 1] : null;
-  const nextLesson = currentLessonIndex >= 0 && currentLessonIndex < allLessons.length - 1
-    ? allLessons[currentLessonIndex + 1]
-    : null;
-
-  const navigateToLesson = (lesson: LmsLesson) => {
-    setSelectedLesson(lesson);
-    markedCompleteRef.current = false;
-    if (lesson.content_type === "text") {
-      void markLessonComplete(lesson);
-    }
-    // Scroll to top
-    window.scrollTo({ top: 0 });
-  };
-
-  // Helper: count completed lessons in a module
   const getModuleProgress = (mod: LmsModuleWithLessons) => {
     let done = 0;
     for (const lesson of mod.lessons) {
@@ -394,13 +477,14 @@ export default function LearnTab() {
     return done;
   };
 
+  // ---------------------------------------------------------------------------
+  // Render: Catalog
+  // ---------------------------------------------------------------------------
+
   const renderCatalogSkeleton = () => (
     <div className="space-y-3">
       {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
-        >
+        <div key={i} className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row">
           <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 animate-pulse" />
           <div className="p-3 space-y-2 flex-1">
             <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
@@ -411,6 +495,56 @@ export default function LearnTab() {
       ))}
     </div>
   );
+
+  const renderCatalog = () => (
+    <Block className="pt-2 pb-24">
+      {loading && renderCatalogSkeleton()}
+      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+      {!loading && !error && courses.length === 0 && (
+        <p className="text-zinc-400 text-sm">No published courses yet.</p>
+      )}
+      <div className="space-y-3">
+        {courses.map((course) => {
+          const summary = courseSummaries.get(course.id);
+          return (
+            <button
+              key={course.id}
+              onClick={() => openCourse(course)}
+              className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
+            >
+              <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
+                {course.thumbnail_url ? (
+                  <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
+                )}
+                {summary && summary.total > 0 && (
+                  <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
+                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
+                <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
+                {course.description && (
+                  <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
+                )}
+                {summary && summary.total > 0 && (
+                  <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
+                    {summary.completed}/{summary.total} lessons completed
+                  </p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </Block>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Render: Course
+  // ---------------------------------------------------------------------------
 
   const renderCourseSkeleton = () => (
     <div className="space-y-3">
@@ -436,54 +570,6 @@ export default function LearnTab() {
     </div>
   );
 
-  const renderCatalog = () => (
-    <Block className="pt-2 pb-24">
-      {loading && renderCatalogSkeleton()}
-      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-      {!loading && !error && courses.length === 0 && (
-        <p className="text-zinc-400 text-sm">No published courses yet.</p>
-      )}
-
-      <div className="space-y-3">
-        {courses.map((course) => {
-          const summary = courseSummaries.get(course.id);
-          return (
-            <button
-              key={course.id}
-              onClick={() => void openCourse(course)}
-              className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
-            >
-              <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
-                {course.thumbnail_url ? (
-                  <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
-                )}
-                {/* Pie chart overlay */}
-                {summary && summary.total > 0 && (
-                  <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
-                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
-                  </div>
-                )}
-              </div>
-              <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
-                <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
-                {course.description && (
-                  <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
-                )}
-                {summary && summary.total > 0 && (
-                  <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
-                    {summary.completed}/{summary.total} lessons completed
-                  </p>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </Block>
-  );
-
   const renderCourse = () => (
     <Block className="pt-2 pb-24">
       {selectedCourse && (
@@ -499,7 +585,6 @@ export default function LearnTab() {
               </span>
             )}
           </div>
-          {/* Course progress bar */}
           {lessonCount > 0 && (
             <div className="mt-2 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
@@ -539,7 +624,6 @@ export default function LearnTab() {
                       </span>
                     )}
                   </div>
-                  {/* Module progress bar */}
                   {modTotal > 0 && (
                     <div className="mt-1.5 h-1 bg-zinc-800 rounded-full overflow-hidden">
                       <div
@@ -566,7 +650,6 @@ export default function LearnTab() {
                           onClick={() => openLesson(lesson)}
                           className="w-full px-3 py-3 text-left border-b border-zinc-800 last:border-b-0 flex items-center gap-3"
                         >
-                          {/* Thumbnail with completed overlay */}
                           <div className="w-16 h-10 shrink-0 rounded-md overflow-hidden bg-zinc-800 relative">
                             {thumb ? (
                               <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
@@ -593,7 +676,6 @@ export default function LearnTab() {
                               {lesson.is_free ? " • Free" : ""}
                             </p>
                           </div>
-                          {/* Completed checkmark next to title */}
                           {isCompleted && (
                             <span className="text-emerald-400 text-xs font-medium shrink-0">Done</span>
                           )}
@@ -610,8 +692,21 @@ export default function LearnTab() {
     </Block>
   );
 
+  // ---------------------------------------------------------------------------
+  // Render: Lesson
+  // ---------------------------------------------------------------------------
+
   const renderLesson = () => {
-    if (!selectedLesson) return null;
+    if (!selectedLesson) {
+      // Lesson not found (modules still loading or bad ID)
+      if (loading) return null;
+      return (
+        <Block className="pt-8 text-center">
+          <p className="text-zinc-400 text-sm">Lesson not found.</p>
+        </Block>
+      );
+    }
+
     const videoUrl = getLessonVideoUrl(selectedLesson);
     const textContent = getLessonTextContent(selectedLesson);
     const poster = getLessonThumbnail(selectedLesson);
@@ -631,6 +726,7 @@ export default function LearnTab() {
         {videoUrl && (
           <div className="mb-4 rounded-xl overflow-hidden border border-zinc-800 bg-black">
             <video
+              key={selectedLesson.id}
               ref={videoRef}
               src={videoUrl}
               controls
@@ -652,16 +748,12 @@ export default function LearnTab() {
 
         {/* Prev / Next navigation bar + dark fill to bottom */}
         <div className="fixed bottom-0 left-0 right-0 z-20">
-          {/* Dark fill — covers from nav bar through tabbar to screen bottom */}
           <div className="bg-zinc-950" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)" }}>
             <div className="border-t border-zinc-800 flex" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
-              {/* Previous — exactly 50% */}
               <button
                 onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
                 disabled={!prevLesson}
-                className={`w-1/2 flex items-center gap-2 pl-4 pr-3 py-2.5 transition-colors ${
-                  prevLesson ? "active:bg-zinc-900" : "opacity-30"
-                }`}
+                className={`w-1/2 flex items-center gap-2 pl-4 pr-3 py-2.5 transition-colors ${prevLesson ? "active:bg-zinc-900" : "opacity-30"}`}
               >
                 <span className="text-zinc-400 text-lg shrink-0">‹</span>
                 <div className="min-w-0 flex-1 text-left">
@@ -669,17 +761,11 @@ export default function LearnTab() {
                   <NavLessonTitle title={prevLesson?.title ?? "—"} />
                 </div>
               </button>
-
-              {/* Divider */}
               <div className="w-px bg-zinc-800 shrink-0 my-2" />
-
-              {/* Next — exactly 50% */}
               <button
                 onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
                 disabled={!nextLesson}
-                className={`w-1/2 flex items-center gap-2 pl-3 pr-4 py-2.5 transition-colors ${
-                  nextLesson ? "active:bg-zinc-900" : "opacity-30"
-                }`}
+                className={`w-1/2 flex items-center gap-2 pl-3 pr-4 py-2.5 transition-colors ${nextLesson ? "active:bg-zinc-900" : "opacity-30"}`}
               >
                 <div className="min-w-0 flex-1 text-right">
                   <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Siguiente</p>
@@ -693,6 +779,10 @@ export default function LearnTab() {
       </Block>
     );
   };
+
+  // ---------------------------------------------------------------------------
+  // Layout
+  // ---------------------------------------------------------------------------
 
   const lessonCompleted = selectedLesson ? progressMap.get(selectedLesson.id)?.completed === true : false;
 
@@ -719,9 +809,7 @@ export default function LearnTab() {
               }
             >
               <svg
-                className={`w-6 h-6 transition-colors duration-300 ${
-                  lessonCompleted ? "text-emerald-400" : "text-zinc-600"
-                }`}
+                className={`w-6 h-6 transition-colors duration-300 ${lessonCompleted ? "text-emerald-400" : "text-zinc-600"}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
