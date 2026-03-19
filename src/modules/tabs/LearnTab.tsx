@@ -322,6 +322,7 @@ export default function LearnTab() {
     setSelectedLesson(lesson);
     setView("lesson");
     markedCompleteRef.current = false;
+    window.scrollTo({ top: 0 });
 
     // Auto-mark text lessons as completed on open
     if (lesson.content_type === "text") {
@@ -653,12 +654,12 @@ export default function LearnTab() {
         <div className="fixed bottom-0 left-0 right-0 z-20">
           {/* Dark fill — covers from nav bar through tabbar to screen bottom */}
           <div className="bg-zinc-950" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)" }}>
-            <div className="border-t border-zinc-800 flex">
+            <div className="border-t border-zinc-800 flex" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
               {/* Previous — exactly 50% */}
               <button
                 onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
                 disabled={!prevLesson}
-                className={`w-1/2 flex items-center gap-2 px-3 py-2.5 transition-colors ${
+                className={`w-1/2 flex items-center gap-2 pl-4 pr-3 py-2.5 transition-colors ${
                   prevLesson ? "active:bg-zinc-900" : "opacity-30"
                 }`}
               >
@@ -676,7 +677,7 @@ export default function LearnTab() {
               <button
                 onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
                 disabled={!nextLesson}
-                className={`w-1/2 flex items-center gap-2 px-3 py-2.5 transition-colors ${
+                className={`w-1/2 flex items-center gap-2 pl-3 pr-4 py-2.5 transition-colors ${
                   nextLesson ? "active:bg-zinc-900" : "opacity-30"
                 }`}
               >
