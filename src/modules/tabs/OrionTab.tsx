@@ -619,6 +619,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
+  const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
   const saveRequestIdRef = useRef(0);
   const draftBeforePreviewRef = useRef<StrategyNodeMap | null>(null);
 
@@ -669,6 +670,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     nodes: nodes as unknown[],
     edges: edges as unknown[],
   }), [nodes, edges]);
+  const hasUnsavedDraftChanges = useMemo(() => {
+    if (isPreviewMode || !hasHydratedNodeMapRef.current) return false;
+    return JSON.stringify(getCurrentNodeMap()) !== lastSavedNodeMapSnapshot;
+  }, [isPreviewMode, getCurrentNodeMap, lastSavedNodeMapSnapshot]);
 
   const applyNodeMapToCanvas = useCallback((nodeMap: StrategyNodeMap) => {
     const nextNodes = (nodeMap.nodes ?? []) as RFNode[];
@@ -731,6 +736,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           edges: normalized.edges,
         } satisfies StrategyNodeMap);
         lastSavedNodeMapRef.current = serialized;
+        setLastSavedNodeMapSnapshot(serialized);
         hasHydratedNodeMapRef.current = true;
       } catch (error) {
         if (!active) return;
@@ -766,6 +772,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         .then(() => {
           if (saveRequestIdRef.current !== requestId) return;
           lastSavedNodeMapRef.current = serialized;
+          setLastSavedNodeMapSnapshot(serialized);
           setSaveStatus('saved');
         })
         .catch((error) => {
@@ -862,6 +869,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       const draftPayload = getCurrentNodeMap();
       await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
       lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
+      setLastSavedNodeMapSnapshot(JSON.stringify(draftPayload));
       const created = await strategiesService.createStrategyNodeVersion(strategyId, versionName, true);
       setNodeVersions((prev) => {
         const next = prev.map((item) => ({ ...item, is_active: false }));
@@ -890,6 +898,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       await strategiesService.saveStrategyNodeMap(strategyId, payload);
       if (saveRequestIdRef.current !== requestId) return;
       lastSavedNodeMapRef.current = serialized;
+      setLastSavedNodeMapSnapshot(serialized);
       setSaveStatus('saved');
     } catch (error) {
       if (saveRequestIdRef.current !== requestId) return;
@@ -924,6 +933,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     try {
       await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
       lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
+      setLastSavedNodeMapSnapshot(JSON.stringify(draftPayload));
       setSaveStatus('saved');
     } catch (error) {
       setSaveStatus('error');
@@ -1220,11 +1230,19 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               <button
                 type="button"
                 onClick={() => void handleSaveNodeMap()}
-                disabled={saveStatus === 'saving' || isPreviewMode}
+                disabled={saveStatus === 'saving' || isPreviewMode || !hasUnsavedDraftChanges}
                 className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
               >
                 <span className="text-sm font-medium text-zinc-100">Guardar</span>
-                <span className="text-xs text-zinc-400">{isPreviewMode ? 'Disabled in preview' : saveStatus === 'saving' ? 'Guardando...' : 'Guardar draft'}</span>
+                <span className="text-xs text-zinc-400">
+                  {isPreviewMode
+                    ? 'Disabled in preview'
+                    : saveStatus === 'saving'
+                      ? 'Guardando...'
+                      : hasUnsavedDraftChanges
+                        ? 'Guardar draft'
+                        : 'Sin cambios'}
+                </span>
               </button>
 
               <button
