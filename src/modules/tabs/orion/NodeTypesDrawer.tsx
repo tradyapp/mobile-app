@@ -1,14 +1,43 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import AppDrawer from '@/components/uiux/AppDrawer';
-import { type NodeTypeCategoryGroup } from '@/modules/tabs/orion/nodesEditorTypes';
+import { normalizeNodeCategory, type NodeTypeCategoryGroup } from '@/modules/tabs/orion/nodesEditorTypes';
 import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 
-function BackIcon() {
+function Connector({ side }: { side: 'left' | 'right' }) {
   return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
+    <span
+      className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-emerald-400 bg-zinc-950 ${side === 'left' ? '-left-1.5' : '-right-1.5'}`}
+    />
+  );
+}
+
+function NodeTypeCard({ item, onClick }: { item: StrategyNodeTypeRecord; onClick: () => void }) {
+  const category = normalizeNodeCategory(item.category);
+  const isTrigger = category === 'trigger';
+  const isOutput = category === 'output';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-center ${isTrigger ? 'rounded-r-2xl rounded-l-full' : isOutput ? 'rounded-l-2xl rounded-r-full' : 'rounded-2xl'}`}
+    >
+      {!isTrigger && <Connector side="left" />}
+      {!isOutput && <Connector side="right" />}
+
+      <div className="h-9 w-9 overflow-hidden rounded-lg border border-zinc-600 bg-zinc-800">
+        {item.icon_url ? (
+          <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+            {item.name.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+      </div>
+      <p className="line-clamp-2 text-xs font-semibold leading-tight text-zinc-100">{item.name}</p>
+    </button>
   );
 }
 
@@ -17,15 +46,9 @@ interface NodeTypesDrawerProps {
   onOpenChange: (open: boolean) => void;
   isNodeTypesLoading: boolean;
   nodeTypesError: string | null;
-  availableNodeTypesCount: number;
+  availableNodeTypes: StrategyNodeTypeRecord[];
   nodeTypeGroups: NodeTypeCategoryGroup[];
-  selectedNodeTypeCategory: NodeTypeCategoryGroup | null;
-  nodeTypeSearch: string;
-  onNodeTypeSearchChange: (value: string) => void;
-  filteredSelectedCategoryItems: StrategyNodeTypeRecord[];
   onRetryLoadNodeTypes: () => void;
-  onSelectCategory: (key: string) => void;
-  onBackToCategories: () => void;
   onAddNodeFromType: (nodeType: StrategyNodeTypeRecord) => void;
 }
 
@@ -34,34 +57,47 @@ export default function NodeTypesDrawer({
   onOpenChange,
   isNodeTypesLoading,
   nodeTypesError,
-  availableNodeTypesCount,
+  availableNodeTypes,
   nodeTypeGroups,
-  selectedNodeTypeCategory,
-  nodeTypeSearch,
-  onNodeTypeSearchChange,
-  filteredSelectedCategoryItems,
   onRetryLoadNodeTypes,
-  onSelectCategory,
-  onBackToCategories,
   onAddNodeFromType,
 }: NodeTypesDrawerProps) {
+  const [activeCategoryKey, setActiveCategoryKey] = useState<'all' | string>('all');
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveCategoryKey('all');
+      return;
+    }
+    setActiveCategoryKey('all');
+  }, [isOpen]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(orientation: landscape)');
+    const sync = () => setIsLandscape(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  const categories = useMemo(
+    () => [{ key: 'all', label: 'All' }, ...nodeTypeGroups.map((group) => ({ key: group.key, label: group.label }))],
+    [nodeTypeGroups]
+  );
+
+  const visibleNodeTypes = useMemo(() => {
+    if (activeCategoryKey === 'all') return availableNodeTypes;
+    return availableNodeTypes.filter((item) => normalizeNodeCategory(item.category) === activeCategoryKey);
+  }, [activeCategoryKey, availableNodeTypes]);
+
   return (
     <AppDrawer
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      title={selectedNodeTypeCategory?.label ?? 'Add Node'}
+      title="Add Node"
       height="full"
       showHeader
-      headerLeft={selectedNodeTypeCategory ? (
-        <button
-          type="button"
-          onClick={onBackToCategories}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300"
-          aria-label="Volver"
-        >
-          <BackIcon />
-        </button>
-      ) : null}
     >
       <div className="pb-4">
         {isNodeTypesLoading ? (
@@ -81,72 +117,44 @@ export default function NodeTypesDrawer({
               Retry
             </button>
           </div>
-        ) : availableNodeTypesCount === 0 ? (
+        ) : availableNodeTypes.length === 0 ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
             No node types available.
           </div>
-        ) : !selectedNodeTypeCategory ? (
-          <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
-            {nodeTypeGroups.map((group) => (
-              <button
-                key={group.key}
-                type="button"
-                onClick={() => onSelectCategory(group.key)}
-                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{group.label}</p>
-                  <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
-                </div>
-                <span className="text-xl leading-none text-zinc-400">›</span>
-              </button>
-            ))}
-          </div>
         ) : (
-          <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
-              <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>
+          <div className="space-y-4">
+            <div className="overflow-x-auto pb-1">
+              <div className="inline-flex min-w-full gap-2 rounded-2xl bg-zinc-900/80 p-1">
+                {categories.map((category) => {
+                  const isActive = activeCategoryKey === category.key;
+                  return (
+                    <button
+                      key={category.key}
+                      type="button"
+                      onClick={() => setActiveCategoryKey(category.key)}
+                      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${isActive ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-300'}`}
+                    >
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="mb-2">
-              <input
-                type="text"
-                value={nodeTypeSearch}
-                onChange={(event) => onNodeTypeSearchChange(event.target.value)}
-                placeholder={`Search in ${selectedNodeTypeCategory.label}...`}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
-                aria-label="Search node types"
-              />
-            </div>
-
-            {filteredSelectedCategoryItems.length === 0 ? (
+            {visibleNodeTypes.length === 0 ? (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                No node types match your search.
+                No node types in this category.
               </div>
             ) : (
-              filteredSelectedCategoryItems.map((item) => (
-                <button
-                  key={`${item.key}-${item.id}`}
-                  type="button"
-                  onClick={() => onAddNodeFromType(item)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
-                >
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                    {item.icon_url ? (
-                      <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                        {item.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
-                    <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
-                  </div>
-                </button>
-              ))
+              <div className={`grid gap-3 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                {visibleNodeTypes.map((item) => (
+                  <NodeTypeCard
+                    key={`${item.key}-${item.id}`}
+                    item={item}
+                    onClick={() => onAddNodeFromType(item)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         )}

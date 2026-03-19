@@ -104,8 +104,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
-  const [selectedNodeTypeCategoryKey, setSelectedNodeTypeCategoryKey] = useState<string | null>(null);
-  const [nodeTypeSearch, setNodeTypeSearch] = useState('');
   const [isNodeMapLoading, setIsNodeMapLoading] = useState(true);
   const [nodeMapError, setNodeMapError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -143,28 +141,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       }));
   }, [availableNodeTypes]);
 
-  const selectedNodeTypeCategory = useMemo(
-    () => nodeTypeGroups.find((group) => group.key === selectedNodeTypeCategoryKey) ?? null,
-    [nodeTypeGroups, selectedNodeTypeCategoryKey]
-  );
   const activeNodeVersion = useMemo(
     () => nodeVersions.find((version) => version.is_active) ?? null,
     [nodeVersions]
   );
   const isPreviewMode = previewVersion !== null;
-
-  const filteredSelectedCategoryItems = useMemo<StrategyNodeTypeRecord[]>(() => {
-    if (!selectedNodeTypeCategory) return [];
-
-    const query = nodeTypeSearch.trim().toLowerCase();
-    if (!query) return selectedNodeTypeCategory.items;
-
-    return selectedNodeTypeCategory.items.filter((item) => {
-      const name = item.name.toLowerCase();
-      const key = item.key.toLowerCase();
-      return name.includes(query) || key.includes(query);
-    });
-  }, [selectedNodeTypeCategory, nodeTypeSearch]);
 
   const getCurrentNodeMap = useCallback((): StrategyNodeMap => ({
     version: 1,
@@ -288,12 +269,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     };
   }, [strategyId, nodes, edges, isPreviewMode, getCurrentNodeMap]);
 
-  useEffect(() => {
-    if (!selectedNodeTypeCategoryKey) return;
-    const exists = nodeTypeGroups.some((group) => group.key === selectedNodeTypeCategoryKey);
-    if (!exists) setSelectedNodeTypeCategoryKey(null);
-  }, [nodeTypeGroups, selectedNodeTypeCategoryKey]);
-
   const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
     setNodes((prev) => {
       const index = prev.length;
@@ -318,16 +293,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       return [...prev, nextNode];
     });
     setIsNodeTypesDrawerOpen(false);
-    setSelectedNodeTypeCategoryKey(null);
-    setNodeTypeSearch('');
   }, [setNodes]);
 
   const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
     setIsNodeTypesDrawerOpen(open);
-    if (!open) {
-      setSelectedNodeTypeCategoryKey(null);
-      setNodeTypeSearch('');
-    }
   }, []);
 
   const handleSettingsDrawerOpenChange = useCallback((open: boolean) => {
@@ -570,11 +539,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       ) : (
         <button
           type="button"
-          onClick={() => {
-            setNodeTypeSearch('');
-            setSelectedNodeTypeCategoryKey(null);
-            setIsNodeTypesDrawerOpen(true);
-          }}
+          onClick={() => setIsNodeTypesDrawerOpen(true)}
           className="absolute bottom-[max(40px,env(safe-area-inset-bottom))] right-[max(28px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
           aria-label="Add node"
         >
@@ -588,21 +553,9 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         onOpenChange={handleNodeTypesDrawerOpenChange}
         isNodeTypesLoading={isNodeTypesLoading}
         nodeTypesError={nodeTypesError}
-        availableNodeTypesCount={availableNodeTypes.length}
+        availableNodeTypes={availableNodeTypes}
         nodeTypeGroups={nodeTypeGroups}
-        selectedNodeTypeCategory={selectedNodeTypeCategory}
-        nodeTypeSearch={nodeTypeSearch}
-        onNodeTypeSearchChange={setNodeTypeSearch}
-        filteredSelectedCategoryItems={filteredSelectedCategoryItems}
         onRetryLoadNodeTypes={() => void loadNodeTypes()}
-        onSelectCategory={(key) => {
-          setSelectedNodeTypeCategoryKey(key);
-          setNodeTypeSearch('');
-        }}
-        onBackToCategories={() => {
-          setSelectedNodeTypeCategoryKey(null);
-          setNodeTypeSearch('');
-        }}
         onAddNodeFromType={handleAddNodeFromType}
       />
 
