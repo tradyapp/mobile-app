@@ -611,9 +611,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [nodeVersions, setNodeVersions] = useState<StrategyNodeVersionRecord[]>([]);
   const [isNodeVersionsLoading, setIsNodeVersionsLoading] = useState(false);
   const [nodeVersionsError, setNodeVersionsError] = useState<string | null>(null);
-  const [versionNameDraft, setVersionNameDraft] = useState('');
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
-  const [isActivatingVersionId, setIsActivatingVersionId] = useState<string | null>(null);
+  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions'>('menu');
+  const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
+  const [versionNameInput, setVersionNameInput] = useState('');
   const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
@@ -822,7 +823,16 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
 
   const handleSettingsDrawerOpenChange = useCallback((open: boolean) => {
     setIsSettingsDrawerOpen(open);
+    if (!open) {
+      setSettingsPanel('menu');
+      setIsVersionNameDialogOpen(false);
+    }
   }, []);
+
+  const getNextVersionDefaultName = useCallback(() => {
+    const maxVersion = nodeVersions.reduce((max, item) => Math.max(max, item.version_number), 0);
+    return `v${maxVersion + 1}`;
+  }, [nodeVersions]);
 
   const loadNodeVersions = useCallback(async () => {
     setIsNodeVersionsLoading(true);
@@ -842,7 +852,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     void loadNodeVersions();
   }, [isSettingsDrawerOpen, loadNodeVersions]);
 
-  const handlePublishVersion = useCallback(async () => {
+  const handlePublishVersion = useCallback(async (versionName?: string) => {
     if (isPublishingVersion || isPreviewMode) return;
     setIsPublishingVersion(true);
     setNodeVersionsError(null);
@@ -851,50 +861,19 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       const draftPayload = getCurrentNodeMap();
       await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
       lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
-      const created = await strategiesService.createStrategyNodeVersion(strategyId, versionNameDraft, true);
-      setVersionNameDraft('');
+      const created = await strategiesService.createStrategyNodeVersion(strategyId, versionName, true);
       setNodeVersions((prev) => {
         const next = prev.map((item) => ({ ...item, is_active: false }));
         const withoutSame = next.filter((item) => item.id !== created.id);
         return [created, ...withoutSame].sort((a, b) => b.version_number - a.version_number);
       });
+      setSaveStatus('saved');
     } catch (error) {
       setNodeVersionsError(error instanceof Error ? error.message : 'Failed to publish version');
     } finally {
       setIsPublishingVersion(false);
     }
-  }, [isPublishingVersion, isPreviewMode, getCurrentNodeMap, strategyId, versionNameDraft]);
-
-  const handleActivateVersion = useCallback(async (version: StrategyNodeVersionRecord) => {
-    if (isActivatingVersionId) return;
-    setIsActivatingVersionId(version.id);
-    setNodeVersionsError(null);
-
-    try {
-      await strategiesService.activateStrategyNodeVersion(strategyId, version.id);
-      const nextMap = version.node_map ?? { version: 1, nodes: [], edges: [] };
-      applyNodeMapToCanvas(nextMap);
-      lastSavedNodeMapRef.current = JSON.stringify(nextMap);
-      setSaveStatus('saved');
-      setNodeVersions((prev) =>
-        prev.map((item) => ({ ...item, is_active: item.id === version.id }))
-      );
-    } catch (error) {
-      setNodeVersionsError(error instanceof Error ? error.message : 'Failed to activate version');
-    } finally {
-      setIsActivatingVersionId(null);
-    }
-  }, [isActivatingVersionId, strategyId, applyNodeMapToCanvas]);
-
-  const handleLoadVersionDraft = useCallback((version: StrategyNodeVersionRecord) => {
-    if (!version.node_map) return;
-    applyNodeMapToCanvas(version.node_map);
-    setPreviewVersion(null);
-    draftBeforePreviewRef.current = null;
-    setSaveStatus('idle');
-    setSaveError(null);
-    lastSavedNodeMapRef.current = '';
-  }, [applyNodeMapToCanvas]);
+  }, [isPublishingVersion, isPreviewMode, getCurrentNodeMap, strategyId]);
 
   const handleSaveNodeMap = useCallback(async () => {
     if (isPreviewMode) return;
@@ -927,19 +906,29 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     setPreviewVersion(version);
     setSaveStatus('idle');
     setSaveError(null);
+    setIsSettingsDrawerOpen(false);
+    setSettingsPanel('menu');
   }, [isPreviewMode, getCurrentNodeMap, applyNodeMapToCanvas]);
 
-  const handleExitPreview = useCallback(() => {
-    if (!isPreviewMode) return;
-    const draft = draftBeforePreviewRef.current;
-    if (draft) {
-      applyNodeMapToCanvas(draft);
-    }
+  const handleEditPreviewAsDraft = useCallback(async () => {
+    if (!previewVersion?.node_map) return;
+
+    const draftPayload = previewVersion.node_map;
+    applyNodeMapToCanvas(draftPayload);
     setPreviewVersion(null);
     draftBeforePreviewRef.current = null;
-    setSaveStatus('idle');
+    setSaveStatus('saving');
     setSaveError(null);
-  }, [isPreviewMode, applyNodeMapToCanvas]);
+
+    try {
+      await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
+      lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
+      setSaveStatus('saved');
+    } catch (error) {
+      setSaveStatus('error');
+      setSaveError(error instanceof Error ? error.message : 'Failed to save node map');
+    }
+  }, [previewVersion, applyNodeMapToCanvas, strategyId]);
 
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
@@ -975,7 +964,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           <div className="ml-auto">
             <button
               type="button"
-              onClick={() => setIsSettingsDrawerOpen(true)}
+              onClick={() => {
+                setSettingsPanel('menu');
+                setIsSettingsDrawerOpen(true);
+              }}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-100"
               aria-label="Open nodes settings"
             >
@@ -1036,20 +1028,28 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          if (isPreviewMode) return;
-          setNodeTypeSearch('');
-          setSelectedNodeTypeCategoryKey(null);
-          setIsNodeTypesDrawerOpen(true);
-        }}
-        disabled={isPreviewMode}
-        className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)] disabled:opacity-50"
-        aria-label="Add node"
-      >
-        +
-      </button>
+      {isPreviewMode ? (
+        <button
+          type="button"
+          onClick={() => void handleEditPreviewAsDraft()}
+          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-[max(16px,env(safe-area-inset-left))] right-[max(16px,env(safe-area-inset-right))] z-[230] rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+        >
+          Editar
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setNodeTypeSearch('');
+            setSelectedNodeTypeCategoryKey(null);
+            setIsNodeTypesDrawerOpen(true);
+          }}
+          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+          aria-label="Add node"
+        >
+          +
+        </button>
+      )}
 
       <AppDrawer
         isOpen={isNodeTypesDrawerOpen}
@@ -1183,7 +1183,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       >
         <div className="pb-4" style={safeDrawerInsetStyle}>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Node Settings</h3>
+            <h3 className="text-sm font-semibold text-white">{settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}</h3>
             <button
               type="button"
               onClick={() => handleSettingsDrawerOpenChange(false)}
@@ -1193,73 +1193,75 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
             </button>
           </div>
 
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => void handleSaveNodeMap()}
-              disabled={saveStatus === 'saving' || isPreviewMode}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-            >
-              <span className="text-sm font-medium text-zinc-100">Guardar</span>
-              <span className="text-xs text-zinc-400">{isPreviewMode ? 'Disabled in preview' : saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
-            </button>
-
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Publicar Draft</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={versionNameDraft}
-                  onChange={(event) => setVersionNameDraft(event.target.value)}
-                  placeholder="Nombre de versión (opcional)"
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handlePublishVersion()}
-                  disabled={isPublishingVersion || isPreviewMode}
-                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
-                >
-                  {isPublishingVersion ? 'Publicando...' : 'Activar'}
-                </button>
-              </div>
-            </div>
-            {isPreviewMode && (
+          {settingsPanel === 'menu' ? (
+            <div className="space-y-2">
               <button
                 type="button"
-                onClick={handleExitPreview}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm font-medium text-zinc-200"
+                onClick={() => void handleSaveNodeMap()}
+                disabled={saveStatus === 'saving' || isPreviewMode}
+                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
               >
-                Salir Preview
+                <span className="text-sm font-medium text-zinc-100">Guardar</span>
+                <span className="text-xs text-zinc-400">{isPreviewMode ? 'Disabled in preview' : saveStatus === 'saving' ? 'Guardando...' : 'Guardar draft'}</span>
               </button>
-            )}
-          </div>
 
-          <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Versiones</p>
               <button
                 type="button"
-                onClick={() => void loadNodeVersions()}
-                className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] text-zinc-300"
+                onClick={async () => {
+                  if (isPreviewMode) return;
+                  if (!isNodeVersionsLoading && nodeVersions.length === 0) {
+                    await loadNodeVersions();
+                  }
+                  setVersionNameInput(getNextVersionDefaultName());
+                  setIsVersionNameDialogOpen(true);
+                }}
+                disabled={isPublishingVersion || isPreviewMode}
+                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
               >
-                Refresh
+                <span className="text-sm font-medium text-zinc-100">Activar version</span>
+                <span className="text-xs text-zinc-400">{isPublishingVersion ? 'Publicando...' : 'Publicar y activar'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsPanel('versions');
+                  void loadNodeVersions();
+                }}
+                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
+              >
+                <span className="text-sm font-medium text-zinc-100">Versiones anteriores</span>
+                <span className="text-lg leading-none text-zinc-400">›</span>
               </button>
             </div>
+          ) : (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setSettingsPanel('menu')}
+                className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
+              >
+                <BackIcon />
+                Menú
+              </button>
 
-            {isNodeVersionsLoading ? (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm text-zinc-400">
-                Loading versions...
-              </div>
-            ) : nodeVersions.length === 0 ? (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm text-zinc-400">
-                No published versions yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {nodeVersions.map((version) => (
-                  <div key={version.id} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
+              {isNodeVersionsLoading ? (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
+                  Loading versions...
+                </div>
+              ) : nodeVersions.length === 0 ? (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
+                  No hay versiones anteriores.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {nodeVersions.map((version) => (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => handleEnterPreviewVersion(version)}
+                      className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-left"
+                    >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-zinc-100">v{version.version_number} · {version.name}</p>
                         <p className="truncate text-[11px] text-zinc-500">{new Date(version.created_at).toLocaleString('en-US')}</p>
@@ -1267,38 +1269,12 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                       {version.is_active && (
                         <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300">Active</span>
                       )}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEnterPreviewVersion(version)}
-                        className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
-                      >
-                        Ver
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleLoadVersionDraft(version)}
-                        className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
-                      >
-                        Editar desde esta versión
-                      </button>
-                      {!version.is_active && (
-                        <button
-                          type="button"
-                          onClick={() => void handleActivateVersion(version)}
-                          disabled={isActivatingVersionId === version.id}
-                          className="rounded-md bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-zinc-950 disabled:opacity-50"
-                        >
-                          {isActivatingVersionId === version.id ? 'Activando...' : 'Activar'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {nodeVersionsError && (
             <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
@@ -1307,6 +1283,50 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           )}
         </div>
       </AppDrawer>
+
+      {isVersionNameDialogOpen && (
+        <div className="absolute inset-0 z-[260]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setIsVersionNameDialogOpen(false)}
+            aria-label="Close version name dialog"
+          />
+          <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <h3 className="text-sm font-semibold text-white">Activar version</h3>
+            <p className="mt-1 text-xs text-zinc-400">Nombre de la nueva versión</p>
+            <input
+              type="text"
+              value={versionNameInput}
+              onChange={(event) => setVersionNameInput(event.target.value)}
+              className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsVersionNameDialogOpen(false)}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const fallback = getNextVersionDefaultName();
+                  const chosen = versionNameInput.trim() || fallback;
+                  await handlePublishVersion(chosen);
+                  setIsVersionNameDialogOpen(false);
+                }}
+                disabled={isPublishingVersion}
+                className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-50"
+              >
+                {isPublishingVersion ? 'Activando...' : 'Activar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
