@@ -23,7 +23,7 @@ import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
-import { compareNodeCategory, EditorNodeData, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
+import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
 import dataService from '@/services/DataService';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
@@ -34,6 +34,52 @@ function CloseIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
+}
+
+type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
+
+function makeFieldId(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createNodeDefaults(category?: string): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
+  const normalized = normalizeNodeCategory(category);
+
+  if (normalized === 'trigger') {
+    return {
+      inputs: [],
+      attributes: [
+        { id: makeFieldId('attr'), name: 'schedule', type: 'cron', value: '' },
+      ],
+      outputs: [
+        { id: makeFieldId('out'), name: 'event', type: 'signal' },
+      ],
+    };
+  }
+
+  if (normalized === 'output') {
+    return {
+      inputs: [
+        { id: makeFieldId('in'), name: 'signal', type: 'signal', required: true },
+      ],
+      attributes: [
+        { id: makeFieldId('attr'), name: 'channel', type: 'string', value: '' },
+      ],
+      outputs: [],
+    };
+  }
+
+  return {
+    inputs: [
+      { id: makeFieldId('in'), name: 'input', type: 'number', required: true },
+    ],
+    attributes: [
+      { id: makeFieldId('attr'), name: 'operator', type: 'string', value: '' },
+    ],
+    outputs: [
+      { id: makeFieldId('out'), name: 'result', type: 'number' },
+    ],
+  };
 }
 interface NodesViewProps {
   strategyId: string;
@@ -122,6 +168,8 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [nodeEditorNodeId, setNodeEditorNodeId] = useState<string | null>(null);
+  const [nodeDetailsPanel, setNodeDetailsPanel] = useState<NodeDetailsPanel>('inputs');
   const [isNodeMapLoading, setIsNodeMapLoading] = useState(true);
   const [nodeMapError, setNodeMapError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -152,6 +200,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
   const saveRequestIdRef = useRef(0);
   const draftBeforePreviewRef = useRef<StrategyNodeMap | null>(null);
+  const lastNodeTapRef = useRef<{ id: string; at: number } | null>(null);
 
   const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
     const grouped = new Map<string, StrategyNodeTypeRecord[]>();
@@ -188,6 +237,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   );
   const isPreviewMode = previewVersion !== null;
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
+  const selectedNodeForEditor = useMemo(
+    () => (nodeEditorNodeId ? nodes.find((node) => node.id === nodeEditorNodeId) ?? null : null),
+    [nodeEditorNodeId, nodes]
+  );
 
   const getCurrentNodeMap = useCallback((): StrategyNodeMap => ({
     version: 1,
@@ -336,6 +389,14 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [strategyId, applyNodeMapToCanvas]);
 
   useEffect(() => {
+    if (!nodeEditorNodeId) return;
+    const exists = nodes.some((node) => node.id === nodeEditorNodeId);
+    if (!exists) {
+      setNodeEditorNodeId(null);
+    }
+  }, [nodeEditorNodeId, nodes]);
+
+  useEffect(() => {
     if (!hasHydratedNodeMapRef.current) return;
     if (isPreviewMode) return;
 
@@ -386,6 +447,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           nodeTypeKey: nodeType.key,
           category: nodeType.category,
           iconUrl: nodeType.icon_url,
+          ...createNodeDefaults(nodeType.category),
         } satisfies EditorNodeData,
       };
 
@@ -397,6 +459,37 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
     setIsNodeTypesDrawerOpen(open);
   }, []);
+
+  const openNodeEditor = useCallback((nodeId: string) => {
+    setNodeEditorNodeId(nodeId);
+    setNodeDetailsPanel('inputs');
+  }, []);
+
+  const handleNodeClick = useCallback((_event: unknown, node: RFNode) => {
+    const now = Date.now();
+    const prev = lastNodeTapRef.current;
+    if (prev && prev.id === node.id && now - prev.at < 300) {
+      openNodeEditor(node.id);
+      lastNodeTapRef.current = null;
+      return;
+    }
+    lastNodeTapRef.current = { id: node.id, at: now };
+  }, [openNodeEditor]);
+
+  const updateNodePanelFields = useCallback((nodeId: string, panel: NodeDetailsPanel, updater: (prev: EditorNodeField[]) => EditorNodeField[]) => {
+    setNodes((prev) => prev.map((node) => {
+      if (node.id !== nodeId) return node;
+      const data = (node.data ?? {}) as EditorNodeData;
+      const current = Array.isArray(data[panel]) ? (data[panel] as EditorNodeField[]) : [];
+      return {
+        ...node,
+        data: {
+          ...data,
+          [panel]: updater(current),
+        } satisfies EditorNodeData,
+      };
+    }));
+  }, [setNodes]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -578,6 +671,11 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     }
   }, [previewVersion, isPublishingVersion, strategyId]);
 
+  const nodeEditorData = selectedNodeForEditor?.data as EditorNodeData | undefined;
+  const panelFields = nodeEditorData
+    ? (Array.isArray(nodeEditorData[nodeDetailsPanel]) ? nodeEditorData[nodeDetailsPanel] as EditorNodeField[] : [])
+    : [];
+
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -649,67 +747,192 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               {saveError}
             </div>
           )}
-          <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={isPreviewMode ? undefined : onNodesChange}
-              onEdgesChange={isPreviewMode ? undefined : onEdgesChange}
-              onConnect={isPreviewMode ? undefined : onConnect}
-              nodeTypes={nodeTypes}
-              nodesDraggable={!isPreviewMode}
-              nodesConnectable={!isPreviewMode}
-              elementsSelectable={!isPreviewMode}
-              edgesUpdatable={!isPreviewMode}
-              onSelectionChange={
-                isPreviewMode
-                  ? undefined
-                  : handleSelectionChange
-              }
-              proOptions={{ hideAttribution: true }}
-              fitView
-            >
-              <Background color="#3f3f46" gap={16} />
-              <Controls className="orion-nodes-controls" />
-            </ReactFlow>
-            <style>{`
-              .orion-nodes-controls {
-                box-shadow: none !important;
-              }
-              .orion-nodes-controls .react-flow__controls-button {
-                background: #09090b !important;
-                border-color: #27272a !important;
-                color: #ffffff !important;
-              }
-              .orion-nodes-controls .react-flow__controls-button svg {
-                fill: #ffffff !important;
-              }
-              .orion-nodes-controls .react-flow__controls-button:hover {
-                background: #18181b !important;
-              }
-              .react-flow__node.selected > div {
-                border-color: #34d399 !important;
-                box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6), 0 10px 28px rgba(0, 0, 0, 0.45) !important;
-              }
-              .react-flow__edge.selected .react-flow__edge-path {
-                stroke: #34d399 !important;
-                filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.45));
-              }
-            `}</style>
-
-            {!isPreviewMode && hasSelection && (
-              <button
-                type="button"
-                onClick={() => setIsDeleteSelectionDialogOpen(true)}
-                className="absolute right-3 top-3 z-[240] flex h-10 w-10 items-center justify-center rounded-full border border-red-900 bg-red-950/70 text-red-300"
-                aria-label="Delete selected elements"
+          {selectedNodeForEditor ? (
+            <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+              <div className="flex items-center border-b border-zinc-800 px-3 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => setNodeEditorNodeId(null)}
+                  className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300"
+                >
+                  Back
+                </button>
+                <div className="ml-2 min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-100">{nodeEditorData?.label ?? 'Node'}</p>
+                  <p className="truncate text-[11px] text-zinc-500">{nodeEditorData?.nodeTypeKey ?? 'custom-node'}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 border-b border-zinc-800 px-3 py-2">
+                {([
+                  { key: 'inputs', label: 'Inputs' },
+                  { key: 'attributes', label: 'Atributos' },
+                  { key: 'outputs', label: 'Outputs' },
+                ] as Array<{ key: NodeDetailsPanel; label: string }>).map((item) => {
+                  const active = nodeDetailsPanel === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setNodeDetailsPanel(item.key)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${active ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-300'}`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3">
+                <div className="space-y-2">
+                  {panelFields.length === 0 ? (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
+                      No items yet in this panel.
+                    </div>
+                  ) : (
+                    panelFields.map((field, index) => (
+                      <div key={field.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                        <div className="grid grid-cols-1 gap-2">
+                          <input
+                            type="text"
+                            value={field.name}
+                            readOnly={isPreviewMode}
+                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], name: event.target.value };
+                              return next;
+                            })}
+                            placeholder="Field name"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                          />
+                          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                            <input
+                              type="text"
+                              value={field.type}
+                              readOnly={isPreviewMode}
+                              onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], type: event.target.value };
+                                return next;
+                              })}
+                              placeholder="Type"
+                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                            />
+                            <button
+                              type="button"
+                              disabled={isPreviewMode}
+                              onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], required: !next[index]?.required };
+                                return next;
+                              })}
+                              className={`rounded-md border px-2 py-1 text-[11px] ${field.required ? 'border-emerald-600 bg-emerald-950/40 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} disabled:opacity-60`}
+                            >
+                              Req
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isPreviewMode}
+                              onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => prev.filter((item) => item.id !== field.id))}
+                              className="rounded-md border border-red-900 bg-red-950/30 px-2 py-1 text-[11px] text-red-300 disabled:opacity-60"
+                            >
+                              Del
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={field.value ?? ''}
+                            readOnly={isPreviewMode}
+                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], value: event.target.value };
+                              return next;
+                            })}
+                            placeholder="Default value"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {!isPreviewMode && (
+                    <button
+                      type="button"
+                      onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => [
+                        ...prev,
+                        { id: makeFieldId('field'), name: '', type: 'string', value: '', required: false },
+                      ])}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                    >
+                      Add {nodeDetailsPanel.slice(0, 1).toUpperCase() + nodeDetailsPanel.slice(1, -1)}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={isPreviewMode ? undefined : onNodesChange}
+                onEdgesChange={isPreviewMode ? undefined : onEdgesChange}
+                onConnect={isPreviewMode ? undefined : onConnect}
+                onNodeClick={isPreviewMode ? undefined : handleNodeClick}
+                onNodeDoubleClick={isPreviewMode ? undefined : (_event, node) => openNodeEditor(node.id)}
+                nodeTypes={nodeTypes}
+                nodesDraggable={!isPreviewMode}
+                nodesConnectable={!isPreviewMode}
+                elementsSelectable={!isPreviewMode}
+                edgesUpdatable={!isPreviewMode}
+                onSelectionChange={
+                  isPreviewMode
+                    ? undefined
+                    : handleSelectionChange
+                }
+                proOptions={{ hideAttribution: true }}
+                fitView
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18M8 6V4h8v2m-7 4v8m4-8v8M6 6l1 14h10l1-14" />
-                </svg>
-              </button>
-            )}
-          </div>
+                <Background color="#3f3f46" gap={16} />
+                <Controls className="orion-nodes-controls" />
+              </ReactFlow>
+              <style>{`
+                .orion-nodes-controls {
+                  box-shadow: none !important;
+                }
+                .orion-nodes-controls .react-flow__controls-button {
+                  background: #09090b !important;
+                  border-color: #27272a !important;
+                  color: #ffffff !important;
+                }
+                .orion-nodes-controls .react-flow__controls-button svg {
+                  fill: #ffffff !important;
+                }
+                .orion-nodes-controls .react-flow__controls-button:hover {
+                  background: #18181b !important;
+                }
+                .react-flow__node.selected > div {
+                  border-color: #34d399 !important;
+                  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6), 0 10px 28px rgba(0, 0, 0, 0.45) !important;
+                }
+                .react-flow__edge.selected .react-flow__edge-path {
+                  stroke: #34d399 !important;
+                  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.45));
+                }
+              `}</style>
+
+              {!isPreviewMode && hasSelection && (
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteSelectionDialogOpen(true)}
+                  className="absolute right-3 top-3 z-[240] flex h-10 w-10 items-center justify-center rounded-full border border-red-900 bg-red-950/70 text-red-300"
+                  aria-label="Delete selected elements"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18M8 6V4h8v2m-7 4v8m4-8v8M6 6l1 14h10l1-14" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       {isPreviewMode ? (
         <div className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-1/2 z-[230] -translate-x-1/2">
@@ -721,7 +944,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             Editar
           </button>
         </div>
-      ) : (
+      ) : !selectedNodeForEditor ? (
         <button
           type="button"
           onClick={() => setIsNodeTypesDrawerOpen(true)}
@@ -730,7 +953,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         >
           +
         </button>
-      )}
+      ) : null}
       </div>
 
       <NodeTypesDrawer

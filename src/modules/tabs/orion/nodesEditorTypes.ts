@@ -5,6 +5,17 @@ export interface EditorNodeData {
   nodeTypeKey?: string;
   category?: string;
   iconUrl?: string | null;
+  inputs?: EditorNodeField[];
+  attributes?: EditorNodeField[];
+  outputs?: EditorNodeField[];
+}
+
+export interface EditorNodeField {
+  id: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  value?: string;
 }
 
 export interface NodeTypeCategoryGroup {
