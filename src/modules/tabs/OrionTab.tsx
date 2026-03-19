@@ -73,6 +73,7 @@ export default function OrionTab() {
   );
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
+  const isCreateStrategyView = isMarketplace && myStrategiesScreen === 'create';
 
   useEffect(() => {
     if (!isStrategyDetailView || !selectedStrategyId) return;
@@ -108,18 +109,21 @@ export default function OrionTab() {
     <>
       {!isNodesView && (
         <AppNavbar
-          title={isMarketplace ? 'Orion Marketplace' : 'Notifications'}
+          title={isCreateStrategyView ? 'New Strategy' : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
           left={
             isMarketplace ? (
               <button
                 type="button"
                 onClick={() => {
+                  if (isCreateStrategyView) {
+                    navigate('/orion/marketplace/my-strategies');
+                    setCreateError(null);
+                    return;
+                  }
                   navigate('/orion');
-                  setCreateDraft(createEmptyDraft());
-                  setCreateError(null);
                 }}
                 className="flex h-10 w-10 items-center justify-center text-2xl text-zinc-200"
-                aria-label="Close Orion marketplace"
+                aria-label={isCreateStrategyView ? 'Close new strategy' : 'Close Orion marketplace'}
               >
                 <CloseIcon />
               </button>
@@ -135,7 +139,7 @@ export default function OrionTab() {
             )
           }
           right={
-            isMarketplace ? (
+            isMarketplace && !isCreateStrategyView ? (
               <button
                 type="button"
                 onClick={() => {
@@ -148,7 +152,7 @@ export default function OrionTab() {
               >
                 +
               </button>
-            ) : undefined
+            ) : null
           }
         />
       )}

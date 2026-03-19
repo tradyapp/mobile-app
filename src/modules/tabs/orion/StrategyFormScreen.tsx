@@ -5,23 +5,13 @@ import { processStrategyPhoto } from '@/modules/tabs/orion/imageUtils';
 import { type StrategyDraft } from '@/modules/tabs/orion/shared';
 
 interface StrategyFormScreenProps {
-  title: string;
   draft: StrategyDraft;
   onChangeDraft: (updater: (prev: StrategyDraft) => StrategyDraft) => void;
   isSubmitting: boolean;
   error: string | null;
   submitLabel: string;
-  onBack: () => void;
   onSubmit: () => void;
   onDelete?: () => void;
-}
-
-function BackIcon() {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  );
 }
 
 function PencilIcon() {
@@ -33,13 +23,11 @@ function PencilIcon() {
 }
 
 export default function StrategyFormScreen({
-  title,
   draft,
   onChangeDraft,
   isSubmitting,
   error,
   submitLabel,
-  onBack,
   onSubmit,
   onDelete,
 }: StrategyFormScreenProps) {
@@ -65,62 +53,37 @@ export default function StrategyFormScreen({
   };
 
   return (
-    <div className="mt-4">
-      <div className="mb-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-zinc-300"
-          aria-label="Back"
-        >
-          <BackIcon />
-        </button>
-        <h3 className="text-base font-semibold text-white">{title}</h3>
-      </div>
-
-      <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="flex flex-col items-center gap-2">
-          <div className="relative">
-            <div className="h-[250px] w-[250px] overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-800">
-              {draft.photoUrl ? (
-                <img src={draft.photoUrl} alt="Strategy logo" className="h-full w-full object-contain" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-zinc-500">250x250</div>
-              )}
-            </div>
-            {draft.photoUrl && (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-200"
-                aria-label="Edit photo"
-              >
-                <PencilIcon />
-              </button>
+    <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="flex items-start gap-3">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isProcessingPhoto}
+            className="h-24 w-24 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-800 disabled:opacity-60"
+            aria-label="Upload strategy image"
+          >
+            {draft.photoUrl ? (
+              <img src={draft.photoUrl} alt="Strategy logo" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[11px] text-zinc-500">
+                {isProcessingPhoto ? 'Processing...' : 'Upload'}
+              </div>
             )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.svg"
-            onChange={handleUpload}
-            className="hidden"
-          />
-
-          {!draft.photoUrl && (
+          </button>
+          {draft.photoUrl && (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessingPhoto}
-              className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs font-medium text-zinc-200 disabled:opacity-50"
+              className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-200"
+              aria-label="Edit photo"
             >
-              {isProcessingPhoto ? 'Processing...' : 'Upload Photo'}
+              <PencilIcon />
             </button>
           )}
         </div>
 
-        <div className="space-y-1.5">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <label htmlFor="strategy-form-name" className="text-sm text-zinc-300">Name</label>
           <input
             id="strategy-form-name"
@@ -131,45 +94,53 @@ export default function StrategyFormScreen({
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
           />
         </div>
+      </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="strategy-form-description" className="text-sm text-zinc-300">Description</label>
-          <textarea
-            id="strategy-form-description"
-            value={draft.description}
-            onChange={(e) => onChangeDraft((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="Describe what this strategy does"
-            rows={4}
-            className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
-          />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.svg"
+        onChange={handleUpload}
+        className="hidden"
+      />
+
+      <div className="mt-4 space-y-1.5">
+        <label htmlFor="strategy-form-description" className="text-sm text-zinc-300">Description</label>
+        <textarea
+          id="strategy-form-description"
+          value={draft.description}
+          onChange={(e) => onChangeDraft((prev) => ({ ...prev, description: e.target.value }))}
+          placeholder="Describe what this strategy does"
+          rows={4}
+          className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-500"
+        />
+      </div>
+
+      {(error || photoError) && (
+        <div className="mt-4 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+          {error || photoError}
         </div>
+      )}
 
-        {(error || photoError) && (
-          <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-            {error || photoError}
-          </div>
-        )}
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={isSubmitting || isProcessingPhoto || !draft.name.trim()}
+        className="mt-4 w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSubmitting ? 'Saving...' : submitLabel}
+      </button>
 
+      {onDelete && (
         <button
           type="button"
-          onClick={onSubmit}
-          disabled={isSubmitting || isProcessingPhoto || !draft.name.trim()}
-          className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onDelete}
+          disabled={isSubmitting}
+          className="mt-2 w-full rounded-lg border border-red-900 bg-red-950/40 px-4 py-2.5 text-sm font-semibold text-red-300 disabled:opacity-50"
         >
-          {isSubmitting ? 'Saving...' : submitLabel}
+          Delete Strategy
         </button>
-
-        {onDelete && (
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={isSubmitting}
-            className="w-full rounded-lg border border-red-900 bg-red-950/40 px-4 py-2.5 text-sm font-semibold text-red-300 disabled:opacity-50"
-          >
-            Delete Strategy
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

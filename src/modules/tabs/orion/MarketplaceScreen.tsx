@@ -55,25 +55,28 @@ export default function MarketplaceScreen({
   onCreate,
 }: MarketplaceScreenProps) {
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
+  const isCreateScreen = tab === 'my-strategies' && myStrategiesScreen === 'create';
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-24">
-      <div className="mt-3 grid grid-cols-2 rounded-xl bg-zinc-900 p-1">
-        <button
-          type="button"
-          onClick={() => onChangeTab('explore')}
-          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'explore' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
-        >
-          Explore
-        </button>
-        <button
-          type="button"
-          onClick={() => onChangeTab('my-strategies')}
-          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'my-strategies' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
-        >
-          My Strategies
-        </button>
-      </div>
+      {!isCreateScreen && (
+        <div className="mt-3 grid grid-cols-2 rounded-xl bg-zinc-900 p-1">
+          <button
+            type="button"
+            onClick={() => onChangeTab('explore')}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'explore' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
+          >
+            Explore
+          </button>
+          <button
+            type="button"
+            onClick={() => onChangeTab('my-strategies')}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === 'my-strategies' ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
+          >
+            My Strategies
+          </button>
+        </div>
+      )}
 
       {tab === 'explore' ? (
         <>
@@ -160,13 +163,11 @@ export default function MarketplaceScreen({
 
           {myStrategiesScreen === 'create' && (
             <StrategyFormScreen
-              title="Create Strategy"
               draft={createDraft}
               onChangeDraft={onChangeCreateDraft}
               isSubmitting={isCreatingStrategy}
               error={createError}
               submitLabel="Create Strategy"
-              onBack={() => onChangeMyStrategiesScreen('list')}
               onSubmit={onCreate}
             />
           )}
