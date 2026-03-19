@@ -1035,8 +1035,8 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   }, [previewVersion, isPublishingVersion, strategyId]);
 
   return (
-    <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
-      <div className="flex h-full flex-col overflow-hidden">
+    <div className="relative z-[220] flex min-h-[100dvh] flex-col overflow-hidden bg-zinc-950">
+      <div className="flex h-full flex-1 flex-col overflow-hidden">
         <header
           className="flex items-center gap-3 border-b border-zinc-800 pb-3 pt-[max(16px,env(safe-area-inset-top))]"
           style={safeHorizontalInsetStyle}
@@ -1130,8 +1130,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
             `}</style>
           </div>
         </div>
-      </div>
-
       {isPreviewMode ? (
         <div className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-1/2 z-[230] -translate-x-1/2">
           <button
@@ -1156,6 +1154,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           +
         </button>
       )}
+      </div>
 
       <AppDrawer
         isOpen={isNodeTypesDrawerOpen}
@@ -1740,10 +1739,10 @@ export default function OrionTab() {
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={orionRouteKey}
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
+          initial={isNodesView ? { opacity: 0, x: 28 } : { opacity: 0, y: 14 }}
+          animate={isNodesView ? { opacity: 1, x: 0 } : { opacity: 1, y: 0 }}
+          exit={isNodesView ? { opacity: 0, x: 28 } : { opacity: 0, y: -10 }}
+          transition={{ duration: isNodesView ? 0.22 : 0.18, ease: 'easeOut' }}
         >
           {isNodesView && selectedStrategy ? (
             <NodesView
