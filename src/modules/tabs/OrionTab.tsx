@@ -1035,8 +1035,8 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   }, [previewVersion, isPublishingVersion, strategyId]);
 
   return (
-    <div className="relative z-[220] flex min-h-[100dvh] flex-col overflow-hidden bg-zinc-950">
-      <div className="flex h-full flex-1 flex-col overflow-hidden">
+    <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <header
           className="flex items-center gap-3 border-b border-zinc-800 pb-3 pt-[max(16px,env(safe-area-inset-top))]"
           style={safeHorizontalInsetStyle}
@@ -1081,7 +1081,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         </header>
 
         <div
-          className="flex-1 overflow-hidden pb-4 pt-4"
+          className="min-h-0 flex-1 overflow-hidden pb-4 pt-4"
           style={safeCanvasInsetStyle}
         >
           {nodeMapError && (
@@ -1744,11 +1744,11 @@ export default function OrionTab() {
           exit={isNodesView ? { opacity: 0, x: 28 } : { opacity: 0, y: -10 }}
           transition={{ duration: isNodesView ? 0.22 : 0.18, ease: 'easeOut' }}
         >
-          {isNodesView && selectedStrategy ? (
+          {isNodesView && selectedStrategyId ? (
             <NodesView
-              strategyId={selectedStrategy.id}
-              strategyName={selectedStrategy.name}
-              onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}`)}
+              strategyId={selectedStrategyId}
+              strategyName={selectedStrategy?.name ?? 'Strategy'}
+              onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}`)}
             />
           ) : isStrategyDetailView && selectedStrategy ? (
             <StrategyDetailView

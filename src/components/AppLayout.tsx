@@ -33,6 +33,10 @@ const AppLayout = () => {
     () => tabs.find((tab) => location.pathname.startsWith(tab.path)) ?? tabs[0],
     [tabs, location.pathname]
   );
+  const isFullscreenRoute = useMemo(
+    () => /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname),
+    [location.pathname]
+  );
   const ActiveTabComponent = activeTab.component;
 
   useEffect(() => {
@@ -49,7 +53,7 @@ const AppLayout = () => {
 
   return (
     <Page>
-      <div className="pb-16">
+      <div className={isFullscreenRoute ? "pb-0" : "pb-16"}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab.id}
@@ -63,24 +67,32 @@ const AppLayout = () => {
         </AnimatePresence>
       </div>
 
-      <div
-        className="fixed bottom-0 left-0 right-0 z-100"
-        style={{ transform: "translateY(calc(env(safe-area-inset-bottom) / 2 + 6px))" }}
-      >
-        <Tabbar labels={true} icons={true}>
-          <ToolbarPane>
-            {tabs.map((tab) => (
-              <TabbarLink
-                key={tab.id}
-                active={activeTab.id === tab.id}
-                onClick={() => navigate(tab.path)}
-                icon={<span className="text-2xl">{tab.icon}</span>}
-                label={tab.label}
-              />
-            ))}
-          </ToolbarPane>
-        </Tabbar>
-      </div>
+      <AnimatePresence initial={false}>
+        {!isFullscreenRoute && (
+          <motion.div
+            className="fixed bottom-0 left-0 right-0 z-100"
+            style={{ transform: "translateY(calc(env(safe-area-inset-bottom) / 2 + 6px))" }}
+            initial={{ y: 72, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 72, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            <Tabbar labels={true} icons={true}>
+              <ToolbarPane>
+                {tabs.map((tab) => (
+                  <TabbarLink
+                    key={tab.id}
+                    active={activeTab.id === tab.id}
+                    onClick={() => navigate(tab.path)}
+                    icon={<span className="text-2xl">{tab.icon}</span>}
+                    label={tab.label}
+                  />
+                ))}
+              </ToolbarPane>
+            </Tabbar>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Page>
   );
 };
