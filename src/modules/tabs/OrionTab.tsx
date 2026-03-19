@@ -15,6 +15,7 @@ import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
 import dataService from '@/services/DataService';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
+import { userService } from '@/services/UserService';
 import { useAuthStore } from '@/stores/authStore';
 
 function CloseIcon() {
@@ -42,6 +43,7 @@ export default function OrionTab() {
   const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
   const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
   const [symbolsError, setSymbolsError] = useState<string | null>(null);
+  const [strategyAuthors, setStrategyAuthors] = useState<Record<string, { displayName: string; avatarUrl: string | null }>>({});
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
   const orionRouteKey = useMemo(() => location.pathname, [location.pathname]);
@@ -63,12 +65,45 @@ export default function OrionTab() {
     try {
       const records = await strategiesService.listStrategies();
       setStrategies(records);
+
+      const authorIds = Array.from(new Set(records.map((item) => item.user_id).filter(Boolean)));
+      if (authorIds.length === 0) {
+        setStrategyAuthors({});
+        return;
+      }
+
+      const profiles = await userService.listPublicProfiles(authorIds);
+      const profileById = new Map(profiles.map((item) => [item.id, item]));
+      const currentUserDisplayName =
+        user?.raw?.user_metadata?.display_name
+        || user?.raw?.user_metadata?.name
+        || user?.email
+        || 'User';
+      const currentUserAvatar =
+        typeof user?.raw?.user_metadata?.avatar_url === 'string'
+          ? user.raw.user_metadata.avatar_url
+          : null;
+
+      const nextAuthors: Record<string, { displayName: string; avatarUrl: string | null }> = {};
+      for (const strategy of records) {
+        const profile = profileById.get(strategy.user_id);
+        if (profile) {
+          nextAuthors[strategy.id] = { displayName: profile.displayName, avatarUrl: profile.avatarUrl };
+          continue;
+        }
+        if (strategy.user_id === user?.uid) {
+          nextAuthors[strategy.id] = { displayName: String(currentUserDisplayName), avatarUrl: currentUserAvatar };
+          continue;
+        }
+        nextAuthors[strategy.id] = { displayName: 'User', avatarUrl: null };
+      }
+      setStrategyAuthors(nextAuthors);
     } catch (err) {
       setStrategiesError(err instanceof Error ? err.message : 'Failed to load strategies');
     } finally {
       setIsStrategiesLoading(false);
     }
-  }, [user?.uid]);
+  }, [user?.email, user?.raw?.user_metadata?.avatar_url, user?.raw?.user_metadata?.display_name, user?.raw?.user_metadata?.name, user?.uid]);
 
   useEffect(() => {
     if (!isMarketplace || marketplaceTab !== 'my-strategies') return;
@@ -320,6 +355,7 @@ export default function OrionTab() {
               isCreatingStrategy={isCreatingStrategy}
               createError={createError}
               onCreate={handleCreateStrategy}
+              strategyAuthors={strategyAuthors}
             />
           ) : (
             <NotificationsScreen />

@@ -18,6 +18,7 @@ interface MarketplaceScreenProps {
   isCreatingStrategy: boolean;
   createError: string | null;
   onCreate: () => void;
+  strategyAuthors: Record<string, { displayName: string; avatarUrl: string | null }>;
 }
 
 function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'photo_url'> }) {
@@ -53,6 +54,7 @@ export default function MarketplaceScreen({
   isCreatingStrategy,
   createError,
   onCreate,
+  strategyAuthors,
 }: MarketplaceScreenProps) {
   const categories = [...new Set(MARKETPLACE_APPS.map((item) => item.category))];
   const isCreateScreen = tab === 'my-strategies' && myStrategiesScreen === 'create';
@@ -148,6 +150,22 @@ export default function MarketplaceScreen({
                           <div>
                             <h4 className="text-sm font-semibold text-white">{strategy.name}</h4>
                             <p className="line-clamp-2 text-xs text-zinc-400">{strategy.description || 'No description'}</p>
+                            <div className="mt-1 flex items-center gap-1.5">
+                              {strategyAuthors[strategy.id]?.avatarUrl ? (
+                                <img
+                                  src={strategyAuthors[strategy.id]?.avatarUrl ?? ''}
+                                  alt={strategyAuthors[strategy.id]?.displayName ?? 'User'}
+                                  className="h-4 w-4 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-zinc-700 text-[9px] text-zinc-300">
+                                  👤
+                                </div>
+                              )}
+                              <p className="truncate text-[11px] text-zinc-500">
+                                by {strategyAuthors[strategy.id]?.displayName ?? 'User'}
+                              </p>
+                            </div>
                           </div>
                         </div>
                         <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300">

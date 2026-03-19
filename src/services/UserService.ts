@@ -44,6 +44,35 @@ const PROFILE_SCHEMA: UserFieldMetadata[] = [
 ];
 
 class UserService {
+  async listPublicProfiles(ids: string[]): Promise<Array<{ id: string; displayName: string; avatarUrl: string | null }>> {
+    const uniqueIds = Array.from(new Set(ids.filter((item) => typeof item === "string" && item.length > 0)));
+    if (uniqueIds.length === 0) return [];
+
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc("list_public_user_profiles", { p_ids: uniqueIds });
+
+    if (!rpcError && Array.isArray(rpcData)) {
+      return rpcData.map((row) => ({
+        id: row.id as string,
+        displayName: typeof row.display_name === "string" && row.display_name.trim().length > 0 ? row.display_name : "User",
+        avatarUrl: typeof row.avatar_url === "string" ? row.avatar_url : null,
+      }));
+    }
+
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("id, display_name, avatar_url")
+      .in("id", uniqueIds);
+
+    if (error) throw error;
+
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      displayName: typeof row.display_name === "string" && row.display_name.trim().length > 0 ? row.display_name : "User",
+      avatarUrl: typeof row.avatar_url === "string" ? row.avatar_url : null,
+    }));
+  }
+
   async getUserProfile(uid: string): Promise<UserProfileResponse> {
     const { data, error } = await supabase
       .from("user_profiles")
