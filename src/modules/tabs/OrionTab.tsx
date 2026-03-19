@@ -930,6 +930,25 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     }
   }, [previewVersion, applyNodeMapToCanvas, strategyId]);
 
+  const handleActivatePreviewVersion = useCallback(async () => {
+    if (!previewVersion || previewVersion.is_active || isPublishingVersion) return;
+
+    setIsPublishingVersion(true);
+    setNodeVersionsError(null);
+    try {
+      await strategiesService.activateStrategyNodeVersion(strategyId, previewVersion.id);
+      setNodeVersions((prev) =>
+        prev.map((item) => ({ ...item, is_active: item.id === previewVersion.id }))
+      );
+      setPreviewVersion((prev) => (prev ? { ...prev, is_active: true } : prev));
+      setSaveStatus('saved');
+    } catch (error) {
+      setNodeVersionsError(error instanceof Error ? error.message : 'Failed to activate version');
+    } finally {
+      setIsPublishingVersion(false);
+    }
+  }, [previewVersion, isPublishingVersion, strategyId]);
+
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
       <div className="flex h-full flex-col overflow-hidden">
@@ -1029,13 +1048,15 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       </div>
 
       {isPreviewMode ? (
-        <button
-          type="button"
-          onClick={() => void handleEditPreviewAsDraft()}
-          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-[max(16px,env(safe-area-inset-left))] right-[max(16px,env(safe-area-inset-right))] z-[230] rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
-        >
-          Editar
-        </button>
+        <div className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-1/2 z-[230] -translate-x-1/2">
+          <button
+            type="button"
+            onClick={() => void handleEditPreviewAsDraft()}
+            className="rounded-full border border-zinc-600 bg-zinc-800/95 px-5 py-2 text-sm font-medium text-zinc-100 shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+          >
+            Editar
+          </button>
+        </div>
       ) : (
         <button
           type="button"
@@ -1208,18 +1229,27 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               <button
                 type="button"
                 onClick={async () => {
-                  if (isPreviewMode) return;
+                  if (isPreviewMode) {
+                    await handleActivatePreviewVersion();
+                    return;
+                  }
                   if (!isNodeVersionsLoading && nodeVersions.length === 0) {
                     await loadNodeVersions();
                   }
                   setVersionNameInput(getNextVersionDefaultName());
                   setIsVersionNameDialogOpen(true);
                 }}
-                disabled={isPublishingVersion || isPreviewMode}
+                disabled={isPublishingVersion || (isPreviewMode && Boolean(previewVersion?.is_active))}
                 className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
               >
                 <span className="text-sm font-medium text-zinc-100">Activar version</span>
-                <span className="text-xs text-zinc-400">{isPublishingVersion ? 'Publicando...' : 'Publicar y activar'}</span>
+                <span className="text-xs text-zinc-400">
+                  {isPublishingVersion
+                    ? 'Activando...'
+                    : isPreviewMode
+                      ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
+                      : 'Publicar y activar'}
+                </span>
               </button>
 
               <button
