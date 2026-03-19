@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
-import { BlockTitle, List, ListItem } from 'konsta/react';
+import { BlockTitle, List, ListItem, Toggle } from 'konsta/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addEdge,
@@ -476,18 +476,10 @@ function StrategyDetailView({
         <ListItem
           title="Live"
           after={(
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isLive}
-              onClick={() => setIsLive((prev) => !prev)}
-              className={`relative h-7 w-12 rounded-full transition-colors ${isLive ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-              aria-label="Toggle live mode"
-            >
-              <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${isLive ? 'translate-x-6' : 'translate-x-1'}`}
-              />
-            </button>
+            <Toggle
+              checked={isLive}
+              onChange={() => setIsLive((prev) => !prev)}
+            />
           )}
         />
       </List>
