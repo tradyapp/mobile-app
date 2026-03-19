@@ -524,7 +524,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               {saveError}
             </div>
           )}
-          <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+          <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
             <ReactFlow
               nodes={nodes}
               edges={edges}
