@@ -147,10 +147,9 @@ export default function MarketplaceScreen({
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <StrategyLogo strategy={strategy} />
-                          <div>
+                          <div className="min-w-0">
                             <h4 className="text-sm font-semibold text-white">{strategy.name}</h4>
-                            <p className="line-clamp-2 text-xs text-zinc-400">{strategy.description || 'No description'}</p>
-                            <div className="mt-1 flex items-center gap-1.5">
+                            <div className="mt-0.5 flex items-center gap-1.5">
                               {strategyAuthors[strategy.id]?.avatarUrl ? (
                                 <img
                                   src={strategyAuthors[strategy.id]?.avatarUrl ?? ''}
@@ -166,11 +165,10 @@ export default function MarketplaceScreen({
                                 by {strategyAuthors[strategy.id]?.displayName ?? 'User'}
                               </p>
                             </div>
+                            <p className="mt-1 line-clamp-2 text-xs text-zinc-400">{strategy.description || 'No description'}</p>
                           </div>
                         </div>
-                        <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                          Saved
-                        </span>
+                        <span className="text-lg leading-none text-zinc-500">›</span>
                       </div>
                     </button>
                   ))}
