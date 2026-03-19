@@ -614,9 +614,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [versionNameDraft, setVersionNameDraft] = useState('');
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
   const [isActivatingVersionId, setIsActivatingVersionId] = useState<string | null>(null);
+  const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const saveRequestIdRef = useRef(0);
+  const draftBeforePreviewRef = useRef<StrategyNodeMap | null>(null);
 
   const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
     const grouped = new Map<string, StrategyNodeTypeRecord[]>();
@@ -641,6 +643,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     () => nodeTypeGroups.find((group) => group.key === selectedNodeTypeCategoryKey) ?? null,
     [nodeTypeGroups, selectedNodeTypeCategoryKey]
   );
+  const activeNodeVersion = useMemo(
+    () => nodeVersions.find((version) => version.is_active) ?? null,
+    [nodeVersions]
+  );
+  const isPreviewMode = previewVersion !== null;
 
   const filteredSelectedCategoryItems = useMemo<StrategyNodeTypeRecord[]>(() => {
     if (!selectedNodeTypeCategory) return [];
@@ -654,6 +661,12 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       return name.includes(query) || key.includes(query);
     });
   }, [selectedNodeTypeCategory, nodeTypeSearch]);
+
+  const getCurrentNodeMap = useCallback((): StrategyNodeMap => ({
+    version: 1,
+    nodes: nodes as unknown[],
+    edges: edges as unknown[],
+  }), [nodes, edges]);
 
   const applyNodeMapToCanvas = useCallback((nodeMap: StrategyNodeMap) => {
     const nextNodes = (nodeMap.nodes ?? []) as RFNode[];
@@ -700,6 +713,8 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       setNodeMapError(null);
       setSaveError(null);
       setSaveStatus('idle');
+      setPreviewVersion(null);
+      draftBeforePreviewRef.current = null;
 
       try {
         const payload = await strategiesService.getStrategyNodeMap(strategyId);
@@ -733,12 +748,9 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
 
   useEffect(() => {
     if (!hasHydratedNodeMapRef.current) return;
+    if (isPreviewMode) return;
 
-    const payload: StrategyNodeMap = {
-      version: 1,
-      nodes: nodes as unknown[],
-      edges: edges as unknown[],
-    };
+    const payload = getCurrentNodeMap();
     const serialized = JSON.stringify(payload);
     if (serialized === lastSavedNodeMapRef.current) return;
 
@@ -764,7 +776,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [strategyId, nodes, edges]);
+  }, [strategyId, nodes, edges, isPreviewMode, getCurrentNodeMap]);
 
   useEffect(() => {
     if (!selectedNodeTypeCategoryKey) return;
@@ -831,12 +843,14 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   }, [isSettingsDrawerOpen, loadNodeVersions]);
 
   const handlePublishVersion = useCallback(async () => {
-    if (isPublishingVersion) return;
+    if (isPublishingVersion || isPreviewMode) return;
     setIsPublishingVersion(true);
     setNodeVersionsError(null);
 
     try {
-      await handleSaveNodeMap();
+      const draftPayload = getCurrentNodeMap();
+      await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
+      lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
       const created = await strategiesService.createStrategyNodeVersion(strategyId, versionNameDraft, true);
       setVersionNameDraft('');
       setNodeVersions((prev) => {
@@ -849,7 +863,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     } finally {
       setIsPublishingVersion(false);
     }
-  }, [isPublishingVersion, handleSaveNodeMap, strategyId, versionNameDraft]);
+  }, [isPublishingVersion, isPreviewMode, getCurrentNodeMap, strategyId, versionNameDraft]);
 
   const handleActivateVersion = useCallback(async (version: StrategyNodeVersionRecord) => {
     if (isActivatingVersionId) return;
@@ -875,20 +889,21 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const handleLoadVersionDraft = useCallback((version: StrategyNodeVersionRecord) => {
     if (!version.node_map) return;
     applyNodeMapToCanvas(version.node_map);
+    setPreviewVersion(null);
+    draftBeforePreviewRef.current = null;
     setSaveStatus('idle');
+    setSaveError(null);
+    lastSavedNodeMapRef.current = '';
   }, [applyNodeMapToCanvas]);
 
   const handleSaveNodeMap = useCallback(async () => {
+    if (isPreviewMode) return;
     const requestId = saveRequestIdRef.current + 1;
     saveRequestIdRef.current = requestId;
     setSaveStatus('saving');
     setSaveError(null);
 
-    const payload: StrategyNodeMap = {
-      version: 1,
-      nodes: nodes as unknown[],
-      edges: edges as unknown[],
-    };
+    const payload = getCurrentNodeMap();
     const serialized = JSON.stringify(payload);
 
     try {
@@ -901,7 +916,30 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       setSaveStatus('error');
       setSaveError(error instanceof Error ? error.message : 'Failed to save node map');
     }
-  }, [strategyId, nodes, edges]);
+  }, [strategyId, getCurrentNodeMap, isPreviewMode]);
+
+  const handleEnterPreviewVersion = useCallback((version: StrategyNodeVersionRecord) => {
+    if (!version.node_map) return;
+    if (!isPreviewMode) {
+      draftBeforePreviewRef.current = getCurrentNodeMap();
+    }
+    applyNodeMapToCanvas(version.node_map);
+    setPreviewVersion(version);
+    setSaveStatus('idle');
+    setSaveError(null);
+  }, [isPreviewMode, getCurrentNodeMap, applyNodeMapToCanvas]);
+
+  const handleExitPreview = useCallback(() => {
+    if (!isPreviewMode) return;
+    const draft = draftBeforePreviewRef.current;
+    if (draft) {
+      applyNodeMapToCanvas(draft);
+    }
+    setPreviewVersion(null);
+    draftBeforePreviewRef.current = null;
+    setSaveStatus('idle');
+    setSaveError(null);
+  }, [isPreviewMode, applyNodeMapToCanvas]);
 
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
@@ -921,7 +959,17 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
             <p className="text-xs text-zinc-500">
-              {isNodeMapLoading ? 'Loading map...' : saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Save error' : 'Nodes Editor'}
+              {isNodeMapLoading
+                ? 'Loading map...'
+                : isPreviewMode
+                  ? `Preview · v${previewVersion.version_number} ${previewVersion.name}`
+                  : saveStatus === 'saving'
+                    ? `Draft · Saving...${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                    : saveStatus === 'saved'
+                      ? `Draft · Saved${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                      : saveStatus === 'error'
+                        ? 'Draft · Save error'
+                        : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`}
             </p>
           </div>
           <div className="ml-auto">
@@ -954,10 +1002,14 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
             <ReactFlow
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onNodesChange={isPreviewMode ? undefined : onNodesChange}
+              onEdgesChange={isPreviewMode ? undefined : onEdgesChange}
+              onConnect={isPreviewMode ? undefined : onConnect}
               nodeTypes={nodeTypes}
+              nodesDraggable={!isPreviewMode}
+              nodesConnectable={!isPreviewMode}
+              elementsSelectable={!isPreviewMode}
+              edgesUpdatable={!isPreviewMode}
               proOptions={{ hideAttribution: true }}
               fitView
             >
@@ -987,11 +1039,13 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       <button
         type="button"
         onClick={() => {
+          if (isPreviewMode) return;
           setNodeTypeSearch('');
           setSelectedNodeTypeCategoryKey(null);
           setIsNodeTypesDrawerOpen(true);
         }}
-        className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+        disabled={isPreviewMode}
+        className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)] disabled:opacity-50"
         aria-label="Add node"
       >
         +
@@ -1143,11 +1197,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
             <button
               type="button"
               onClick={() => void handleSaveNodeMap()}
-              disabled={saveStatus === 'saving'}
+              disabled={saveStatus === 'saving' || isPreviewMode}
               className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
             >
               <span className="text-sm font-medium text-zinc-100">Guardar</span>
-              <span className="text-xs text-zinc-400">{saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
+              <span className="text-xs text-zinc-400">{isPreviewMode ? 'Disabled in preview' : saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
             </button>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
@@ -1163,13 +1217,22 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                 <button
                   type="button"
                   onClick={() => void handlePublishVersion()}
-                  disabled={isPublishingVersion}
+                  disabled={isPublishingVersion || isPreviewMode}
                   className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
                 >
                   {isPublishingVersion ? 'Publicando...' : 'Activar'}
                 </button>
               </div>
             </div>
+            {isPreviewMode && (
+              <button
+                type="button"
+                onClick={handleExitPreview}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm font-medium text-zinc-200"
+              >
+                Salir Preview
+              </button>
+            )}
           </div>
 
           <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
@@ -1208,10 +1271,17 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
+                        onClick={() => handleEnterPreviewVersion(version)}
+                        className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
+                      >
+                        Ver
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleLoadVersionDraft(version)}
                         className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
                       >
-                        Cargar Draft
+                        Editar desde esta versión
                       </button>
                       {!version.is_active && (
                         <button
