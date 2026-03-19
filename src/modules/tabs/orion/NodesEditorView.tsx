@@ -575,7 +575,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
             setSelectedNodeTypeCategoryKey(null);
             setIsNodeTypesDrawerOpen(true);
           }}
-          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+          className="absolute bottom-[max(28px,env(safe-area-inset-bottom))] right-[max(28px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
           aria-label="Add node"
         >
           +
