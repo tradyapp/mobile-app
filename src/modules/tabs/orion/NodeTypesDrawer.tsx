@@ -124,7 +124,7 @@ export default function NodeTypesDrawer({
         ) : (
           <div className="space-y-4">
             <div className="overflow-x-auto pb-1">
-              <div className="inline-flex min-w-full gap-2 rounded-2xl bg-zinc-900/80 p-1">
+              <div className="inline-flex min-w-full gap-2 rounded-2xl bg-transparent p-1">
                 {categories.map((category) => {
                   const isActive = activeCategoryKey === category.key;
                   return (
@@ -146,7 +146,7 @@ export default function NodeTypesDrawer({
                 No node types in this category.
               </div>
             ) : (
-              <div className={`grid gap-3 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2'}`}>
+              <div className={`grid gap-4 ${isLandscape ? 'grid-cols-4' : 'grid-cols-2'}`}>
                 {visibleNodeTypes.map((item) => (
                   <NodeTypeCard
                     key={`${item.key}-${item.id}`}
