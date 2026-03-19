@@ -35,6 +35,7 @@ export default function OrionTab() {
   const [createDraft, setCreateDraft] = useState<StrategyDraft>(createEmptyDraft);
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [activeVersionLabel, setActiveVersionLabel] = useState<string | null>(null);
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
   const orionRouteKey = useMemo(() => location.pathname, [location.pathname]);
@@ -74,6 +75,35 @@ export default function OrionTab() {
   );
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
+
+  useEffect(() => {
+    if (!isStrategyDetailView || !selectedStrategyId) {
+      setActiveVersionLabel(null);
+      return;
+    }
+
+    let active = true;
+    const loadActiveVersion = async () => {
+      try {
+        const versions = await strategiesService.listStrategyNodeVersions(selectedStrategyId);
+        if (!active) return;
+        const activeVersion = versions.find((item) => item.is_active) ?? null;
+        setActiveVersionLabel(
+          activeVersion
+            ? `v${activeVersion.version_number} · ${activeVersion.name}`
+            : 'Sin versión activa'
+        );
+      } catch {
+        if (!active) return;
+        setActiveVersionLabel('Sin versión activa');
+      }
+    };
+
+    void loadActiveVersion();
+    return () => {
+      active = false;
+    };
+  }, [isStrategyDetailView, selectedStrategyId]);
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
     navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}`);
@@ -162,6 +192,7 @@ export default function OrionTab() {
             <StrategyDetailView
               strategy={selectedStrategy}
               onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
+              activeVersionLabel={activeVersionLabel}
             />
           ) : isMarketplace ? (
             <MarketplaceScreen

@@ -7,9 +7,10 @@ import { type StrategyRecord } from '@/services/StrategiesService';
 interface StrategyDetailViewProps {
   strategy: StrategyRecord;
   onOpenNodes: () => void;
+  activeVersionLabel: string | null;
 }
 
-export default function StrategyDetailView({ strategy, onOpenNodes }: StrategyDetailViewProps) {
+export default function StrategyDetailView({ strategy, onOpenNodes, activeVersionLabel }: StrategyDetailViewProps) {
   const [isLive, setIsLive] = useState(false);
   const initials = strategy.name
     .split(' ')
@@ -33,7 +34,13 @@ export default function StrategyDetailView({ strategy, onOpenNodes }: StrategyDe
           </div>
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-zinc-100">{strategy.name}</p>
-            <p className="text-sm text-zinc-500">Strategy workspace</p>
+            <p className="truncate text-sm text-zinc-500">{activeVersionLabel ?? 'Sin versión activa'}</p>
+          </div>
+          <div className="ml-auto">
+            <Toggle
+              checked={isLive}
+              onChange={() => setIsLive((prev) => !prev)}
+            />
           </div>
         </div>
       </div>
@@ -55,14 +62,6 @@ export default function StrategyDetailView({ strategy, onOpenNodes }: StrategyDe
           <span>Back Testing</span>
           <span className="text-lg leading-none text-zinc-500">›</span>
         </button>
-        <div className="border-t border-zinc-800" />
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-sm font-medium text-zinc-100">Live</span>
-          <Toggle
-            checked={isLive}
-            onChange={() => setIsLive((prev) => !prev)}
-          />
-        </div>
       </div>
     </div>
   );
