@@ -41,6 +41,14 @@ interface NodesViewProps {
 }
 
 function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
+  const areSameIds = (prev: string[], next: string[]) => {
+    if (prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i += 1) {
+      if (prev[i] !== next[i]) return false;
+    }
+    return true;
+  };
+
   const safeHorizontalInsetStyle = {
     paddingLeft: 'max(16px, env(safe-area-inset-left))',
     paddingRight: 'max(16px, env(safe-area-inset-right))',
@@ -186,6 +194,17 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
   }, [setEdges]);
+
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: RFNode[]; edges: RFEdge[] }) => {
+      const nextNodeIds = selectedNodes.map((node) => node.id);
+      const nextEdgeIds = selectedEdges.map((edge) => edge.id);
+
+      setSelectedNodeIds((prev) => (areSameIds(prev, nextNodeIds) ? prev : nextNodeIds));
+      setSelectedEdgeIds((prev) => (areSameIds(prev, nextEdgeIds) ? prev : nextEdgeIds));
+    },
+    []
+  );
 
   const loadNodeTypes = useCallback(async () => {
     setIsNodeTypesLoading(true);
@@ -539,10 +558,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               onSelectionChange={
                 isPreviewMode
                   ? undefined
-                  : ({ nodes: selectedNodes, edges: selectedEdges }) => {
-                    setSelectedNodeIds(selectedNodes.map((node) => node.id));
-                    setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
-                  }
+                  : handleSelectionChange
               }
               proOptions={{ hideAttribution: true }}
               fitView
