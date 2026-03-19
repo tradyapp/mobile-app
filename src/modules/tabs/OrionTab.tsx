@@ -134,6 +134,22 @@ export default function OrionTab() {
               </button>
             )
           }
+          right={
+            isMarketplace ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateDraft(createEmptyDraft());
+                  setCreateError(null);
+                  navigate('/orion/marketplace/my-strategies/create');
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-2xl text-zinc-100"
+                aria-label="Create strategy"
+              >
+                +
+              </button>
+            ) : undefined
+          }
         />
       )}
 

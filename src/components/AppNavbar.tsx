@@ -7,6 +7,7 @@ import ProfileDrawer from '../modules/ProfileDrawer';
 interface AppNavbarProps {
   title?: string;
   left?: ReactNode;
+  right?: ReactNode | null;
   titlePosition?: 'center' | 'left';
 }
 
@@ -55,30 +56,35 @@ function FloatingTitle({ text }: { text: string }) {
   );
 }
 
-export default function AppNavbar({ title, left }: AppNavbarProps) {
+export default function AppNavbar({ title, left, right }: AppNavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const resolvedRight = right === undefined
+    ? (
+      <button onClick={() => setIsProfileOpen(true)}>
+        <img
+          src="/img/default-user.jpg"
+          alt="User"
+          className="w-10 h-10 rounded-full"
+        />
+      </button>
+    )
+    : right;
 
   return (
     <>
       <Navbar
         left={left}
-        right={
-          <button onClick={() => setIsProfileOpen(true)}>
-            <img
-              src="/img/default-user.jpg"
-              alt="User"
-              className="w-10 h-10 rounded-full"
-            />
-          </button>
-        }
+        right={resolvedRight}
       />
 
       {title && <FloatingTitle text={title} />}
 
-      <ProfileDrawer
-        isOpen={isProfileOpen}
-        onOpenChange={setIsProfileOpen}
-      />
+      {right === undefined && (
+        <ProfileDrawer
+          isOpen={isProfileOpen}
+          onOpenChange={setIsProfileOpen}
+        />
+      )}
     </>
   );
 }

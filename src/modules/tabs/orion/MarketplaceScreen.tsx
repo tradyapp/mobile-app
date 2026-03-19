@@ -118,17 +118,6 @@ export default function MarketplaceScreen({
         <>
           {myStrategiesScreen === 'list' && (
             <div className="mt-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-zinc-300">Installed Strategies</h3>
-                <button
-                  type="button"
-                  onClick={() => onChangeMyStrategiesScreen('create')}
-                  className="rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-zinc-900"
-                >
-                  Create Strategy
-                </button>
-              </div>
-
               {isLoadingStrategies ? (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
                   Loading strategies...
@@ -139,7 +128,7 @@ export default function MarketplaceScreen({
                 </div>
               ) : strategies.length === 0 ? (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
-                  You have no strategies yet. Tap <span className="font-medium text-zinc-200">Create Strategy</span> to add your first one.
+                  You have no strategies yet. Tap <span className="font-medium text-zinc-200">+</span> to add your first one.
                 </div>
               ) : (
                 <div className="space-y-3">
