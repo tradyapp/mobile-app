@@ -3,6 +3,7 @@
 import { BlockTitle, List, ListItem, Toggle } from 'konsta/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   addEdge,
   Background,
@@ -296,6 +297,78 @@ function StrategyLogo({ strategy }: { strategy: Pick<StrategyRecord, 'name' | 'p
 
 type MarketplaceTab = 'explore' | 'my-strategies';
 type MyStrategiesScreen = 'list' | 'create' | 'detail' | 'nodes';
+
+function parseOrionRoute(pathname: string): {
+  view: 'notifications' | 'marketplace';
+  marketplaceTab: MarketplaceTab;
+  myStrategiesScreen: MyStrategiesScreen;
+  selectedStrategyId: string | null;
+} {
+  const normalized = pathname.replace(/\/+$/, '');
+
+  if (normalized === '/orion' || normalized === '') {
+    return {
+      view: 'notifications',
+      marketplaceTab: 'explore',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'explore',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace/my-strategies') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'list',
+      selectedStrategyId: null,
+    };
+  }
+
+  if (normalized === '/orion/marketplace/my-strategies/create') {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'create',
+      selectedStrategyId: null,
+    };
+  }
+
+  const nodesMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes$/);
+  if (nodesMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'nodes',
+      selectedStrategyId: decodeURIComponent(nodesMatch[1]),
+    };
+  }
+
+  const detailMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)$/);
+  if (detailMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'detail',
+      selectedStrategyId: decodeURIComponent(detailMatch[1]),
+    };
+  }
+
+  return {
+    view: 'notifications',
+    marketplaceTab: 'explore',
+    myStrategiesScreen: 'list',
+    selectedStrategyId: null,
+  };
+}
 
 interface StrategyFormScreenProps {
   title: string;
@@ -1534,21 +1607,25 @@ function MarketplaceScreen({
 
 export default function OrionTab() {
   const user = useAuthStore((state) => state.user);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [view, setView] = useState<'notifications' | 'marketplace'>('notifications');
-  const [marketplaceTab, setMarketplaceTab] = useState<MarketplaceTab>('explore');
-  const [myStrategiesScreen, setMyStrategiesScreen] = useState<MyStrategiesScreen>('list');
 
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
   const [isStrategiesLoading, setIsStrategiesLoading] = useState(false);
   const [strategiesError, setStrategiesError] = useState<string | null>(null);
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
 
   const [createDraft, setCreateDraft] = useState<StrategyDraft>(createEmptyDraft);
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
+  const view = routeState.view;
+  const marketplaceTab = routeState.marketplaceTab;
+  const myStrategiesScreen = routeState.myStrategiesScreen;
+  const selectedStrategyId = routeState.selectedStrategyId;
 
   const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
   const isMarketplace = view === 'marketplace';
@@ -1590,8 +1667,7 @@ export default function OrionTab() {
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
-    setSelectedStrategyId(strategy.id);
-    setMyStrategiesScreen('detail');
+    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}`);
   };
 
   const handleCreateStrategy = async () => {
@@ -1607,7 +1683,7 @@ export default function OrionTab() {
       });
       setStrategies((prev) => [created, ...prev]);
       setCreateDraft(createEmptyDraft());
-      setMyStrategiesScreen('list');
+      navigate('/orion/marketplace/my-strategies');
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create strategy');
     } finally {
@@ -1625,8 +1701,7 @@ export default function OrionTab() {
               <button
                 type="button"
                 onClick={() => {
-                  setMyStrategiesScreen('list');
-                  setSelectedStrategyId(null);
+                  navigate('/orion/marketplace/my-strategies');
                 }}
                 className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
                 aria-label="Close strategy view"
@@ -1637,10 +1712,7 @@ export default function OrionTab() {
               <button
                 type="button"
                 onClick={() => {
-                  setView('notifications');
-                  setMarketplaceTab('explore');
-                  setMyStrategiesScreen('list');
-                  setSelectedStrategyId(null);
+                  navigate('/orion');
                   setCreateDraft(createEmptyDraft());
                   setCreateError(null);
                 }}
@@ -1652,7 +1724,7 @@ export default function OrionTab() {
             ) : (
               <button
                 type="button"
-                onClick={() => setView('marketplace')}
+                onClick={() => navigate('/orion/marketplace')}
                 className="text-2xl w-10 h-10 flex items-center justify-center text-zinc-200"
                 aria-label="Open Orion marketplace"
               >
@@ -1667,30 +1739,27 @@ export default function OrionTab() {
         <NodesView
           strategyId={selectedStrategy.id}
           strategyName={selectedStrategy.name}
-          onClose={() => setMyStrategiesScreen('detail')}
+          onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}`)}
         />
       ) : isStrategyDetailView && selectedStrategy ? (
         <StrategyDetailView
           strategy={selectedStrategy}
-          onOpenNodes={() => setMyStrategiesScreen('nodes')}
+          onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
         />
       ) : isMarketplace ? (
         <MarketplaceScreen
           tab={marketplaceTab}
           myStrategiesScreen={myStrategiesScreen === 'detail' || myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
           onChangeTab={(tab) => {
-            setMarketplaceTab(tab);
-            if (tab === 'my-strategies') setMyStrategiesScreen('list');
+            navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
           }}
           onChangeMyStrategiesScreen={(screen) => {
-            setMyStrategiesScreen(screen);
             if (screen === 'create') {
               setCreateDraft(createEmptyDraft());
               setCreateError(null);
+              navigate('/orion/marketplace/my-strategies/create');
             }
-            if (screen === 'list') {
-              setSelectedStrategyId(null);
-            }
+            if (screen === 'list') navigate('/orion/marketplace/my-strategies');
           }}
           strategies={strategies}
           isLoadingStrategies={isStrategiesLoading}

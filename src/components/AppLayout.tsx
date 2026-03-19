@@ -49,7 +49,7 @@ const AppLayout = () => {
           >
             <Routes>
               {tabs.map((tab) => (
-                <Route key={tab.id} path={tab.path} element={<tab.component />} />
+                <Route key={tab.id} path={`${tab.path}/*`} element={<tab.component />} />
               ))}
               <Route path="/" element={<Navigate to="/orion" replace />} />
               <Route path="*" element={<Navigate to="/orion" replace />} />
