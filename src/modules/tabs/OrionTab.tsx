@@ -22,7 +22,7 @@ import AppNavbar from '@/components/AppNavbar';
 import CogIcon from '@/components/icons/CogIcon';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
-import { strategiesService, type StrategyNodeMap, type StrategyRecord } from '@/services/StrategiesService';
+import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Notification {
@@ -608,7 +608,12 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [nodeMapError, setNodeMapError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isStrategyActive, setIsStrategyActive] = useState(false);
+  const [nodeVersions, setNodeVersions] = useState<StrategyNodeVersionRecord[]>([]);
+  const [isNodeVersionsLoading, setIsNodeVersionsLoading] = useState(false);
+  const [nodeVersionsError, setNodeVersionsError] = useState<string | null>(null);
+  const [versionNameDraft, setVersionNameDraft] = useState('');
+  const [isPublishingVersion, setIsPublishingVersion] = useState(false);
+  const [isActivatingVersionId, setIsActivatingVersionId] = useState<string | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const saveRequestIdRef = useRef(0);
@@ -650,6 +655,22 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     });
   }, [selectedNodeTypeCategory, nodeTypeSearch]);
 
+  const applyNodeMapToCanvas = useCallback((nodeMap: StrategyNodeMap) => {
+    const nextNodes = (nodeMap.nodes ?? []) as RFNode[];
+    const nextEdges = (nodeMap.edges ?? []) as RFEdge[];
+
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+
+    const maxNodeIndex = nextNodes.reduce((max, node) => {
+      const match = /^node-(\d+)$/.exec(node.id);
+      if (!match) return max;
+      const value = Number(match[1]);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+    nodeCounterRef.current = maxNodeIndex + 1;
+  }, [setEdges, setNodes]);
+
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
   }, [setEdges]);
@@ -684,23 +705,13 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         const payload = await strategiesService.getStrategyNodeMap(strategyId);
         if (!active) return;
 
-        const nextNodes = (payload?.nodes ?? []) as RFNode[];
-        const nextEdges = (payload?.edges ?? []) as RFEdge[];
-        setNodes(nextNodes);
-        setEdges(nextEdges);
-
-        const maxNodeIndex = nextNodes.reduce((max, node) => {
-          const match = /^node-(\d+)$/.exec(node.id);
-          if (!match) return max;
-          const value = Number(match[1]);
-          return Number.isFinite(value) ? Math.max(max, value) : max;
-        }, 0);
-        nodeCounterRef.current = maxNodeIndex + 1;
+        const normalized = payload ?? { version: 1, nodes: [], edges: [] };
+        applyNodeMapToCanvas(normalized);
 
         const serialized = JSON.stringify({
-          version: payload?.version ?? 1,
-          nodes: nextNodes,
-          edges: nextEdges,
+          version: normalized.version,
+          nodes: normalized.nodes,
+          edges: normalized.edges,
         } satisfies StrategyNodeMap);
         lastSavedNodeMapRef.current = serialized;
         hasHydratedNodeMapRef.current = true;
@@ -718,7 +729,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     return () => {
       active = false;
     };
-  }, [strategyId, setEdges, setNodes]);
+  }, [strategyId, applyNodeMapToCanvas]);
 
   useEffect(() => {
     if (!hasHydratedNodeMapRef.current) return;
@@ -800,6 +811,72 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const handleSettingsDrawerOpenChange = useCallback((open: boolean) => {
     setIsSettingsDrawerOpen(open);
   }, []);
+
+  const loadNodeVersions = useCallback(async () => {
+    setIsNodeVersionsLoading(true);
+    setNodeVersionsError(null);
+    try {
+      const rows = await strategiesService.listStrategyNodeVersions(strategyId);
+      setNodeVersions(rows);
+    } catch (error) {
+      setNodeVersionsError(error instanceof Error ? error.message : 'Failed to load versions');
+    } finally {
+      setIsNodeVersionsLoading(false);
+    }
+  }, [strategyId]);
+
+  useEffect(() => {
+    if (!isSettingsDrawerOpen) return;
+    void loadNodeVersions();
+  }, [isSettingsDrawerOpen, loadNodeVersions]);
+
+  const handlePublishVersion = useCallback(async () => {
+    if (isPublishingVersion) return;
+    setIsPublishingVersion(true);
+    setNodeVersionsError(null);
+
+    try {
+      await handleSaveNodeMap();
+      const created = await strategiesService.createStrategyNodeVersion(strategyId, versionNameDraft, true);
+      setVersionNameDraft('');
+      setNodeVersions((prev) => {
+        const next = prev.map((item) => ({ ...item, is_active: false }));
+        const withoutSame = next.filter((item) => item.id !== created.id);
+        return [created, ...withoutSame].sort((a, b) => b.version_number - a.version_number);
+      });
+    } catch (error) {
+      setNodeVersionsError(error instanceof Error ? error.message : 'Failed to publish version');
+    } finally {
+      setIsPublishingVersion(false);
+    }
+  }, [isPublishingVersion, handleSaveNodeMap, strategyId, versionNameDraft]);
+
+  const handleActivateVersion = useCallback(async (version: StrategyNodeVersionRecord) => {
+    if (isActivatingVersionId) return;
+    setIsActivatingVersionId(version.id);
+    setNodeVersionsError(null);
+
+    try {
+      await strategiesService.activateStrategyNodeVersion(strategyId, version.id);
+      const nextMap = version.node_map ?? { version: 1, nodes: [], edges: [] };
+      applyNodeMapToCanvas(nextMap);
+      lastSavedNodeMapRef.current = JSON.stringify(nextMap);
+      setSaveStatus('saved');
+      setNodeVersions((prev) =>
+        prev.map((item) => ({ ...item, is_active: item.id === version.id }))
+      );
+    } catch (error) {
+      setNodeVersionsError(error instanceof Error ? error.message : 'Failed to activate version');
+    } finally {
+      setIsActivatingVersionId(null);
+    }
+  }, [isActivatingVersionId, strategyId, applyNodeMapToCanvas]);
+
+  const handleLoadVersionDraft = useCallback((version: StrategyNodeVersionRecord) => {
+    if (!version.node_map) return;
+    applyNodeMapToCanvas(version.node_map);
+    setSaveStatus('idle');
+  }, [applyNodeMapToCanvas]);
 
   const handleSaveNodeMap = useCallback(async () => {
     const requestId = saveRequestIdRef.current + 1;
@@ -1073,17 +1150,91 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               <span className="text-xs text-zinc-400">{saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsStrategyActive((prev) => !prev)}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-            >
-              <span className="text-sm font-medium text-zinc-100">{isStrategyActive ? 'Desactivar' : 'Activar'}</span>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isStrategyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
-                {isStrategyActive ? 'Activo' : 'Inactivo'}
-              </span>
-            </button>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Publicar Draft</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={versionNameDraft}
+                  onChange={(event) => setVersionNameDraft(event.target.value)}
+                  placeholder="Nombre de versión (opcional)"
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handlePublishVersion()}
+                  disabled={isPublishingVersion}
+                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+                >
+                  {isPublishingVersion ? 'Publicando...' : 'Activar'}
+                </button>
+              </div>
+            </div>
           </div>
+
+          <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Versiones</p>
+              <button
+                type="button"
+                onClick={() => void loadNodeVersions()}
+                className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] text-zinc-300"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {isNodeVersionsLoading ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm text-zinc-400">
+                Loading versions...
+              </div>
+            ) : nodeVersions.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm text-zinc-400">
+                No published versions yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {nodeVersions.map((version) => (
+                  <div key={version.id} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-100">v{version.version_number} · {version.name}</p>
+                        <p className="truncate text-[11px] text-zinc-500">{new Date(version.created_at).toLocaleString('en-US')}</p>
+                      </div>
+                      {version.is_active && (
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300">Active</span>
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadVersionDraft(version)}
+                        className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
+                      >
+                        Cargar Draft
+                      </button>
+                      {!version.is_active && (
+                        <button
+                          type="button"
+                          onClick={() => void handleActivateVersion(version)}
+                          disabled={isActivatingVersionId === version.id}
+                          className="rounded-md bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-zinc-950 disabled:opacity-50"
+                        >
+                          {isActivatingVersionId === version.id ? 'Activando...' : 'Activar'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {nodeVersionsError && (
+            <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+              {nodeVersionsError}
+            </div>
+          )}
         </div>
       </AppDrawer>
     </div>

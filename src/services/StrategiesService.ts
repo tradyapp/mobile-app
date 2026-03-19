@@ -23,6 +23,17 @@ export interface StrategyNodeMap {
   edges: unknown[];
 }
 
+export interface StrategyNodeVersionRecord {
+  id: string;
+  strategy_id: string;
+  name: string;
+  version_number: number;
+  is_active: boolean;
+  node_map: StrategyNodeMap | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -38,6 +49,8 @@ interface UpdateStrategyInput {
 class StrategiesService {
   private hasPhotoUrlColumn: boolean | null = null;
   private hasNodeMapColumn: boolean | null = null;
+  private hasNodeVersionsTable: boolean | null = null;
+  private hasNodeVersionRpc: boolean | null = null;
 
   private async getAuthToken(): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -106,6 +119,27 @@ class StrategiesService {
     );
   }
 
+  private isMissingNodeVersionsTable(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    if (!msg.includes("strategy_node_versions")) return false;
+    return (
+      msg.includes("relation") ||
+      msg.includes("does not exist") ||
+      msg.includes("schema cache")
+    );
+  }
+
+  private isMissingRpcFunction(error: unknown, functionName: string): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    return msg.includes(functionName.toLowerCase()) && (
+      msg.includes("function") ||
+      msg.includes("does not exist") ||
+      msg.includes("schema cache")
+    );
+  }
+
   private normalizeRow(row: Partial<StrategyRecord>): StrategyRecord {
     return {
       id: row.id ?? "",
@@ -113,6 +147,30 @@ class StrategiesService {
       name: row.name ?? "",
       description: row.description ?? null,
       photo_url: row.photo_url ?? null,
+      created_at: row.created_at ?? "",
+      updated_at: row.updated_at ?? "",
+    };
+  }
+
+  private normalizeNodeMap(row: unknown): StrategyNodeMap | null {
+    if (!row || typeof row !== "object") return null;
+    const payload = row as Partial<StrategyNodeMap>;
+    if (!Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) return null;
+    return {
+      version: typeof payload.version === "number" ? payload.version : 1,
+      nodes: payload.nodes,
+      edges: payload.edges,
+    };
+  }
+
+  private normalizeNodeVersionRow(row: Partial<StrategyNodeVersionRecord>): StrategyNodeVersionRecord {
+    return {
+      id: row.id ?? "",
+      strategy_id: row.strategy_id ?? "",
+      name: row.name ?? "",
+      version_number: row.version_number ?? 0,
+      is_active: row.is_active ?? false,
+      node_map: this.normalizeNodeMap(row.node_map) ?? null,
       created_at: row.created_at ?? "",
       updated_at: row.updated_at ?? "",
     };
@@ -249,17 +307,11 @@ class StrategiesService {
       );
 
       const raw = rows[0]?.node_map;
-      if (!raw || typeof raw !== "object") return null;
-
-      const payload = raw as Partial<StrategyNodeMap>;
-      if (!Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) return null;
+      const normalized = this.normalizeNodeMap(raw);
+      if (!normalized) return null;
 
       if (this.hasNodeMapColumn === null) this.hasNodeMapColumn = true;
-      return {
-        version: typeof payload.version === "number" ? payload.version : 1,
-        nodes: payload.nodes,
-        edges: payload.edges,
-      };
+      return normalized;
     } catch (error) {
       if (this.isMissingNodeMapColumn(error)) {
         this.hasNodeMapColumn = false;
@@ -285,6 +337,74 @@ class StrategiesService {
       if (this.isMissingNodeMapColumn(error)) {
         this.hasNodeMapColumn = false;
         throw new Error("Missing node_map column. Run backend migration first.");
+      }
+      throw error;
+    }
+  }
+
+  async listStrategyNodeVersions(strategyId: string): Promise<StrategyNodeVersionRecord[]> {
+    if (this.hasNodeVersionsTable === false) return [];
+
+    try {
+      const rows = await this.request<Partial<StrategyNodeVersionRecord>[]>(
+        `/strategy_node_versions?select=id,strategy_id,name,version_number,is_active,node_map,created_at,updated_at&strategy_id=eq.${encodeURIComponent(strategyId)}&order=version_number.desc`,
+        { method: "GET" }
+      );
+      if (this.hasNodeVersionsTable === null) this.hasNodeVersionsTable = true;
+      return rows.map((row) => this.normalizeNodeVersionRow(row));
+    } catch (error) {
+      if (this.isMissingNodeVersionsTable(error)) {
+        this.hasNodeVersionsTable = false;
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async createStrategyNodeVersion(strategyId: string, name?: string, activate = true): Promise<StrategyNodeVersionRecord> {
+    if (this.hasNodeVersionRpc === false) {
+      throw new Error("Missing versioning RPC functions. Run backend migration first.");
+    }
+
+    try {
+      const row = await this.request<Partial<StrategyNodeVersionRecord>>("/rpc/create_strategy_node_version", {
+        method: "POST",
+        body: JSON.stringify({
+          p_strategy_id: strategyId,
+          p_name: name?.trim() ? name.trim() : null,
+          p_activate: activate,
+        }),
+      });
+      if (this.hasNodeVersionRpc === null) this.hasNodeVersionRpc = true;
+      return this.normalizeNodeVersionRow(row);
+    } catch (error) {
+      if (this.isMissingRpcFunction(error, "create_strategy_node_version")) {
+        this.hasNodeVersionRpc = false;
+        throw new Error("Missing versioning RPC functions. Run backend migration first.");
+      }
+      throw error;
+    }
+  }
+
+  async activateStrategyNodeVersion(strategyId: string, versionId: string): Promise<StrategyNodeVersionRecord> {
+    if (this.hasNodeVersionRpc === false) {
+      throw new Error("Missing versioning RPC functions. Run backend migration first.");
+    }
+
+    try {
+      const row = await this.request<Partial<StrategyNodeVersionRecord>>("/rpc/activate_strategy_node_version", {
+        method: "POST",
+        body: JSON.stringify({
+          p_strategy_id: strategyId,
+          p_version_id: versionId,
+        }),
+      });
+      if (this.hasNodeVersionRpc === null) this.hasNodeVersionRpc = true;
+      return this.normalizeNodeVersionRow(row);
+    } catch (error) {
+      if (this.isMissingRpcFunction(error, "activate_strategy_node_version")) {
+        this.hasNodeVersionRpc = false;
+        throw new Error("Missing versioning RPC functions. Run backend migration first.");
       }
       throw error;
     }
