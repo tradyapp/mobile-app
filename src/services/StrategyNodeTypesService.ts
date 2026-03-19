@@ -2,12 +2,29 @@ import { supabase } from "@/lib/supabase";
 
 export type StrategyNodeCategory = "trigger" | "logic" | "output";
 
+export interface StrategyNodePortRecord {
+  key: string;
+  type: string;
+  label: string;
+}
+
+export interface StrategyNodePropertyRecord {
+  key: string;
+  type: "number" | "text" | "boolean" | string;
+  label: string;
+  default?: unknown;
+}
+
 export interface StrategyNodeTypeRecord {
   id: string;
   key: string;
   name: string;
   category: StrategyNodeCategory;
   icon_url: string | null;
+  description?: string | null;
+  input_ports?: StrategyNodePortRecord[];
+  output_ports?: StrategyNodePortRecord[];
+  properties?: StrategyNodePropertyRecord[];
   is_active: boolean;
   is_latest: boolean;
 }
@@ -36,12 +53,45 @@ class StrategyNodeTypesService {
   }
 
   private normalizeRow(row: Partial<StrategyNodeTypeRecord>): StrategyNodeTypeRecord {
+    const normalizePorts = (value: unknown): StrategyNodePortRecord[] => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const raw = item as { key?: unknown; type?: unknown; label?: unknown };
+          const key = typeof raw.key === "string" ? raw.key : "";
+          const type = typeof raw.type === "string" ? raw.type : "any";
+          const label = typeof raw.label === "string" ? raw.label : key || "Port";
+          if (!key && !label) return null;
+          return { key, type, label };
+        })
+        .filter((item): item is StrategyNodePortRecord => item !== null);
+    };
+
+    const normalizeProperties = (value: unknown): StrategyNodePropertyRecord[] => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const raw = item as { key?: unknown; type?: unknown; label?: unknown; default?: unknown };
+          const key = typeof raw.key === "string" ? raw.key : "";
+          const type = typeof raw.type === "string" ? raw.type : "text";
+          const label = typeof raw.label === "string" ? raw.label : key || "Field";
+          return { key, type, label, default: raw.default };
+        })
+        .filter((item): item is StrategyNodePropertyRecord => item !== null);
+    };
+
     return {
       id: row.id ?? "",
       key: row.key ?? "",
       name: row.name ?? "",
       category: (row.category ?? "logic") as StrategyNodeCategory,
       icon_url: row.icon_url ?? null,
+      description: row.description ?? null,
+      input_ports: normalizePorts(row.input_ports),
+      output_ports: normalizePorts(row.output_ports),
+      properties: normalizeProperties(row.properties),
       is_active: row.is_active ?? true,
       is_latest: row.is_latest ?? true,
     };
@@ -53,7 +103,7 @@ class StrategyNodeTypesService {
     if (withLatest) {
       const { data, error } = await supabase
         .from("strategy_node_types")
-        .select("id,key,name,category,icon_url,is_active,is_latest")
+        .select("id,key,name,description,category,icon_url,input_ports,output_ports,properties,is_active,is_latest")
         .eq("is_active", true)
         .eq("is_latest", true)
         .order("category", { ascending: true })
@@ -73,7 +123,7 @@ class StrategyNodeTypesService {
 
     const { data, error } = await supabase
       .from("strategy_node_types")
-      .select("id,key,name,category,icon_url,is_active")
+      .select("id,key,name,description,category,icon_url,input_ports,output_ports,properties,is_active")
       .eq("is_active", true)
       .order("category", { ascending: true })
       .order("name", { ascending: true });

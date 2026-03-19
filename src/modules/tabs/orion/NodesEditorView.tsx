@@ -25,7 +25,7 @@ import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
 import dataService from '@/services/DataService';
-import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
+import { strategyNodeTypesService, type StrategyNodePropertyRecord, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
 
 function CloseIcon() {
@@ -43,43 +43,66 @@ function makeFieldId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createNodeDefaults(category?: string): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
+function toFieldDefaultValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefined): EditorNodeField[] {
+  if (!Array.isArray(properties)) return [];
+  return properties.map((item, index) => ({
+    id: makeFieldId('input'),
+    name: item.label?.trim() || item.key?.trim() || `Input ${index + 1}`,
+    type: item.type || 'text',
+    value: toFieldDefaultValue(item.default),
+    required: true,
+  }));
+}
+
+function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
+  const { category } = nodeType;
   const normalized = normalizeNodeCategory(category);
+  const inputsFromProperties = mapPropertiesToInputs(nodeType.properties);
+  const outputsFromNodeType = (nodeType.output_ports ?? []).map((port, index) => ({
+    id: makeFieldId('out'),
+    name: port.label?.trim() || port.key?.trim() || `Output ${index + 1}`,
+    type: port.type || 'any',
+    required: false,
+  }));
 
   if (normalized === 'trigger') {
     return {
-      inputs: [],
-      attributes: [
-        { id: makeFieldId('attr'), name: 'schedule', type: 'cron', value: '' },
-      ],
-      outputs: [
-        { id: makeFieldId('out'), name: 'event', type: 'signal' },
-      ],
+      inputs: inputsFromProperties,
+      attributes: [],
+      outputs: outputsFromNodeType.length > 0
+        ? outputsFromNodeType
+        : [{ id: makeFieldId('out'), name: 'event', type: 'signal' }],
     };
   }
 
   if (normalized === 'output') {
     return {
-      inputs: [
-        { id: makeFieldId('in'), name: 'signal', type: 'signal', required: true },
-      ],
-      attributes: [
-        { id: makeFieldId('attr'), name: 'channel', type: 'string', value: '' },
-      ],
+      inputs: inputsFromProperties.length > 0
+        ? inputsFromProperties
+        : [{ id: makeFieldId('in'), name: 'signal', type: 'signal', required: true }],
+      attributes: [],
       outputs: [],
     };
   }
 
   return {
-    inputs: [
-      { id: makeFieldId('in'), name: 'input', type: 'number', required: true },
-    ],
-    attributes: [
-      { id: makeFieldId('attr'), name: 'operator', type: 'string', value: '' },
-    ],
-    outputs: [
-      { id: makeFieldId('out'), name: 'result', type: 'number' },
-    ],
+    inputs: inputsFromProperties.length > 0
+      ? inputsFromProperties
+      : [{ id: makeFieldId('in'), name: 'input', type: 'number', required: true }],
+    attributes: [],
+    outputs: outputsFromNodeType.length > 0
+      ? outputsFromNodeType
+      : [{ id: makeFieldId('out'), name: 'result', type: 'number' }],
   };
 }
 interface NodesViewProps {
@@ -448,7 +471,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           nodeTypeKey: nodeType.key,
           category: nodeType.category,
           iconUrl: nodeType.icon_url,
-          ...createNodeDefaults(nodeType.category),
+          ...createNodeDefaults(nodeType),
         } satisfies EditorNodeData,
       };
 
@@ -678,7 +701,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     if (category === 'trigger') {
       return [
-        { key: 'attributes', label: 'Attributes' },
+        { key: 'inputs', label: 'Inputs' },
         { key: 'outputs', label: 'Outputs' },
       ];
     }
