@@ -53,7 +53,7 @@ export default function StrategyFormScreen({
   };
 
   return (
-    <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+    <div className="mt-4 flex min-h-[calc(100dvh-220px)] flex-col">
       <div className="flex items-start gap-3">
         <div className="relative">
           <button
@@ -126,7 +126,7 @@ export default function StrategyFormScreen({
         type="button"
         onClick={onSubmit}
         disabled={isSubmitting || isProcessingPhoto || !draft.name.trim()}
-        className="mt-4 w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-auto w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSubmitting ? 'Saving...' : submitLabel}
       </button>
