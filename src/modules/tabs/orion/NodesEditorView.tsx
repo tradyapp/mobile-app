@@ -60,7 +60,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
 
       return (
         <div
-          className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${isTrigger ? 'rounded-l-full rounded-r-[20px]' : isOutput ? 'rounded-r-full rounded-l-[20px]' : 'rounded-[20px]'}`}
+          className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${isTrigger ? 'rounded-[24px] rounded-l-[34px]' : isOutput ? 'rounded-[24px] rounded-r-[34px]' : 'rounded-[24px]'}`}
         >
           {showLeftHandle && (
             <Handle

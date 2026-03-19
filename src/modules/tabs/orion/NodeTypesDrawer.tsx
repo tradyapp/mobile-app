@@ -22,7 +22,7 @@ function NodeTypeCard({ item, onClick }: { item: StrategyNodeTypeRecord; onClick
     <button
       type="button"
       onClick={onClick}
-      className={`relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-center ${isTrigger ? 'rounded-r-2xl rounded-l-full' : isOutput ? 'rounded-l-2xl rounded-r-full' : 'rounded-2xl'}`}
+      className={`relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-center ${isTrigger ? 'rounded-[24px] rounded-l-[34px]' : isOutput ? 'rounded-[24px] rounded-r-[34px]' : 'rounded-[24px]'}`}
     >
       {!isTrigger && <Connector side="left" />}
       {!isOutput && <Connector side="right" />}
