@@ -1220,7 +1220,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 })}
                 </Segmented>
               </div>
-              <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3">
+              <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#3f3f46_#09090b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-zinc-950 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-600">
                 <div className="space-y-2">
                   {nodeDetailsPanel === 'attributes' ? (
                     panelFields.length === 0 ? (
