@@ -619,7 +619,7 @@ export default function LearnTab() {
     const lessonPosition = currentLessonIndex >= 0 ? `${currentLessonIndex + 1}/${allLessons.length}` : "";
 
     return (
-      <Block className="pt-2 pb-32">
+      <Block className="pt-2 pb-32 landscape:max-w-2xl landscape:mx-auto">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-zinc-500 text-xs">
             {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
