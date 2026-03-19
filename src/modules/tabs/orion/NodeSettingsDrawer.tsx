@@ -184,7 +184,7 @@ export function VersionNameDialog({
           onClick={onClose}
           aria-label="Close version name dialog"
         />
-        <div className="absolute left-1/2 top-[max(24px,env(safe-area-inset-top))] w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+        <div className="absolute left-1/2 top-1/2 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
           <h3 className="text-sm font-semibold text-white">Activar version</h3>
           <p className="mt-1 text-xs text-zinc-400">Nombre de la nueva versión</p>
           <input
