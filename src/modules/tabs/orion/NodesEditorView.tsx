@@ -565,6 +565,10 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
               .orion-nodes-controls .react-flow__controls-button:hover {
                 background: #18181b !important;
               }
+              .react-flow__node.selected > div {
+                border-color: #34d399 !important;
+                box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6), 0 10px 28px rgba(0, 0, 0, 0.45) !important;
+              }
             `}</style>
 
             {!isPreviewMode && hasSelection && (
