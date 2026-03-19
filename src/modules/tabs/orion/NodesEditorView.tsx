@@ -144,6 +144,26 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'unknown' {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (isPlainObject(value)) return 'object';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  return 'unknown';
+}
+
+function getTypeToken(type: ReturnType<typeof getValueType>): { icon: string; pillClass: string; typeLabel: string } {
+  if (type === 'string') return { icon: 'T', pillClass: 'border-sky-300 bg-sky-100/80 text-sky-900', typeLabel: 'string' };
+  if (type === 'number') return { icon: '#', pillClass: 'border-emerald-300 bg-emerald-100/80 text-emerald-900', typeLabel: 'number' };
+  if (type === 'boolean') return { icon: '?', pillClass: 'border-amber-300 bg-amber-100/80 text-amber-900', typeLabel: 'boolean' };
+  if (type === 'null') return { icon: '0', pillClass: 'border-zinc-300 bg-zinc-100/80 text-zinc-900', typeLabel: 'null' };
+  if (type === 'array') return { icon: '[]', pillClass: 'border-violet-300 bg-violet-100/80 text-violet-900', typeLabel: 'array' };
+  if (type === 'object') return { icon: '{}', pillClass: 'border-rose-300 bg-rose-100/80 text-rose-900', typeLabel: 'object' };
+  return { icon: '·', pillClass: 'border-zinc-300 bg-zinc-100/80 text-zinc-900', typeLabel: 'unknown' };
+}
+
 function SnapshotTree({
   label,
   value,
@@ -158,11 +178,20 @@ function SnapshotTree({
   const isBranch = isArray || isObject;
   const tone = depth % 3;
   const keyTextClass = tone === 0 ? 'text-zinc-200' : tone === 1 ? 'text-zinc-300' : 'text-zinc-400';
+  const valueType = getValueType(value);
+  const token = getTypeToken(valueType);
 
   if (!isBranch) {
     return (
       <div className="mt-1 flex items-start justify-between gap-3 py-1.5">
-        <p className={`min-w-0 shrink text-[11px] font-semibold ${keyTextClass}`}>{label}</p>
+        <div className="flex min-w-0 shrink items-center gap-1.5">
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700 bg-zinc-900 px-1 text-[9px] font-semibold text-zinc-300">
+            {token.icon}
+          </span>
+          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+            {label}
+          </span>
+        </div>
         <p className="max-w-[58%] break-words text-right text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
       </div>
     );
@@ -179,9 +208,14 @@ function SnapshotTree({
     >
       <summary className="cursor-pointer py-1.5 text-[11px] font-semibold text-zinc-100 marker:text-zinc-500">
         <span className="inline-flex items-center gap-2">
-          <span className={keyTextClass}>{label}</span>
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm border border-zinc-700 bg-zinc-900 px-1 text-[9px] font-semibold text-zinc-300">
+            {token.icon}
+          </span>
+          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
+            {label}
+          </span>
           <span className="text-zinc-500">({entries.length})</span>
-          <span className="text-[10px] text-zinc-500">{isArray ? 'array' : 'object'}</span>
+          <span className={`rounded-md border px-1.5 py-0.5 text-[10px] ${token.pillClass}`}>{token.typeLabel}</span>
         </span>
       </summary>
       <div className="ml-4 space-y-0.5 pl-2">
