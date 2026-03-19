@@ -106,6 +106,50 @@ function getLessonTextContent(lesson: LmsLesson): string {
   return (value as string | undefined) ?? "";
 }
 
+/** Lesson title in nav bar — truncates with marquee animation if overflowing */
+function NavLessonTitle({ title, align = "left" }: { title: string; align?: "left" | "right" }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const container = containerRef.current;
+      const span = textRef.current;
+      if (!container || !span) return;
+      const isOverflowing = span.scrollWidth > container.clientWidth;
+      setOverflows(isOverflowing);
+      if (isOverflowing) {
+        container.style.setProperty("--marquee-container-width", `${container.clientWidth}px`);
+      }
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [title]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden"
+    >
+      {overflows && (
+        <>
+          <div className={`absolute top-0 bottom-0 w-4 z-10 pointer-events-none ${align === "right" ? "right-0 bg-gradient-to-l" : "left-0 bg-gradient-to-r"} from-zinc-950 to-transparent`} />
+          {align === "left" && <div className="absolute right-0 top-0 bottom-0 w-4 z-10 pointer-events-none bg-gradient-to-l from-zinc-950 to-transparent" />}
+          {align === "right" && <div className="absolute left-0 top-0 bottom-0 w-4 z-10 pointer-events-none bg-gradient-to-r from-zinc-950 to-transparent" />}
+        </>
+      )}
+      <span
+        ref={textRef}
+        className={`inline-block whitespace-nowrap text-xs text-zinc-300 ${overflows ? "animate-marquee" : ""} ${align === "right" && !overflows ? "w-full text-right" : ""}`}
+      >
+        {title}
+      </span>
+    </div>
+  );
+}
+
 export default function LearnTab() {
   const [view, setView] = useState<LearnView>("catalog");
   const [courses, setCourses] = useState<LmsCourse[]>([]);
@@ -605,41 +649,44 @@ export default function LearnTab() {
           !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
         )}
 
-        {/* Prev / Next navigation bar */}
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+56px)] left-0 right-0 z-20 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            {/* Previous */}
-            <button
-              onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
-              disabled={!prevLesson}
-              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                prevLesson ? "active:bg-zinc-800" : "opacity-30"
-              }`}
-            >
-              <span className="text-zinc-400 text-lg">‹</span>
-              <div className="min-w-0 text-left">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Anterior</p>
-                <p className="text-xs text-zinc-300 truncate">{prevLesson?.title ?? "—"}</p>
-              </div>
-            </button>
+        {/* Prev / Next navigation bar + dark fill to bottom */}
+        <div className="fixed bottom-0 left-0 right-0 z-20">
+          {/* Dark fill — covers from nav bar through tabbar to screen bottom */}
+          <div className="bg-zinc-950" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)" }}>
+            <div className="border-t border-zinc-800 flex">
+              {/* Previous — exactly 50% */}
+              <button
+                onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
+                disabled={!prevLesson}
+                className={`w-1/2 flex items-center gap-2 px-3 py-2.5 transition-colors ${
+                  prevLesson ? "active:bg-zinc-900" : "opacity-30"
+                }`}
+              >
+                <span className="text-zinc-400 text-lg shrink-0">‹</span>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Anterior</p>
+                  <NavLessonTitle title={prevLesson?.title ?? "—"} />
+                </div>
+              </button>
 
-            {/* Divider */}
-            <div className="w-px h-8 bg-zinc-800 shrink-0" />
+              {/* Divider */}
+              <div className="w-px bg-zinc-800 shrink-0 my-2" />
 
-            {/* Next */}
-            <button
-              onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
-              disabled={!nextLesson}
-              className={`flex-1 flex items-center justify-end gap-2 px-3 py-2 rounded-lg transition-colors ${
-                nextLesson ? "active:bg-zinc-800" : "opacity-30"
-              }`}
-            >
-              <div className="min-w-0 text-right">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Siguiente</p>
-                <p className="text-xs text-zinc-300 truncate">{nextLesson?.title ?? "—"}</p>
-              </div>
-              <span className="text-zinc-400 text-lg">›</span>
-            </button>
+              {/* Next — exactly 50% */}
+              <button
+                onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
+                disabled={!nextLesson}
+                className={`w-1/2 flex items-center gap-2 px-3 py-2.5 transition-colors ${
+                  nextLesson ? "active:bg-zinc-900" : "opacity-30"
+                }`}
+              >
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Siguiente</p>
+                  <NavLessonTitle title={nextLesson?.title ?? "—"} align="right" />
+                </div>
+                <span className="text-zinc-400 text-lg shrink-0">›</span>
+              </button>
+            </div>
           </div>
         </div>
       </Block>
