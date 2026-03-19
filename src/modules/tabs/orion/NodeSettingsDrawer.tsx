@@ -95,6 +95,9 @@ interface NodeSettingsDrawerProps {
   onOpenSymbolsLibrary: () => void;
   onRetryLoadSymbols: () => void;
   onToggleSymbol: (symbol: StrategySymbolCatalogItem | StrategyTrackedSymbol) => void;
+  strategyName: string;
+  isDeletingStrategy: boolean;
+  onDeleteStrategyRequest: () => void;
 }
 
 export function NodeSettingsDrawer({
@@ -124,6 +127,9 @@ export function NodeSettingsDrawer({
   onOpenSymbolsLibrary,
   onRetryLoadSymbols,
   onToggleSymbol,
+  strategyName,
+  isDeletingStrategy,
+  onDeleteStrategyRequest,
 }: NodeSettingsDrawerProps) {
   const [activeMarketFilter, setActiveMarketFilter] = useState<'ALL' | StrategySymbolMarket>('ALL');
 
@@ -166,50 +172,67 @@ export function NodeSettingsDrawer({
     >
       <div className="pb-4">
         {settingsPanel === 'menu' && (
-          <List strong className="overflow-hidden rounded-xl">
-            <ListItem
-              title="Live"
-              after={(
-                <Toggle
-                  checked={isLive}
-                  onChange={onToggleLive}
-                />
-              )}
-            />
-            <ListItem
-              link
-              title="Back Testing"
-              after={<span className="text-[11px] text-zinc-500">Soon</span>}
-              onClick={onOpenBacktesting}
-            />
-            <ListItem
-              link
-              title="Symbols"
-              after={<span className="text-[11px] text-zinc-500">{trackedSymbols.length}</span>}
-              onClick={onOpenSymbols}
-              disabled={!isOwner}
-            />
-            <ListItem
-              link
-              title="Activar version"
-              after={(
-                <span className="text-[11px] text-zinc-500">
-                  {isPublishingVersion
-                    ? 'Activando...'
-                    : isPreviewMode
-                      ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
-                      : 'Publicar y activar'}
-                </span>
-              )}
-              onClick={() => void onActivateButtonClick()}
-              disabled={isPublishingVersion || (isPreviewMode && Boolean(previewVersion?.is_active))}
-            />
-            <ListItem
-              link
-              title="Versiones anteriores"
-              onClick={onOpenVersions}
-            />
-          </List>
+          <div className="space-y-4">
+            <List strong className="overflow-hidden rounded-xl">
+              <ListItem
+                title="Live"
+                after={(
+                  <Toggle
+                    checked={isLive}
+                    onChange={onToggleLive}
+                  />
+                )}
+              />
+              <ListItem
+                link
+                title="Back Testing"
+                after={<span className="text-[11px] text-zinc-500">Soon</span>}
+                onClick={onOpenBacktesting}
+              />
+              <ListItem
+                link
+                title="Symbols"
+                after={<span className="text-[11px] text-zinc-500">{trackedSymbols.length}</span>}
+                onClick={onOpenSymbols}
+                disabled={!isOwner}
+              />
+              <ListItem
+                link
+                title="Activar version"
+                after={(
+                  <span className="text-[11px] text-zinc-500">
+                    {isPublishingVersion
+                      ? 'Activando...'
+                      : isPreviewMode
+                        ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
+                        : 'Publicar y activar'}
+                  </span>
+                )}
+                onClick={() => void onActivateButtonClick()}
+                disabled={isPublishingVersion || (isPreviewMode && Boolean(previewVersion?.is_active))}
+              />
+              <ListItem
+                link
+                title="Versiones anteriores"
+                onClick={onOpenVersions}
+              />
+            </List>
+
+            {isOwner && (
+              <div className="rounded-xl border border-red-900/70 bg-red-950/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-red-300">Danger Zone</p>
+                <p className="mt-1 text-xs text-red-200/80">Eliminar la estrategia y todos sus datos asociados.</p>
+                <button
+                  type="button"
+                  onClick={onDeleteStrategyRequest}
+                  disabled={isDeletingStrategy}
+                  className="mt-3 w-full rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm font-semibold text-red-300 disabled:opacity-60"
+                >
+                  {isDeletingStrategy ? 'Eliminando...' : `Delete "${strategyName}"`}
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {settingsPanel === 'versions' && (

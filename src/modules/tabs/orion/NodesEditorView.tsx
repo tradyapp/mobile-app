@@ -40,10 +40,11 @@ interface NodesViewProps {
   strategyName: string;
   strategyPhotoUrl?: string | null;
   isOwner: boolean;
+  onDeleted?: (strategyId: string) => void;
   onClose: () => void;
 }
 
-function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onClose }: NodesViewProps) {
+function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: NodesViewProps) {
   const areSameIds = (prev: string[], next: string[]) => {
     if (prev.length !== next.length) return false;
     for (let i = 0; i < prev.length; i += 1) {
@@ -132,6 +133,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
   const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
+  const [isDeleteStrategyDialogOpen, setIsDeleteStrategyDialogOpen] = useState(false);
+  const [deleteStrategyConfirmInput, setDeleteStrategyConfirmInput] = useState('');
+  const [isDeletingStrategy, setIsDeletingStrategy] = useState(false);
+  const [deleteStrategyError, setDeleteStrategyError] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [trackedSymbols, setTrackedSymbols] = useState<StrategyTrackedSymbol[]>([]);
   const [availableSymbols, setAvailableSymbols] = useState<StrategySymbolCatalogItem[]>([]);
@@ -420,6 +425,27 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       setIsVersionNameDialogOpen(false);
     }
   }, []);
+
+  const handleConfirmDeleteStrategy = useCallback(async () => {
+    if (!isOwner || isDeletingStrategy) return;
+    if (deleteStrategyConfirmInput.trim() !== strategyName) {
+      setDeleteStrategyError('Type the exact strategy name to confirm.');
+      return;
+    }
+
+    setIsDeletingStrategy(true);
+    setDeleteStrategyError(null);
+    try {
+      await strategiesService.deleteStrategy(strategyId);
+      onDeleted?.(strategyId);
+      setIsDeleteStrategyDialogOpen(false);
+      onClose();
+    } catch (error) {
+      setDeleteStrategyError(error instanceof Error ? error.message : 'Failed to delete strategy');
+    } finally {
+      setIsDeletingStrategy(false);
+    }
+  }, [deleteStrategyConfirmInput, isDeletingStrategy, isOwner, onClose, onDeleted, strategyId, strategyName]);
 
   const handleToggleSymbol = useCallback(async (symbol: StrategySymbolCatalogItem | StrategyTrackedSymbol) => {
     if (!isOwner || isSymbolsSaving) return;
@@ -769,6 +795,13 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         onToggleSymbol={(symbol) => {
           void handleToggleSymbol(symbol);
         }}
+        strategyName={strategyName}
+        isDeletingStrategy={isDeletingStrategy}
+        onDeleteStrategyRequest={() => {
+          setDeleteStrategyConfirmInput('');
+          setDeleteStrategyError(null);
+          setIsDeleteStrategyDialogOpen(true);
+        }}
       />
 
       <VersionNameDialog
@@ -820,6 +853,62 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 </>
               )}
             />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {typeof window !== 'undefined' && isDeleteStrategyDialogOpen && createPortal(
+        <div className="fixed inset-0 z-[10060] pointer-events-none">
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/70"
+              onClick={() => {
+                if (isDeletingStrategy) return;
+                setIsDeleteStrategyDialogOpen(false);
+              }}
+              aria-label="Close delete strategy dialog"
+            />
+            <div className="absolute left-1/2 top-1/2 w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-red-900 bg-zinc-950 p-4">
+              <h3 className="text-sm font-semibold text-red-300">Delete Strategy</h3>
+              <p className="mt-1 text-xs text-zinc-400">
+                This action will delete the strategy and all related data in cascade.
+              </p>
+              <p className="mt-2 text-xs text-zinc-500">
+                Type <span className="font-semibold text-zinc-300">{strategyName}</span> to confirm.
+              </p>
+              <input
+                type="text"
+                value={deleteStrategyConfirmInput}
+                onChange={(event) => setDeleteStrategyConfirmInput(event.target.value)}
+                className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+                autoFocus
+              />
+              {deleteStrategyError && (
+                <div className="mt-3 rounded-lg border border-red-900 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+                  {deleteStrategyError}
+                </div>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteStrategyDialogOpen(false)}
+                  disabled={isDeletingStrategy}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmDeleteStrategy()}
+                  disabled={isDeletingStrategy}
+                  className="rounded-lg bg-red-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-60"
+                >
+                  {isDeletingStrategy ? 'Deleting...' : 'Delete permanently'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>,
         document.body
