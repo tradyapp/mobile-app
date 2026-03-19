@@ -2,7 +2,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   addEdge,
   Background,
@@ -20,64 +19,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
-import AppDrawer from '@/components/uiux/AppDrawer';
+import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
+import { NodeSettingsDrawer, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
+import { compareNodeCategory, EditorNodeData, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
 import { strategyNodeTypesService, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord } from '@/services/StrategiesService';
 
-interface EditorNodeData {
-  label: string;
-  nodeTypeKey?: string;
-  category?: string;
-  iconUrl?: string | null;
-}
-
-interface NodeTypeCategoryGroup {
-  key: string;
-  label: string;
-  items: StrategyNodeTypeRecord[];
-}
-
-const NODE_CATEGORY_SORT_WEIGHT: Record<string, number> = {
-  trigger: 0,
-  condition: 1,
-  logic: 2,
-  action: 3,
-  output: 4,
-  uncategorized: 99,
-};
-
-function normalizeNodeCategory(value?: string | null): string {
-  const normalized = value?.trim().toLowerCase();
-  return normalized && normalized.length > 0 ? normalized : 'uncategorized';
-}
-
-function formatNodeCategoryLabel(key: string): string {
-  if (key === 'uncategorized') return 'Uncategorized';
-  return key
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function compareNodeCategory(a: string, b: string): number {
-  const weightA = NODE_CATEGORY_SORT_WEIGHT[a] ?? 50;
-  const weightB = NODE_CATEGORY_SORT_WEIGHT[b] ?? 50;
-  if (weightA !== weightB) return weightA - weightB;
-  return a.localeCompare(b);
-}
 function CloseIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  );
-}
-
-function BackIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
     </svg>
   );
 }
@@ -638,306 +589,79 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       )}
       </div>
 
-      <AppDrawer
+      <NodeTypesDrawer
         isOpen={isNodeTypesDrawerOpen}
         onOpenChange={handleNodeTypesDrawerOpenChange}
-        title="Add Node"
-        height="auto"
-        showHeader={false}
-      >
-        <div className="pb-4" style={safeDrawerInsetStyle}>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Add Node</h3>
-            <button
-              type="button"
-              onClick={() => handleNodeTypesDrawerOpenChange(false)}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-            >
-              Close
-            </button>
-          </div>
+        safeDrawerInsetStyle={safeDrawerInsetStyle}
+        isNodeTypesLoading={isNodeTypesLoading}
+        nodeTypesError={nodeTypesError}
+        availableNodeTypesCount={availableNodeTypes.length}
+        nodeTypeGroups={nodeTypeGroups}
+        selectedNodeTypeCategory={selectedNodeTypeCategory}
+        nodeTypeSearch={nodeTypeSearch}
+        onNodeTypeSearchChange={setNodeTypeSearch}
+        filteredSelectedCategoryItems={filteredSelectedCategoryItems}
+        onRetryLoadNodeTypes={() => void loadNodeTypes()}
+        onSelectCategory={(key) => {
+          setSelectedNodeTypeCategoryKey(key);
+          setNodeTypeSearch('');
+        }}
+        onBackToCategories={() => {
+          setSelectedNodeTypeCategoryKey(null);
+          setNodeTypeSearch('');
+        }}
+        onAddNodeFromType={handleAddNodeFromType}
+      />
 
-          {isNodeTypesLoading ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-              Loading node types...
-            </div>
-          ) : nodeTypesError ? (
-            <div className="space-y-2">
-              <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-                {nodeTypesError}
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadNodeTypes()}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100"
-              >
-                Retry
-              </button>
-            </div>
-          ) : availableNodeTypes.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-              No node types available.
-            </div>
-          ) : !selectedNodeTypeCategory ? (
-            <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-              {nodeTypeGroups.map((group) => (
-                <button
-                  key={group.key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedNodeTypeCategoryKey(group.key);
-                    setNodeTypeSearch('');
-                  }}
-                  className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{group.label}</p>
-                    <p className="text-[11px] text-zinc-500">{group.items.length} node{group.items.length === 1 ? '' : 's'}</p>
-                  </div>
-                  <span className="text-xl leading-none text-zinc-400">›</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedNodeTypeCategoryKey(null);
-                  setNodeTypeSearch('');
-                }}
-                className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
-              >
-                <BackIcon />
-                Categories
-              </button>
-
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5">
-                <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200">{selectedNodeTypeCategory.label}</p>
-                <p className="text-[11px] text-zinc-500">{selectedNodeTypeCategory.items.length} node{selectedNodeTypeCategory.items.length === 1 ? '' : 's'}</p>
-              </div>
-
-              <div className="mb-2">
-                <input
-                  type="text"
-                  value={nodeTypeSearch}
-                  onChange={(event) => setNodeTypeSearch(event.target.value)}
-                  placeholder={`Search in ${selectedNodeTypeCategory.label}...`}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-500"
-                  aria-label="Search node types"
-                />
-              </div>
-
-              {filteredSelectedCategoryItems.length === 0 ? (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
-                  No node types match your search.
-                </div>
-              ) : (
-                filteredSelectedCategoryItems.map((item) => (
-                  <button
-                    key={`${item.key}-${item.id}`}
-                    type="button"
-                    onClick={() => handleAddNodeFromType(item)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-left"
-                  >
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                      {item.icon_url ? (
-                        <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                          {item.name.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
-                      <p className="truncate text-xs uppercase tracking-[0.08em] text-zinc-500">{item.category || 'uncategorized'}</p>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      </AppDrawer>
-
-      <AppDrawer
+      <NodeSettingsDrawer
         isOpen={isSettingsDrawerOpen}
         onOpenChange={handleSettingsDrawerOpenChange}
-        title="Node Settings"
-        height="auto"
-        showHeader={false}
-      >
-        <div className="pb-4" style={safeDrawerInsetStyle}>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">{settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}</h3>
-            <button
-              type="button"
-              onClick={() => handleSettingsDrawerOpenChange(false)}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-            >
-              Close
-            </button>
-          </div>
+        safeDrawerInsetStyle={safeDrawerInsetStyle}
+        settingsPanel={settingsPanel}
+        onSettingsPanelChange={setSettingsPanel}
+        saveStatus={saveStatus}
+        isPreviewMode={isPreviewMode}
+        hasUnsavedDraftChanges={hasUnsavedDraftChanges}
+        onSaveNodeMap={() => void handleSaveNodeMap()}
+        isPublishingVersion={isPublishingVersion}
+        previewVersion={previewVersion}
+        onActivateButtonClick={async () => {
+          if (isPreviewMode) {
+            await handleActivatePreviewVersion();
+            return;
+          }
+          if (!isNodeVersionsLoading && nodeVersions.length === 0) {
+            await loadNodeVersions();
+          }
+          setVersionNameInput(getNextVersionDefaultName());
+          setIsVersionNameDialogOpen(true);
+        }}
+        onOpenVersions={() => {
+          setSettingsPanel('versions');
+          void loadNodeVersions();
+        }}
+        isNodeVersionsLoading={isNodeVersionsLoading}
+        nodeVersions={nodeVersions}
+        onEnterPreviewVersion={handleEnterPreviewVersion}
+        nodeVersionsError={nodeVersionsError}
+      />
 
-          {settingsPanel === 'menu' ? (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => void handleSaveNodeMap()}
-                disabled={saveStatus === 'saving' || isPreviewMode || !hasUnsavedDraftChanges}
-                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-              >
-                <span className="text-sm font-medium text-zinc-100">Guardar</span>
-                <span className="text-xs text-zinc-400">
-                  {isPreviewMode
-                    ? 'Disabled in preview'
-                    : saveStatus === 'saving'
-                      ? 'Guardando...'
-                      : hasUnsavedDraftChanges
-                        ? 'Guardar draft'
-                        : 'Sin cambios'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (isPreviewMode) {
-                    await handleActivatePreviewVersion();
-                    return;
-                  }
-                  if (!isNodeVersionsLoading && nodeVersions.length === 0) {
-                    await loadNodeVersions();
-                  }
-                  setVersionNameInput(getNextVersionDefaultName());
-                  setIsVersionNameDialogOpen(true);
-                }}
-                disabled={isPublishingVersion || (isPreviewMode && Boolean(previewVersion?.is_active))}
-                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-              >
-                <span className="text-sm font-medium text-zinc-100">Activar version</span>
-                <span className="text-xs text-zinc-400">
-                  {isPublishingVersion
-                    ? 'Activando...'
-                    : isPreviewMode
-                      ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
-                      : 'Publicar y activar'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsPanel('versions');
-                  void loadNodeVersions();
-                }}
-                className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-              >
-                <span className="text-sm font-medium text-zinc-100">Versiones anteriores</span>
-                <span className="text-lg leading-none text-zinc-400">›</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setSettingsPanel('menu')}
-                className="mb-1 inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300"
-              >
-                <BackIcon />
-                Menú
-              </button>
-
-              {isNodeVersionsLoading ? (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
-                  Loading versions...
-                </div>
-              ) : nodeVersions.length === 0 ? (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
-                  No hay versiones anteriores.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {nodeVersions.map((version) => (
-                    <button
-                      key={version.id}
-                      type="button"
-                      onClick={() => handleEnterPreviewVersion(version)}
-                      className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-left"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-zinc-100">v{version.version_number} · {version.name}</p>
-                        <p className="truncate text-[11px] text-zinc-500">{new Date(version.created_at).toLocaleString('en-US')}</p>
-                      </div>
-                      {version.is_active && (
-                        <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300">Active</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {nodeVersionsError && (
-            <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-              {nodeVersionsError}
-            </div>
-          )}
-        </div>
-      </AppDrawer>
-
-      {typeof window !== 'undefined' && isVersionNameDialogOpen && createPortal(
-        <div className="fixed inset-0 z-[10050] pointer-events-none">
-          <div className="pointer-events-auto">
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/70"
-              onClick={() => setIsVersionNameDialogOpen(false)}
-              aria-label="Close version name dialog"
-            />
-            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-              <h3 className="text-sm font-semibold text-white">Activar version</h3>
-              <p className="mt-1 text-xs text-zinc-400">Nombre de la nueva versión</p>
-              <input
-                type="text"
-                value={versionNameInput}
-                onChange={(event) => setVersionNameInput(event.target.value)}
-                className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
-                autoFocus
-              />
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsVersionNameDialogOpen(false)}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const fallback = getNextVersionDefaultName();
-                    const chosen = versionNameInput.trim() || fallback;
-                    await handlePublishVersion(chosen);
-                    setIsVersionNameDialogOpen(false);
-                  }}
-                  disabled={isPublishingVersion}
-                  className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-50"
-                >
-                  {isPublishingVersion ? 'Activando...' : 'Activar'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <VersionNameDialog
+        isOpen={isVersionNameDialogOpen}
+        versionNameInput={versionNameInput}
+        onVersionNameInputChange={setVersionNameInput}
+        onClose={() => setIsVersionNameDialogOpen(false)}
+        onConfirm={async () => {
+          const fallback = getNextVersionDefaultName();
+          const chosen = versionNameInput.trim() || fallback;
+          await handlePublishVersion(chosen);
+          setIsVersionNameDialogOpen(false);
+        }}
+        isPublishingVersion={isPublishingVersion}
+      />
     </div>
   );
 }
 
 
 export default NodesView;
-
