@@ -8,9 +8,34 @@ interface StrategyDetailViewProps {
   strategy: StrategyRecord;
   onOpenNodes: () => void;
   activeVersionLabel: string | null;
+  isOwner: boolean;
 }
 
-export default function StrategyDetailView({ strategy, onOpenNodes, activeVersionLabel }: StrategyDetailViewProps) {
+function DetailRow({
+  label,
+  onClick,
+  disabled = false,
+  after,
+}: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  after?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-500"
+    >
+      <span>{label}</span>
+      <span className="text-xs text-zinc-500">{after ?? '›'}</span>
+    </button>
+  );
+}
+
+export default function StrategyDetailView({ strategy, onOpenNodes, activeVersionLabel, isOwner }: StrategyDetailViewProps) {
   const [isLive, setIsLive] = useState(false);
   const initials = strategy.name
     .split(' ')
@@ -46,22 +71,15 @@ export default function StrategyDetailView({ strategy, onOpenNodes, activeVersio
       </div>
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
-        <button
-          type="button"
-          onClick={onOpenNodes}
-          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-100"
-        >
-          <span>Nodes</span>
-          <span className="text-lg leading-none text-zinc-500">›</span>
-        </button>
+        <DetailRow label="Symbols" after="Soon" />
         <div className="border-t border-zinc-800" />
-        <button
-          type="button"
-          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-100"
-        >
-          <span>Back Testing</span>
-          <span className="text-lg leading-none text-zinc-500">›</span>
-        </button>
+        <DetailRow label="WebHook" after="Soon" />
+        {isOwner && (
+          <>
+            <div className="border-t border-zinc-800" />
+            <DetailRow label="Nodes" onClick={onOpenNodes} />
+          </>
+        )}
       </div>
     </div>
   );

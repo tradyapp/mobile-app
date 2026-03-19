@@ -9,6 +9,7 @@ import CogIcon from '@/components/icons/CogIcon';
 import MarketplaceScreen from '@/modules/tabs/orion/MarketplaceScreen';
 import NodesEditorView from '@/modules/tabs/orion/NodesEditorView';
 import NotificationsScreen from '@/modules/tabs/orion/NotificationsScreen';
+import StrategyDetailView from '@/modules/tabs/orion/StrategyDetailView';
 import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
@@ -74,14 +75,10 @@ export default function OrionTab() {
   const isStrategyDetailView = isMarketplace && myStrategiesScreen === 'detail';
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
   const isCreateStrategyView = isMarketplace && myStrategiesScreen === 'create';
-
-  useEffect(() => {
-    if (!isStrategyDetailView || !selectedStrategyId) return;
-    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}/nodes`, { replace: true });
-  }, [isStrategyDetailView, selectedStrategyId]);
+  const isMyStrategiesListView = isMarketplace && marketplaceTab === 'my-strategies' && myStrategiesScreen === 'list';
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
-    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}/nodes`);
+    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}`);
   };
 
   const handleCreateStrategy = async () => {
@@ -120,10 +117,14 @@ export default function OrionTab() {
                     setCreateError(null);
                     return;
                   }
+                  if (isStrategyDetailView) {
+                    navigate('/orion/marketplace/my-strategies');
+                    return;
+                  }
                   navigate('/orion');
                 }}
                 className="flex h-10 w-10 items-center justify-center text-2xl text-zinc-200"
-                aria-label={isCreateStrategyView ? 'Close new strategy' : 'Close Orion marketplace'}
+                aria-label={isCreateStrategyView ? 'Close new strategy' : isStrategyDetailView ? 'Close strategy detail' : 'Close Orion marketplace'}
               >
                 <CloseIcon />
               </button>
@@ -140,7 +141,7 @@ export default function OrionTab() {
           }
           right={
             isMarketplace
-              ? (isCreateStrategyView
+              ? (isCreateStrategyView || isStrategyDetailView || !isMyStrategiesListView
                 ? null
                 : (
                   <button
@@ -176,10 +177,17 @@ export default function OrionTab() {
               strategyPhotoUrl={selectedStrategy?.photo_url ?? null}
               onClose={() => navigate('/orion/marketplace/my-strategies')}
             />
+          ) : isStrategyDetailView && selectedStrategy ? (
+            <StrategyDetailView
+              strategy={selectedStrategy}
+              activeVersionLabel={null}
+              isOwner={selectedStrategy.user_id === (user?.uid ?? '')}
+              onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
+            />
           ) : isMarketplace ? (
             <MarketplaceScreen
               tab={marketplaceTab}
-              myStrategiesScreen={myStrategiesScreen === 'detail' || myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
+              myStrategiesScreen={myStrategiesScreen === 'nodes' ? 'list' : myStrategiesScreen}
               onChangeTab={(tab) => {
                 navigate(tab === 'my-strategies' ? '/orion/marketplace/my-strategies' : '/orion/marketplace');
               }}
