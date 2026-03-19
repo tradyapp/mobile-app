@@ -150,17 +150,14 @@ export default function MarketplaceScreen({
                           <div className="min-w-0">
                             <h4 className="text-sm font-semibold text-white">{strategy.name}</h4>
                             <div className="mt-0.5 flex items-center gap-1.5">
-                              {strategyAuthors[strategy.id]?.avatarUrl ? (
-                                <img
-                                  src={strategyAuthors[strategy.id]?.avatarUrl ?? ''}
-                                  alt={strategyAuthors[strategy.id]?.displayName ?? 'User'}
-                                  className="h-4 w-4 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-zinc-700 text-[9px] text-zinc-300">
-                                  👤
-                                </div>
-                              )}
+                              <img
+                                src={strategyAuthors[strategy.id]?.avatarUrl ?? '/img/default-user.webp'}
+                                alt={strategyAuthors[strategy.id]?.displayName ?? 'User'}
+                                className="h-4 w-4 rounded-full object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.src = '/img/default-user.webp';
+                                }}
+                              />
                               <p className="truncate text-[11px] text-zinc-500">
                                 by {strategyAuthors[strategy.id]?.displayName ?? 'User'}
                               </p>

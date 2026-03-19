@@ -44,7 +44,7 @@ function AccountScreen() {
           }
           media={
             <img
-              src="/img/default-user.jpg"
+              src="/img/default-user.webp"
               alt="Profile"
               className="w-14 h-14 rounded-full"
             />

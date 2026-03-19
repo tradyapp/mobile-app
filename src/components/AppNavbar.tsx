@@ -62,7 +62,7 @@ export default function AppNavbar({ title, left, right }: AppNavbarProps) {
     ? (
       <button onClick={() => setIsProfileOpen(true)}>
         <img
-          src="/img/default-user.jpg"
+          src="/img/default-user.webp"
           alt="User"
           className="w-10 h-10 rounded-full"
         />
