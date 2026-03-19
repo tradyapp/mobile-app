@@ -600,12 +600,14 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [isNodeTypesLoading, setIsNodeTypesLoading] = useState(false);
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [selectedNodeTypeCategoryKey, setSelectedNodeTypeCategoryKey] = useState<string | null>(null);
   const [nodeTypeSearch, setNodeTypeSearch] = useState('');
   const [isNodeMapLoading, setIsNodeMapLoading] = useState(true);
   const [nodeMapError, setNodeMapError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isStrategyActive, setIsStrategyActive] = useState(false);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const saveRequestIdRef = useRef(0);
@@ -786,6 +788,31 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     setNodeTypeSearch('');
   }, [setNodes]);
 
+  const handleSaveNodeMap = useCallback(async () => {
+    const requestId = saveRequestIdRef.current + 1;
+    saveRequestIdRef.current = requestId;
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    const payload: StrategyNodeMap = {
+      version: 1,
+      nodes: nodes as unknown[],
+      edges: edges as unknown[],
+    };
+    const serialized = JSON.stringify(payload);
+
+    try {
+      await strategiesService.saveStrategyNodeMap(strategyId, payload);
+      if (saveRequestIdRef.current !== requestId) return;
+      lastSavedNodeMapRef.current = serialized;
+      setSaveStatus('saved');
+    } catch (error) {
+      if (saveRequestIdRef.current !== requestId) return;
+      setSaveStatus('error');
+      setSaveError(error instanceof Error ? error.message : 'Failed to save node map');
+    }
+  }, [strategyId, nodes, edges]);
+
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-zinc-950">
       <div className="flex h-full flex-col overflow-hidden">
@@ -810,15 +837,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           <div className="ml-auto">
             <button
               type="button"
-              onClick={() => {
-                setNodeTypeSearch('');
-                setSelectedNodeTypeCategoryKey(null);
-                setIsNodeTypesDrawerOpen(true);
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xl text-zinc-100"
-              aria-label="Add node"
+              onClick={() => setIsSettingsDrawerOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-100"
+              aria-label="Open nodes settings"
             >
-              +
+              <CogIcon />
             </button>
           </div>
         </header>
@@ -870,6 +893,19 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setNodeTypeSearch('');
+          setSelectedNodeTypeCategoryKey(null);
+          setIsNodeTypesDrawerOpen(true);
+        }}
+        className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-[max(16px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+        aria-label="Add node"
+      >
+        +
+      </button>
 
       {isNodeTypesDrawerOpen && (
         <div className="absolute inset-0 z-[240]">
@@ -1003,6 +1039,56 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSettingsDrawerOpen && (
+        <div className="absolute inset-0 z-[245]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setIsSettingsDrawerOpen(false)}
+            aria-label="Close node settings drawer"
+          />
+
+          <div className="absolute bottom-0 left-0 right-0 max-h-[52vh] rounded-t-2xl border-t border-zinc-700 bg-zinc-950">
+            <div className="pb-4 pt-3" style={safeDrawerInsetStyle}>
+              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-700" />
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Node Settings</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsDrawerOpen(false)}
+                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSaveNodeMap()}
+                  disabled={saveStatus === 'saving'}
+                  className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
+                >
+                  <span className="text-sm font-medium text-zinc-100">Guardar</span>
+                  <span className="text-xs text-zinc-400">{saveStatus === 'saving' ? 'Guardando...' : 'Guardar ahora'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsStrategyActive((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
+                >
+                  <span className="text-sm font-medium text-zinc-100">{isStrategyActive ? 'Desactivar' : 'Activar'}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isStrategyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
+                    {isStrategyActive ? 'Activo' : 'Inactivo'}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
