@@ -1236,14 +1236,30 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           </button>
         </div>
       ) : !selectedNodeForEditor ? (
-        <button
-          type="button"
-          onClick={() => setIsNodeTypesDrawerOpen(true)}
-          className="absolute bottom-[max(40px,env(safe-area-inset-bottom))] right-[max(28px,env(safe-area-inset-right))] z-[230] flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
-          aria-label="Add node"
-        >
-          +
-        </button>
+        <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setIsLocalExecutionOpen(true);
+              void runLocalExecution();
+            }}
+            className="flex h-11 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-950/70 px-4 text-sm font-semibold text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)]"
+            aria-label="Run local simulation"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            Play
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsNodeTypesDrawerOpen(true)}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
+            aria-label="Add node"
+          >
+            +
+          </button>
+        </div>
       ) : null}
       </div>
 
