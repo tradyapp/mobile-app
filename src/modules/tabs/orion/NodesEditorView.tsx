@@ -256,7 +256,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       const mapped: StrategySymbolCatalogItem[] = rows.map((item) => ({
         ticker: String(item.symbol ?? '').toUpperCase(),
         name: item.name ?? String(item.symbol ?? '').toUpperCase(),
-        icon_url: item.photo ?? null,
+        icon_url: item.icon_url ?? (item.photo?.startsWith('blob:') ? null : (item.photo ?? null)),
         market: item.type === 'FOREX' || item.type === 'CRYPTO' ? item.type : 'STOCKS',
       })).filter((item) => item.ticker.length > 0);
       setAvailableSymbols(mapped);

@@ -202,7 +202,10 @@ class StrategiesService {
         return {
           ticker,
           name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : ticker,
-          icon_url: typeof row.icon_url === "string" ? row.icon_url : null,
+          icon_url:
+            typeof row.icon_url === "string" && !row.icon_url.startsWith("blob:")
+              ? row.icon_url
+              : null,
           market,
         } satisfies StrategyTrackedSymbol;
       })

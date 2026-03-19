@@ -13,6 +13,7 @@ interface Symbol {
   type: SymbolType | null;
   name: string | null;
   photo: string | null;
+  icon_url: string | null;
 }
 
 interface DbSymbol {
@@ -173,6 +174,7 @@ class DataService {
         type: mapMarket(item.market),
         name: item.name,
         photo: item.icon_url,
+        icon_url: item.icon_url,
       }));
 
       await this.downloadAllImages(symbols);
