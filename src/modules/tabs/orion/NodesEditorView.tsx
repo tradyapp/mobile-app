@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -162,6 +162,16 @@ function getTypeToken(type: ReturnType<typeof getValueType>): { icon: string; pi
   if (type === 'array') return { icon: '[]', pillClass: 'border-violet-300 bg-violet-100/80 text-violet-900', typeLabel: 'array' };
   if (type === 'object') return { icon: '{}', pillClass: 'border-rose-300 bg-rose-100/80 text-rose-900', typeLabel: 'object' };
   return { icon: '·', pillClass: 'border-zinc-300 bg-zinc-100/80 text-zinc-900', typeLabel: 'unknown' };
+}
+
+function getAttributeTypeIcon(type?: string): string {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (normalized.includes('number') || normalized.includes('int') || normalized.includes('float') || normalized.includes('decimal')) return '#';
+  if (normalized.includes('bool')) return '?';
+  if (normalized.includes('date') || normalized.includes('time')) return '@';
+  if (normalized.includes('json') || normalized.includes('object') || normalized.includes('map')) return '{}';
+  if (normalized.includes('array') || normalized.includes('list')) return '[]';
+  return 'T';
 }
 
 function SnapshotTree({
@@ -1228,45 +1238,34 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                         No configurable attributes for this node.
                       </div>
                     ) : (
-                      panelFields.map((field, index) => (
-                        <div key={field.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                          <div className="grid grid-cols-1 gap-2">
-                            <input
-                              type="text"
-                              value={field.name}
-                              readOnly
-                              placeholder="Field name"
-                              className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
-                            />
-                            <div className="grid grid-cols-1 gap-2">
-                              <input
-                                type="text"
-                                value={field.type}
-                                readOnly
-                                placeholder="Type"
-                                className="w-full rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 text-xs text-zinc-200 outline-none"
-                              />
-                              {field.required && (
-                                <span className="inline-flex w-fit rounded-full border border-emerald-700/60 bg-emerald-950/30 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                                  Required
-                                </span>
-                              )}
-                            </div>
-                            <input
-                              type="text"
-                              value={field.value ?? ''}
-                              readOnly={isPreviewMode}
-                              onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                const next = [...prev];
-                                next[index] = { ...next[index], value: event.target.value };
-                                return next;
-                              })}
-                              placeholder="Set value"
-                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
-                            />
-                          </div>
-                        </div>
-                      ))
+                      <List
+                        strong
+                        inset
+                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:py-2"
+                      >
+                        {panelFields.map((field, index) => (
+                          <ListInput
+                            key={field.id}
+                            type="text"
+                            value={field.value ?? ''}
+                            disabled={isPreviewMode}
+                            label={(
+                              <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                <span>{field.name || field.key || 'Attribute'}</span>
+                                {field.required && <span className="text-red-400">*</span>}
+                              </span>
+                            )}
+                            placeholder="Set value"
+                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], value: event.target.value };
+                              return next;
+                            })}
+                            className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1.5 [&_input]:text-xs [&_input]:text-zinc-100"
+                          />
+                        ))}
+                      </List>
                     )
                   ) : (
                     <>
