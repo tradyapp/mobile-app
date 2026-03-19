@@ -71,8 +71,8 @@ export interface StrategySymbolCatalogItem {
 interface NodeSettingsDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library';
-  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library') => void;
+  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'danger';
+  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'danger') => void;
   isPreviewMode: boolean;
   isPublishingVersion: boolean;
   previewVersion: StrategyNodeVersionRecord | null;
@@ -148,6 +148,8 @@ export function NodeSettingsDrawer({
       ? 'Node Settings'
       : settingsPanel === 'versions'
         ? 'Versiones anteriores'
+        : settingsPanel === 'danger'
+          ? 'Danger Zone'
         : settingsPanel === 'symbols'
           ? 'Symbols'
           : 'Add Symbols';
@@ -216,22 +218,14 @@ export function NodeSettingsDrawer({
                 title="Versiones anteriores"
                 onClick={onOpenVersions}
               />
+              {isOwner && (
+                <ListItem
+                  link
+                  title={<span className="text-red-300">Danger Zone</span>}
+                  onClick={() => onSettingsPanelChange('danger')}
+                />
+              )}
             </List>
-
-            {isOwner && (
-              <div className="rounded-xl border border-red-900/70 bg-red-950/20 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-red-300">Danger Zone</p>
-                <p className="mt-1 text-xs text-red-200/80">Eliminar la estrategia y todos sus datos asociados.</p>
-                <button
-                  type="button"
-                  onClick={onDeleteStrategyRequest}
-                  disabled={isDeletingStrategy}
-                  className="mt-3 w-full rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm font-semibold text-red-300 disabled:opacity-60"
-                >
-                  {isDeletingStrategy ? 'Eliminando...' : `Delete "${strategyName}"`}
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -358,6 +352,21 @@ export function NodeSettingsDrawer({
                 Reload Symbols
               </button>
             )}
+          </div>
+        )}
+
+        {settingsPanel === 'danger' && (
+          <div className="rounded-xl border border-red-900/70 bg-red-950/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-red-300">Danger Zone</p>
+            <p className="mt-1 text-xs text-red-200/80">Eliminar la estrategia y todos sus datos asociados.</p>
+            <button
+              type="button"
+              onClick={onDeleteStrategyRequest}
+              disabled={isDeletingStrategy}
+              className="mt-3 w-full rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm font-semibold text-red-300 disabled:opacity-60"
+            >
+              {isDeletingStrategy ? 'Eliminando...' : `Delete "${strategyName}"`}
+            </button>
           </div>
         )}
 
