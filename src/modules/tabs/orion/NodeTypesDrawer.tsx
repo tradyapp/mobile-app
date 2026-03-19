@@ -51,20 +51,9 @@ export default function NodeTypesDrawer({
       onOpenChange={onOpenChange}
       title="Add Node"
       height="full"
-      showHeader={false}
+      showHeader
     >
       <div className="pb-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">Add Node</h3>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-          >
-            Close
-          </button>
-        </div>
-
         {isNodeTypesLoading ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
             Loading node types...

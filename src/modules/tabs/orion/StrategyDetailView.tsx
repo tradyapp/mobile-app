@@ -1,6 +1,6 @@
 'use client';
 
-import { List, ListItem, Toggle } from 'konsta/react';
+import { Toggle } from 'konsta/react';
 import { useState } from 'react';
 import { type StrategyRecord } from '@/services/StrategiesService';
 
@@ -22,7 +22,7 @@ export default function StrategyDetailView({ strategy, onOpenNodes }: StrategyDe
     <div className="mx-auto max-w-xl px-4 pb-24">
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-zinc-700 bg-zinc-900">
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
             {strategy.photo_url ? (
               <img src={strategy.photo_url} alt={strategy.name} className="h-full w-full object-cover" />
             ) : (
@@ -38,19 +38,32 @@ export default function StrategyDetailView({ strategy, onOpenNodes }: StrategyDe
         </div>
       </div>
 
-      <List strong className="mt-4 overflow-hidden rounded-xl">
-        <ListItem link title="Nodes" onClick={onOpenNodes} />
-        <ListItem link title="Back Testing" />
-        <ListItem
-          title="Live"
-          after={(
-            <Toggle
-              checked={isLive}
-              onChange={() => setIsLive((prev) => !prev)}
-            />
-          )}
-        />
-      </List>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
+        <button
+          type="button"
+          onClick={onOpenNodes}
+          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-100"
+        >
+          <span>Nodes</span>
+          <span className="text-lg leading-none text-zinc-500">›</span>
+        </button>
+        <div className="border-t border-zinc-800" />
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-100"
+        >
+          <span>Back Testing</span>
+          <span className="text-lg leading-none text-zinc-500">›</span>
+        </button>
+        <div className="border-t border-zinc-800" />
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-sm font-medium text-zinc-100">Live</span>
+          <Toggle
+            checked={isLive}
+            onChange={() => setIsLive((prev) => !prev)}
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -55,19 +55,12 @@ export function NodeSettingsDrawer({
       onOpenChange={onOpenChange}
       title="Node Settings"
       height="full"
-      showHeader={false}
+      showHeader
     >
       <div className="pb-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">{settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}</h3>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300"
-          >
-            Close
-          </button>
-        </div>
+        {settingsPanel === 'versions' && (
+          <h3 className="mb-3 text-sm font-semibold text-white">Versiones anteriores</h3>
+        )}
 
         {settingsPanel === 'menu' ? (
           <div className="space-y-2">
