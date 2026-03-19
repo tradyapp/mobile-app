@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Toggle } from 'konsta/react';
 import { type StrategyRecord, type StrategySymbolMarket } from '@/services/StrategiesService';
 
 type SymbolFilter = 'ALL' | StrategySymbolMarket;
@@ -52,11 +53,6 @@ export default function StrategySymbolsView({
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-24">
-      <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-        <p className="text-sm text-zinc-400">{strategy.name}</p>
-        <p className="mt-1 text-xs text-zinc-500">Enabled {enabledSet.size} of {strategy.symbols.length}</p>
-      </div>
-
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
         {[
           { key: 'ALL', label: 'All' },
@@ -94,15 +90,11 @@ export default function StrategySymbolsView({
                   <p className="truncate text-sm font-semibold text-zinc-100">{item.ticker}</p>
                   <p className="truncate text-xs text-zinc-400">{item.name}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onToggleTicker(item.ticker)}
+                <Toggle
+                  checked={selected}
                   disabled={isSaving}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border text-lg leading-none ${selected ? 'border-red-900 bg-red-950/60 text-red-300' : 'border-emerald-900 bg-emerald-950/40 text-emerald-300'} disabled:opacity-60`}
-                  aria-label={selected ? `Disable ${item.ticker}` : `Enable ${item.ticker}`}
-                >
-                  {selected ? '−' : '+'}
-                </button>
+                  onChange={() => onToggleTicker(item.ticker)}
+                />
               </div>
             );
           })

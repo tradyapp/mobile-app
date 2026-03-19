@@ -188,7 +188,13 @@ export default function OrionTab() {
     <>
       {!isNodesView && (
         <AppNavbar
-          title={isCreateStrategyView ? 'New Strategy' : isSymbolsView ? 'Strategy Symbols' : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
+          title={
+            isCreateStrategyView
+              ? 'New Strategy'
+              : isSymbolsView && selectedStrategy
+                ? `${selectedStrategy.name} · ${enabledSymbols.length}/${selectedStrategy.symbols.length}`
+                : (isMarketplace ? 'Orion Marketplace' : 'Notifications')
+          }
           left={
             isMarketplace ? (
               <button
