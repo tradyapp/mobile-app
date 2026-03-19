@@ -167,18 +167,27 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     paddingRight: 'max(16px, env(safe-area-inset-right))',
     paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
   } as const;
+  const executionStatusByNodeIdRef = useRef<Record<string, LocalExecutionNodeStatus>>({});
 
   const nodeTypes = useMemo<NodeTypes>(() => ({
-    editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => {
+    editorNode: ({ id, data }: RFNodeProps<RFNode<EditorNodeData>>) => {
       const category = normalizeNodeCategory(data?.category);
       const isTrigger = category === 'trigger';
       const isOutput = category === 'output';
       const showLeftHandle = !isTrigger;
       const showRightHandle = !isOutput;
+      const executionStatus = executionStatusByNodeIdRef.current[id];
+      const executionClassName = executionStatus === 'running'
+        ? 'border-blue-400 bg-blue-950/35 shadow-[0_0_0_2px_rgba(59,130,246,0.35)]'
+        : executionStatus === 'success'
+          ? 'border-emerald-400 bg-emerald-950/30 shadow-[0_0_0_2px_rgba(16,185,129,0.35)]'
+          : executionStatus === 'error'
+            ? 'border-red-400 bg-red-950/30 shadow-[0_0_0_2px_rgba(239,68,68,0.35)]'
+            : 'border-zinc-700 bg-zinc-900';
 
       return (
         <div
-          className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${isTrigger ? 'rounded-[24px] rounded-l-[34px]' : isOutput ? 'rounded-[24px] rounded-r-[34px]' : 'rounded-[24px]'}`}
+          className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${executionClassName} ${isTrigger ? 'rounded-[24px] rounded-l-[34px]' : isOutput ? 'rounded-[24px] rounded-r-[34px]' : 'rounded-[24px]'}`}
         >
           {showLeftHandle && (
             <Handle
@@ -253,11 +262,8 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [previewVersion, setPreviewVersion] = useState<StrategyNodeVersionRecord | null>(null);
-  const [isLocalExecutionOpen, setIsLocalExecutionOpen] = useState(false);
   const [localExecutionStatus, setLocalExecutionStatus] = useState<LocalExecutionStatus>('idle');
   const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
-  const [localExecutionStartedAt, setLocalExecutionStartedAt] = useState<string | null>(null);
-  const [localExecutionFinishedAt, setLocalExecutionFinishedAt] = useState<string | null>(null);
   const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
@@ -461,6 +467,15 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [nodeEditorNodeId, nodes]);
 
   useEffect(() => {
+    const validIds = new Set(nodes.map((node) => node.id));
+    const next: Record<string, LocalExecutionNodeStatus> = {};
+    for (const [nodeId, status] of Object.entries(executionStatusByNodeIdRef.current)) {
+      if (validIds.has(nodeId)) next[nodeId] = status;
+    }
+    executionStatusByNodeIdRef.current = next;
+  }, [nodes]);
+
+  useEffect(() => {
     if (availableNodeTypes.length === 0) return;
 
     const byKey = new Map<string, StrategyNodeTypeRecord>();
@@ -602,16 +617,16 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [setNodes]);
 
   const runLocalExecution = useCallback(async () => {
+    if (localExecutionStatus === 'running') return;
+
     if (nodes.length === 0) {
       setLocalExecutionStatus('failed');
       setLocalExecutionError('Add at least one node before running local execution.');
       setLocalExecutionTraces([]);
+      executionStatusByNodeIdRef.current = {};
       return;
     }
 
-    const startedAt = new Date().toISOString();
-    setLocalExecutionStartedAt(startedAt);
-    setLocalExecutionFinishedAt(null);
     setLocalExecutionStatus('running');
     setLocalExecutionError(null);
 
@@ -669,6 +684,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     }
 
     const tracesById = new Map<string, LocalExecutionNodeTrace>();
+    const executionStatusByNodeId: Record<string, LocalExecutionNodeStatus> = {};
     for (const nodeId of orderedNodeIds) {
       const node = nodeById.get(nodeId)!;
       const nodeData = (node.data ?? {}) as EditorNodeData;
@@ -681,15 +697,18 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         outputSnapshot: null,
         error: null,
       });
+      executionStatusByNodeId[nodeId] = 'pending';
     }
 
     const syncTracesState = () => {
+      executionStatusByNodeIdRef.current = { ...executionStatusByNodeId };
       setLocalExecutionTraces(orderedNodeIds.map((nodeId) => tracesById.get(nodeId)!));
     };
 
     syncTracesState();
 
     const outputsByNodeId = new Map<string, unknown>();
+    const stateHistory: Array<{ nodeId: string; nodeTypeKey: string; label: string; output: unknown }> = [];
     const toAttributeValue = (field: EditorNodeField): unknown => {
       const raw = field.value ?? '';
       const normalizedType = (field.type || '').toLowerCase();
@@ -713,6 +732,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       if (!trace || !node) continue;
 
       trace.status = 'running';
+      executionStatusByNodeId[nodeId] = 'running';
       syncTracesState();
       await new Promise((resolve) => window.setTimeout(resolve, 120));
 
@@ -738,6 +758,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       trace.inputSnapshot = {
         upstreamCount: incomingIds.length,
         upstream: inputs,
+        state_history: [...stateHistory],
       };
 
       try {
@@ -770,13 +791,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
         outputsByNodeId.set(nodeId, trace.outputSnapshot);
         trace.status = 'success';
+        executionStatusByNodeId[nodeId] = 'success';
         trace.error = null;
+        stateHistory.push({
+          nodeId,
+          nodeTypeKey: trace.nodeTypeKey,
+          label: trace.label,
+          output: trace.outputSnapshot,
+        });
       } catch (error) {
         trace.status = 'error';
+        executionStatusByNodeId[nodeId] = 'error';
         trace.error = error instanceof Error ? error.message : 'Execution error';
         setLocalExecutionStatus('failed');
         setLocalExecutionError(`Node failed: ${trace.label}`);
-        setLocalExecutionFinishedAt(new Date().toISOString());
         syncTracesState();
         return;
       }
@@ -786,8 +814,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     setLocalExecutionStatus('completed');
     setLocalExecutionError(null);
-    setLocalExecutionFinishedAt(new Date().toISOString());
-  }, [edges, nodes]);
+  }, [edges, localExecutionStatus, nodes]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1002,6 +1029,9 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const panelFields = nodeEditorData
     ? (Array.isArray(nodeEditorData[nodeDetailsPanel]) ? nodeEditorData[nodeDetailsPanel] as EditorNodeField[] : [])
     : [];
+  const selectedNodeExecutionTrace = selectedNodeForEditor
+    ? localExecutionTraces.find((item) => item.nodeId === selectedNodeForEditor.id) ?? null
+    : null;
 
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
@@ -1043,6 +1073,11 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                           ? 'Draft · Save error'
                           : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`}
               </p>
+              {localExecutionStatus !== 'idle' && (
+                <p className={`text-[11px] ${localExecutionStatus === 'running' ? 'text-blue-300' : localExecutionStatus === 'completed' ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {localExecutionStatus === 'running' ? 'Execution · Running' : localExecutionStatus === 'completed' ? 'Execution · Completed' : `Execution · Failed${localExecutionError ? ` · ${localExecutionError}` : ''}`}
+                </p>
+              )}
             </div>
           </div>
           <div className="ml-auto">
@@ -1109,6 +1144,21 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               </div>
               <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3">
                 <div className="space-y-2">
+                  {selectedNodeExecutionTrace && nodeDetailsPanel === 'inputs' && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Inputs</p>
+                      <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.inputSnapshot, null, 2)}</pre>
+                    </div>
+                  )}
+                  {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+                      <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Output</p>
+                      <pre className="mt-2 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900/70 p-2 text-[10px] text-zinc-300">{JSON.stringify(selectedNodeExecutionTrace.outputSnapshot, null, 2)}</pre>
+                      {selectedNodeExecutionTrace.error && (
+                        <p className="mt-2 text-[11px] text-red-300">{selectedNodeExecutionTrace.error}</p>
+                      )}
+                    </div>
+                  )}
                   {panelFields.length === 0 ? (
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
                       {nodeDetailsPanel === 'attributes'
@@ -1239,17 +1289,15 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              setIsLocalExecutionOpen(true);
-              void runLocalExecution();
-            }}
-            className="flex h-11 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-950/70 px-4 text-sm font-semibold text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)]"
+            onClick={() => void runLocalExecution()}
+            disabled={localExecutionStatus === 'running'}
+            className="flex h-11 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-950/70 px-4 text-sm font-semibold text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-60"
             aria-label="Run local simulation"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z" />
             </svg>
-            Play
+            {localExecutionStatus === 'running' ? 'Running...' : 'Play'}
           </button>
           <button
             type="button"
@@ -1305,7 +1353,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         onToggleLive={() => setIsLive((prev) => !prev)}
         onOpenBacktesting={() => {
           setIsSettingsDrawerOpen(false);
-          setIsLocalExecutionOpen(true);
+          void runLocalExecution();
         }}
         isOwner={isOwner}
         trackedSymbols={trackedSymbols}
@@ -1348,116 +1396,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         }}
         isPublishingVersion={isPublishingVersion}
       />
-
-      {typeof window !== 'undefined' && isLocalExecutionOpen && createPortal(
-        <div className="fixed inset-0 z-[10055] pointer-events-none">
-          <div className="pointer-events-auto">
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/70"
-              onClick={() => {
-                if (localExecutionStatus === 'running') return;
-                setIsLocalExecutionOpen(false);
-              }}
-              aria-label="Close local execution dialog"
-            />
-            <div className="absolute left-1/2 top-1/2 h-[min(84vh,760px)] w-[min(94vw,960px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-100">Local Execution</h3>
-                  <p className="text-xs text-zinc-500">
-                    {localExecutionStatus === 'idle'
-                      ? 'Ready to run'
-                      : localExecutionStatus === 'running'
-                        ? 'Running strategy nodes...'
-                        : localExecutionStatus === 'completed'
-                          ? 'Execution completed'
-                          : 'Execution failed'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void runLocalExecution()}
-                    disabled={localExecutionStatus === 'running'}
-                    className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-60"
-                  >
-                    {localExecutionStatus === 'running' ? 'Running...' : 'Run Local'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsLocalExecutionOpen(false)}
-                    disabled={localExecutionStatus === 'running'}
-                    className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-60"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid h-[calc(100%-61px)] grid-cols-1 gap-0 md:grid-cols-[380px_1fr]">
-                <div className="overflow-y-auto border-b border-zinc-800 p-3 md:border-b-0 md:border-r">
-                  <div className="space-y-2">
-                    {localExecutionTraces.length === 0 ? (
-                      <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-xs text-zinc-500">
-                        Run execution to see per-node status.
-                      </div>
-                    ) : (
-                      localExecutionTraces.map((trace) => (
-                        <div key={trace.nodeId} className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-xs font-semibold text-zinc-100">{trace.label}</p>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              trace.status === 'success'
-                                ? 'bg-emerald-950/40 text-emerald-300'
-                                : trace.status === 'running'
-                                  ? 'bg-blue-950/40 text-blue-300'
-                                  : trace.status === 'error'
-                                    ? 'bg-red-950/40 text-red-300'
-                                    : 'bg-zinc-800 text-zinc-400'
-                            }`}>
-                              {trace.status}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 truncate text-[10px] text-zinc-500">{trace.nodeTypeKey}</p>
-                          {trace.error && (
-                            <p className="mt-1 text-[10px] text-red-300">{trace.error}</p>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="overflow-y-auto p-3">
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                      <p className="text-xs font-semibold text-zinc-100">Run Summary</p>
-                      <p className="mt-1 text-[11px] text-zinc-400">Started: {localExecutionStartedAt ? new Date(localExecutionStartedAt).toLocaleString('en-US') : '—'}</p>
-                      <p className="text-[11px] text-zinc-400">Finished: {localExecutionFinishedAt ? new Date(localExecutionFinishedAt).toLocaleString('en-US') : '—'}</p>
-                      <p className="text-[11px] text-zinc-400">Nodes: {localExecutionTraces.length}</p>
-                      {localExecutionError && (
-                        <p className="mt-1 text-[11px] text-red-300">{localExecutionError}</p>
-                      )}
-                    </div>
-
-                    {localExecutionTraces.map((trace) => (
-                      <div key={`detail-${trace.nodeId}`} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                        <p className="text-xs font-semibold text-zinc-100">{trace.label}</p>
-                        <p className="mt-1 text-[11px] text-zinc-500">Inputs</p>
-                        <pre className="mt-1 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-300">{JSON.stringify(trace.inputSnapshot, null, 2)}</pre>
-                        <p className="mt-2 text-[11px] text-zinc-500">Output</p>
-                        <pre className="mt-1 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-300">{JSON.stringify(trace.outputSnapshot, null, 2)}</pre>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {typeof window !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[10040] pointer-events-none">
