@@ -50,12 +50,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
   } as const;
 
-  const safeDrawerInsetStyle = {
-    paddingLeft: 'max(16px, env(safe-area-inset-left))',
-    paddingRight: 'max(16px, env(safe-area-inset-right))',
-    paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
-  } as const;
-
   const nodeTypes = useMemo<NodeTypes>(() => ({
     editorNode: ({ data }: RFNodeProps<RFNode<EditorNodeData>>) => {
       const category = (data?.category ?? 'logic').toLowerCase();
@@ -592,7 +586,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       <NodeTypesDrawer
         isOpen={isNodeTypesDrawerOpen}
         onOpenChange={handleNodeTypesDrawerOpenChange}
-        safeDrawerInsetStyle={safeDrawerInsetStyle}
         isNodeTypesLoading={isNodeTypesLoading}
         nodeTypesError={nodeTypesError}
         availableNodeTypesCount={availableNodeTypes.length}
@@ -616,7 +609,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
       <NodeSettingsDrawer
         isOpen={isSettingsDrawerOpen}
         onOpenChange={handleSettingsDrawerOpenChange}
-        safeDrawerInsetStyle={safeDrawerInsetStyle}
         settingsPanel={settingsPanel}
         onSettingsPanelChange={setSettingsPanel}
         saveStatus={saveStatus}

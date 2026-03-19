@@ -1,6 +1,5 @@
 'use client';
 
-import { type CSSProperties } from 'react';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import { type NodeTypeCategoryGroup } from '@/modules/tabs/orion/nodesEditorTypes';
 import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
@@ -16,7 +15,6 @@ function BackIcon() {
 interface NodeTypesDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  safeDrawerInsetStyle: CSSProperties;
   isNodeTypesLoading: boolean;
   nodeTypesError: string | null;
   availableNodeTypesCount: number;
@@ -34,7 +32,6 @@ interface NodeTypesDrawerProps {
 export default function NodeTypesDrawer({
   isOpen,
   onOpenChange,
-  safeDrawerInsetStyle,
   isNodeTypesLoading,
   nodeTypesError,
   availableNodeTypesCount,
@@ -53,10 +50,10 @@ export default function NodeTypesDrawer({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       title="Add Node"
-      height="auto"
+      height="full"
       showHeader={false}
     >
-      <div className="pb-4" style={safeDrawerInsetStyle}>
+      <div className="pb-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">Add Node</h3>
           <button
@@ -90,7 +87,7 @@ export default function NodeTypesDrawer({
             No node types available.
           </div>
         ) : !selectedNodeTypeCategory ? (
-          <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+          <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
             {nodeTypeGroups.map((group) => (
               <button
                 key={group.key}
@@ -107,7 +104,7 @@ export default function NodeTypesDrawer({
             ))}
           </div>
         ) : (
-          <div className="max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+          <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
             <button
               type="button"
               onClick={onBackToCategories}

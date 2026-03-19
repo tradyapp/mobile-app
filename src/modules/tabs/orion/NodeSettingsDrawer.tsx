@@ -1,6 +1,5 @@
 'use client';
 
-import { type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import { type StrategyNodeVersionRecord } from '@/services/StrategiesService';
@@ -16,7 +15,6 @@ function BackIcon() {
 interface NodeSettingsDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  safeDrawerInsetStyle: CSSProperties;
   settingsPanel: 'menu' | 'versions';
   onSettingsPanelChange: (panel: 'menu' | 'versions') => void;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
@@ -36,7 +34,6 @@ interface NodeSettingsDrawerProps {
 export function NodeSettingsDrawer({
   isOpen,
   onOpenChange,
-  safeDrawerInsetStyle,
   settingsPanel,
   onSettingsPanelChange,
   saveStatus,
@@ -57,10 +54,10 @@ export function NodeSettingsDrawer({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       title="Node Settings"
-      height="auto"
+      height="full"
       showHeader={false}
     >
-      <div className="pb-4" style={safeDrawerInsetStyle}>
+      <div className="pb-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">{settingsPanel === 'menu' ? 'Node Settings' : 'Versiones anteriores'}</h3>
           <button
