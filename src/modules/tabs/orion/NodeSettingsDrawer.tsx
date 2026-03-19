@@ -1,6 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
+import { List, ListItem, Toggle } from 'konsta/react';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import { type StrategyNodeVersionRecord } from '@/services/StrategiesService';
 
@@ -26,6 +27,9 @@ interface NodeSettingsDrawerProps {
   nodeVersions: StrategyNodeVersionRecord[];
   onEnterPreviewVersion: (version: StrategyNodeVersionRecord) => void;
   nodeVersionsError: string | null;
+  isLive: boolean;
+  onToggleLive: () => void;
+  onOpenBacktesting: () => void;
 }
 
 export function NodeSettingsDrawer({
@@ -42,6 +46,9 @@ export function NodeSettingsDrawer({
   nodeVersions,
   onEnterPreviewVersion,
   nodeVersionsError,
+  isLive,
+  onToggleLive,
+  onOpenBacktesting,
 }: NodeSettingsDrawerProps) {
   return (
     <AppDrawer
@@ -63,34 +70,45 @@ export function NodeSettingsDrawer({
     >
       <div className="pb-4">
         {settingsPanel === 'menu' ? (
-          <div className="space-y-2">
-            <button
-              type="button"
+          <List strong className="overflow-hidden rounded-xl">
+            <ListItem
+              title="Live"
+              after={(
+                <Toggle
+                  checked={isLive}
+                  onChange={onToggleLive}
+                />
+              )}
+            />
+            <ListItem
+              link
+              title="Back Testing"
+              after={<span className="text-[11px] text-zinc-500">Soon</span>}
+              onClick={onOpenBacktesting}
+            />
+            <ListItem
+              link
+              title="Activar version"
+              after={(
+                <span className="text-[11px] text-zinc-500">
+                  {isPublishingVersion
+                    ? 'Activando...'
+                    : isPreviewMode
+                      ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
+                      : 'Publicar y activar'}
+                </span>
+              )}
               onClick={() => void onActivateButtonClick()}
               disabled={isPublishingVersion || (isPreviewMode && Boolean(previewVersion?.is_active))}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-            >
-              <span className="text-sm font-medium text-zinc-100">Activar version</span>
-              <span className="text-xs text-zinc-400">
-                {isPublishingVersion
-                  ? 'Activando...'
-                  : isPreviewMode
-                    ? (previewVersion?.is_active ? 'Ya activa' : 'Activar esta versión')
-                    : 'Publicar y activar'}
-              </span>
-            </button>
-
-            <button
-              type="button"
+            />
+            <ListItem
+              link
+              title="Versiones anteriores"
               onClick={onOpenVersions}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left"
-            >
-              <span className="text-sm font-medium text-zinc-100">Versiones anteriores</span>
-              <span className="text-lg leading-none text-zinc-400">›</span>
-            </button>
-          </div>
+            />
+          </List>
         ) : (
-          <div className="space-y-2">
+          <div>
             {isNodeVersionsLoading ? (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm text-zinc-400">
                 Loading versions...
@@ -100,24 +118,22 @@ export function NodeSettingsDrawer({
                 No hay versiones anteriores.
               </div>
             ) : (
-              <div className="space-y-2">
+              <List strong className="overflow-hidden rounded-xl">
                 {nodeVersions.map((version) => (
-                  <button
+                  <ListItem
                     key={version.id}
-                    type="button"
+                    link
+                    title={`v${version.version_number} · ${version.name}`}
+                    subtitle={new Date(version.created_at).toLocaleString('en-US')}
+                    after={
+                      version.is_active ? (
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300">Active</span>
+                      ) : undefined
+                    }
                     onClick={() => onEnterPreviewVersion(version)}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-left"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-100">v{version.version_number} · {version.name}</p>
-                      <p className="truncate text-[11px] text-zinc-500">{new Date(version.created_at).toLocaleString('en-US')}</p>
-                    </div>
-                    {version.is_active && (
-                      <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300">Active</span>
-                    )}
-                  </button>
+                  />
                 ))}
-              </div>
+              </List>
             )}
           </div>
         )}

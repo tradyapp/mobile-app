@@ -37,10 +37,11 @@ function CloseIcon() {
 interface NodesViewProps {
   strategyId: string;
   strategyName: string;
+  strategyPhotoUrl?: string | null;
   onClose: () => void;
 }
 
-function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
+function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, onClose }: NodesViewProps) {
   const areSameIds = (prev: string[], next: string[]) => {
     if (prev.length !== next.length) return false;
     for (let i = 0; i < prev.length; i += 1) {
@@ -129,6 +130,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
   const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
+  const [isLive, setIsLive] = useState(false);
   const [versionNameInput, setVersionNameInput] = useState('');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
@@ -161,6 +163,16 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
   const activeNodeVersion = useMemo(
     () => nodeVersions.find((version) => version.is_active) ?? null,
     [nodeVersions]
+  );
+  const strategyInitials = useMemo(
+    () =>
+      strategyName
+        .split(' ')
+        .map((word) => word[0] ?? '')
+        .join('')
+        .slice(0, 2)
+        .toUpperCase(),
+    [strategyName]
   );
   const isPreviewMode = previewVersion !== null;
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
@@ -471,21 +483,32 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
           >
             <CloseIcon />
           </button>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
-            <p className="text-xs text-zinc-500">
-              {isNodeMapLoading
-                ? 'Loading map...'
-                : isPreviewMode
-                  ? `Preview · v${previewVersion.version_number} ${previewVersion.name}`
-                  : saveStatus === 'saving'
-                    ? `Draft · Saving...${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
-                    : saveStatus === 'saved'
-                      ? `Draft · Saved${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
-                      : saveStatus === 'error'
-                        ? 'Draft · Save error'
-                        : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`}
-            </p>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
+              {strategyPhotoUrl ? (
+                <img src={strategyPhotoUrl} alt={strategyName} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
+                  {strategyInitials || 'ST'}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
+              <p className="text-xs text-zinc-500">
+                {isNodeMapLoading
+                  ? 'Loading map...'
+                  : isPreviewMode
+                    ? `Preview · v${previewVersion.version_number} ${previewVersion.name}`
+                    : saveStatus === 'saving'
+                      ? `Draft · Saving...${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                      : saveStatus === 'saved'
+                        ? `Draft · Saved${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                        : saveStatus === 'error'
+                          ? 'Draft · Save error'
+                          : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`}
+              </p>
+            </div>
           </div>
           <div className="ml-auto">
             <button
@@ -638,6 +661,11 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         nodeVersions={nodeVersions}
         onEnterPreviewVersion={handleEnterPreviewVersion}
         nodeVersionsError={nodeVersionsError}
+        isLive={isLive}
+        onToggleLive={() => setIsLive((prev) => !prev)}
+        onOpenBacktesting={() => {
+          setIsSettingsDrawerOpen(false);
+        }}
       />
 
       <VersionNameDialog

@@ -10,7 +10,6 @@ import MarketplaceScreen from '@/modules/tabs/orion/MarketplaceScreen';
 import NodesEditorView from '@/modules/tabs/orion/NodesEditorView';
 import NotificationsScreen from '@/modules/tabs/orion/NotificationsScreen';
 import { parseOrionRoute } from '@/modules/tabs/orion/routeState';
-import StrategyDetailView from '@/modules/tabs/orion/StrategyDetailView';
 import { createEmptyDraft, type StrategyDraft } from '@/modules/tabs/orion/shared';
 import { strategiesService, type StrategyRecord } from '@/services/StrategiesService';
 import { useAuthStore } from '@/stores/authStore';
@@ -35,7 +34,6 @@ export default function OrionTab() {
   const [createDraft, setCreateDraft] = useState<StrategyDraft>(createEmptyDraft);
   const [isCreatingStrategy, setIsCreatingStrategy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [activeVersionLabel, setActiveVersionLabel] = useState<string | null>(null);
 
   const routeState = useMemo(() => parseOrionRoute(location.pathname), [location.pathname]);
   const orionRouteKey = useMemo(() => location.pathname, [location.pathname]);
@@ -77,36 +75,12 @@ export default function OrionTab() {
   const isNodesView = isMarketplace && myStrategiesScreen === 'nodes';
 
   useEffect(() => {
-    if (!isStrategyDetailView || !selectedStrategyId) {
-      setActiveVersionLabel(null);
-      return;
-    }
-
-    let active = true;
-    const loadActiveVersion = async () => {
-      try {
-        const versions = await strategiesService.listStrategyNodeVersions(selectedStrategyId);
-        if (!active) return;
-        const activeVersion = versions.find((item) => item.is_active) ?? null;
-        setActiveVersionLabel(
-          activeVersion
-            ? `v${activeVersion.version_number} · ${activeVersion.name}`
-            : 'Sin versión activa'
-        );
-      } catch {
-        if (!active) return;
-        setActiveVersionLabel('Sin versión activa');
-      }
-    };
-
-    void loadActiveVersion();
-    return () => {
-      active = false;
-    };
+    if (!isStrategyDetailView || !selectedStrategyId) return;
+    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}/nodes`, { replace: true });
   }, [isStrategyDetailView, selectedStrategyId]);
 
   const handleOpenStrategy = (strategy: StrategyRecord) => {
-    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}`);
+    navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(strategy.id)}/nodes`);
   };
 
   const handleCreateStrategy = async () => {
@@ -134,20 +108,9 @@ export default function OrionTab() {
     <>
       {!isNodesView && (
         <AppNavbar
-          title={isStrategyDetailView ? (selectedStrategy?.name ?? 'Strategy') : (isMarketplace ? 'Orion Marketplace' : 'Notifications')}
+          title={isMarketplace ? 'Orion Marketplace' : 'Notifications'}
           left={
-            isStrategyDetailView ? (
-              <button
-                type="button"
-                onClick={() => {
-                  navigate('/orion/marketplace/my-strategies');
-                }}
-                className="flex h-10 w-10 items-center justify-center text-2xl text-zinc-200"
-                aria-label="Close strategy view"
-              >
-                <CloseIcon />
-              </button>
-            ) : isMarketplace ? (
+            isMarketplace ? (
               <button
                 type="button"
                 onClick={() => {
@@ -186,13 +149,8 @@ export default function OrionTab() {
             <NodesEditorView
               strategyId={selectedStrategyId}
               strategyName={selectedStrategy?.name ?? 'Strategy'}
-              onClose={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategyId)}`)}
-            />
-          ) : isStrategyDetailView && selectedStrategy ? (
-            <StrategyDetailView
-              strategy={selectedStrategy}
-              onOpenNodes={() => navigate(`/orion/marketplace/my-strategies/${encodeURIComponent(selectedStrategy.id)}/nodes`)}
-              activeVersionLabel={activeVersionLabel}
+              strategyPhotoUrl={selectedStrategy?.photo_url ?? null}
+              onClose={() => navigate('/orion/marketplace/my-strategies')}
             />
           ) : isMarketplace ? (
             <MarketplaceScreen
