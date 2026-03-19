@@ -170,10 +170,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     nodes: nodes as unknown[],
     edges: edges as unknown[],
   }), [nodes, edges]);
-  const hasUnsavedDraftChanges = useMemo(() => {
-    if (isPreviewMode || !hasHydratedNodeMapRef.current) return false;
-    return JSON.stringify(getCurrentNodeMap()) !== lastSavedNodeMapSnapshot;
-  }, [isPreviewMode, getCurrentNodeMap, lastSavedNodeMapSnapshot]);
 
   const applyNodeMapToCanvas = useCallback((nodeMap: StrategyNodeMap) => {
     const nextNodes = (nodeMap.nodes ?? []) as RFNode[];
@@ -407,29 +403,6 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
     }
   }, [isPublishingVersion, isPreviewMode, getCurrentNodeMap, strategyId]);
 
-  const handleSaveNodeMap = useCallback(async () => {
-    if (isPreviewMode) return;
-    const requestId = saveRequestIdRef.current + 1;
-    saveRequestIdRef.current = requestId;
-    setSaveStatus('saving');
-    setSaveError(null);
-
-    const payload = getCurrentNodeMap();
-    const serialized = JSON.stringify(payload);
-
-    try {
-      await strategiesService.saveStrategyNodeMap(strategyId, payload);
-      if (saveRequestIdRef.current !== requestId) return;
-      lastSavedNodeMapRef.current = serialized;
-      setLastSavedNodeMapSnapshot(serialized);
-      setSaveStatus('saved');
-    } catch (error) {
-      if (saveRequestIdRef.current !== requestId) return;
-      setSaveStatus('error');
-      setSaveError(error instanceof Error ? error.message : 'Failed to save node map');
-    }
-  }, [strategyId, getCurrentNodeMap, isPreviewMode]);
-
   const handleEnterPreviewVersion = useCallback((version: StrategyNodeVersionRecord) => {
     if (!version.node_map) return;
     if (!isPreviewMode) {
@@ -643,10 +616,7 @@ function NodesView({ strategyId, strategyName, onClose }: NodesViewProps) {
         onOpenChange={handleSettingsDrawerOpenChange}
         settingsPanel={settingsPanel}
         onSettingsPanelChange={setSettingsPanel}
-        saveStatus={saveStatus}
         isPreviewMode={isPreviewMode}
-        hasUnsavedDraftChanges={hasUnsavedDraftChanges}
-        onSaveNodeMap={() => void handleSaveNodeMap()}
         isPublishingVersion={isPublishingVersion}
         previewVersion={previewVersion}
         onActivateButtonClick={async () => {

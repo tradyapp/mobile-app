@@ -17,10 +17,7 @@ interface NodeSettingsDrawerProps {
   onOpenChange: (open: boolean) => void;
   settingsPanel: 'menu' | 'versions';
   onSettingsPanelChange: (panel: 'menu' | 'versions') => void;
-  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   isPreviewMode: boolean;
-  hasUnsavedDraftChanges: boolean;
-  onSaveNodeMap: () => void;
   isPublishingVersion: boolean;
   previewVersion: StrategyNodeVersionRecord | null;
   onActivateButtonClick: () => Promise<void>;
@@ -36,10 +33,7 @@ export function NodeSettingsDrawer({
   onOpenChange,
   settingsPanel,
   onSettingsPanelChange,
-  saveStatus,
   isPreviewMode,
-  hasUnsavedDraftChanges,
-  onSaveNodeMap,
   isPublishingVersion,
   previewVersion,
   onActivateButtonClick,
@@ -70,24 +64,6 @@ export function NodeSettingsDrawer({
       <div className="pb-4">
         {settingsPanel === 'menu' ? (
           <div className="space-y-2">
-            <button
-              type="button"
-              onClick={onSaveNodeMap}
-              disabled={saveStatus === 'saving' || isPreviewMode || !hasUnsavedDraftChanges}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-left disabled:opacity-50"
-            >
-              <span className="text-sm font-medium text-zinc-100">Guardar</span>
-              <span className="text-xs text-zinc-400">
-                {isPreviewMode
-                  ? 'Disabled in preview'
-                  : saveStatus === 'saving'
-                    ? 'Guardando...'
-                    : hasUnsavedDraftChanges
-                      ? 'Guardar draft'
-                      : 'Sin cambios'}
-              </span>
-            </button>
-
             <button
               type="button"
               onClick={() => void onActivateButtonClick()}
