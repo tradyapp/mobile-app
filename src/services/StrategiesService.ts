@@ -103,6 +103,73 @@ export interface ExecuteStrategyNodeResult {
   execution_time: string;
 }
 
+export interface StrategyBacktestMetadataInput {
+  strategy_id?: string;
+  node_map?: StrategyNodeMap;
+  symbol: string;
+  market?: StrategySymbolMarket;
+}
+
+export interface StrategyBacktestTimeframeStat {
+  timeframe: string;
+  count: number;
+  oldest: string | null;
+  newest: string | null;
+}
+
+export interface StrategyBacktestMetadataResult {
+  status: "ok";
+  symbol: string;
+  market: StrategySymbolMarket;
+  requested_timeframes: string[];
+  timeframe_stats: StrategyBacktestTimeframeStat[];
+  base_timeframe: string;
+  warnings: string[];
+}
+
+export interface StrategyBacktestRunInput {
+  strategy_id?: string;
+  node_map?: StrategyNodeMap;
+  symbol: string;
+  market?: StrategySymbolMarket;
+  from?: string;
+  to?: string;
+  max_bars?: number;
+  mode?: "preview" | "cloud" | "live";
+}
+
+export interface StrategyBacktestRunEvent {
+  execution_time: string;
+  anchor_time: string;
+  signal_kind: "true" | "rating";
+  rating: number | null;
+  output_node_id: string;
+  output_node_type: string;
+  output: unknown;
+}
+
+export interface StrategyBacktestRunResult {
+  status: "completed";
+  symbol: string;
+  market: StrategySymbolMarket;
+  requested_timeframes: string[];
+  timeframe_stats: StrategyBacktestTimeframeStat[];
+  base_timeframe: string;
+  from: string;
+  to: string;
+  bars_available: number;
+  bars_evaluated: number;
+  mode: "preview" | "cloud" | "live";
+  stats: {
+    events_total: number;
+    true_events: number;
+    rating_events: number;
+    avg_rating: number | null;
+  };
+  warnings: string[];
+  events: StrategyBacktestRunEvent[];
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -794,6 +861,30 @@ class StrategiesService {
 
   async executeStrategyNode(input: ExecuteStrategyNodeInput): Promise<ExecuteStrategyNodeResult> {
     return this.invokeFunction<ExecuteStrategyNodeResult>("node-execute", input);
+  }
+
+  async getStrategyBacktestMetadata(input: StrategyBacktestMetadataInput): Promise<StrategyBacktestMetadataResult> {
+    return this.invokeFunction<StrategyBacktestMetadataResult>("strategy-backtest", {
+      action: "metadata",
+      strategy_id: input.strategy_id,
+      node_map: input.node_map,
+      symbol: input.symbol,
+      market: input.market,
+    });
+  }
+
+  async runStrategyBacktest(input: StrategyBacktestRunInput): Promise<StrategyBacktestRunResult> {
+    return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
+      action: "run",
+      strategy_id: input.strategy_id,
+      node_map: input.node_map,
+      symbol: input.symbol,
+      market: input.market,
+      from: input.from,
+      to: input.to,
+      max_bars: input.max_bars,
+      mode: input.mode ?? "preview",
+    });
   }
 }
 

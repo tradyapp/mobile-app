@@ -848,7 +848,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [isNodeVersionsLoading, setIsNodeVersionsLoading] = useState(false);
   const [nodeVersionsError, setNodeVersionsError] = useState<string | null>(null);
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
-  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library' | 'danger'>('menu');
+  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
   const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
   const [isDeleteStrategyDialogOpen, setIsDeleteStrategyDialogOpen] = useState(false);
@@ -2163,8 +2163,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         isLive,
         onToggleLive: () => setIsLive((prev) => !prev),
         onOpenBacktesting: () => {
-          setIsSettingsDrawerOpen(false);
-          void runLocalExecution();
+          setSettingsPanel('backtesting');
         },
         isOwner,
         availableSymbols,

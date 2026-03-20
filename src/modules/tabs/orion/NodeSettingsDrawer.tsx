@@ -2,9 +2,16 @@
 
 import { createPortal } from 'react-dom';
 import { List, ListItem, Toggle } from 'konsta/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AppDrawer from '@/components/uiux/AppDrawer';
-import { type StrategyNodeVersionRecord, type StrategySymbolMarket, type StrategyTrackedSymbol } from '@/services/StrategiesService';
+import {
+  strategiesService,
+  type StrategyBacktestMetadataResult,
+  type StrategyBacktestRunResult,
+  type StrategyNodeVersionRecord,
+  type StrategySymbolMarket,
+  type StrategyTrackedSymbol,
+} from '@/services/StrategiesService';
 
 function BackIcon() {
   return (
@@ -71,8 +78,8 @@ export interface StrategySymbolCatalogItem {
 interface NodeSettingsDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'danger';
-  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'danger') => void;
+  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger';
+  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger') => void;
   isPreviewMode: boolean;
   isPublishingVersion: boolean;
   previewVersion: StrategyNodeVersionRecord | null;
@@ -132,6 +139,15 @@ export function NodeSettingsDrawer({
   onDeleteStrategyRequest,
 }: NodeSettingsDrawerProps) {
   const [activeMarketFilter, setActiveMarketFilter] = useState<'ALL' | StrategySymbolMarket>('ALL');
+  const [backtestSymbol, setBacktestSymbol] = useState('');
+  const [backtestFromDate, setBacktestFromDate] = useState('');
+  const [backtestToDate, setBacktestToDate] = useState('');
+  const [backtestMaxBars, setBacktestMaxBars] = useState(5000);
+  const [isBacktestLoadingMetadata, setIsBacktestLoadingMetadata] = useState(false);
+  const [isBacktestRunning, setIsBacktestRunning] = useState(false);
+  const [backtestMetadata, setBacktestMetadata] = useState<StrategyBacktestMetadataResult | null>(null);
+  const [backtestResult, setBacktestResult] = useState<StrategyBacktestRunResult | null>(null);
+  const [backtestError, setBacktestError] = useState<string | null>(null);
 
   const selectedTickerSet = useMemo(
     () => new Set(trackedSymbols.map((item) => item.ticker.toUpperCase())),
@@ -143,11 +159,121 @@ export function NodeSettingsDrawer({
     return availableSymbols.filter((item) => item.market === activeMarketFilter);
   }, [activeMarketFilter, availableSymbols]);
 
+  const resolveStrategyIdFromPath = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const normalized = window.location.pathname.replace(/\/+$/, '');
+    const match = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes$/);
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  };
+
+  const formatDateInputValue = (iso: string | null): string => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  };
+
+  const makeStartISO = (dateInput: string): string => {
+    return `${dateInput}T00:00:00.000Z`;
+  };
+
+  const makeEndISO = (dateInput: string): string => {
+    return `${dateInput}T23:59:59.999Z`;
+  };
+
+  const loadBacktestMetadata = async () => {
+    if (!backtestSymbol.trim()) {
+      setBacktestError('Select a symbol first.');
+      return;
+    }
+    const strategyId = resolveStrategyIdFromPath();
+    if (!strategyId) {
+      setBacktestError('Strategy ID not found in route.');
+      return;
+    }
+
+    setBacktestError(null);
+    setIsBacktestLoadingMetadata(true);
+    try {
+      const metadata = await strategiesService.getStrategyBacktestMetadata({
+        strategy_id: strategyId,
+        symbol: backtestSymbol,
+      });
+      setBacktestMetadata(metadata);
+      setBacktestResult(null);
+      if (!backtestFromDate) {
+        setBacktestFromDate(formatDateInputValue(metadata.timeframe_stats.find((item) => item.timeframe === metadata.base_timeframe)?.oldest ?? null));
+      }
+      if (!backtestToDate) {
+        setBacktestToDate(formatDateInputValue(metadata.timeframe_stats.find((item) => item.timeframe === metadata.base_timeframe)?.newest ?? null));
+      }
+    } catch (error) {
+      setBacktestError(error instanceof Error ? error.message : 'Failed to load backtest metadata');
+    } finally {
+      setIsBacktestLoadingMetadata(false);
+    }
+  };
+
+  const runBacktest = async () => {
+    if (!backtestSymbol.trim()) {
+      setBacktestError('Select a symbol first.');
+      return;
+    }
+    if (!backtestFromDate || !backtestToDate) {
+      setBacktestError('Select both start and end dates.');
+      return;
+    }
+    const strategyId = resolveStrategyIdFromPath();
+    if (!strategyId) {
+      setBacktestError('Strategy ID not found in route.');
+      return;
+    }
+
+    setBacktestError(null);
+    setIsBacktestRunning(true);
+    try {
+      const result = await strategiesService.runStrategyBacktest({
+        strategy_id: strategyId,
+        symbol: backtestSymbol,
+        from: makeStartISO(backtestFromDate),
+        to: makeEndISO(backtestToDate),
+        max_bars: backtestMaxBars,
+        mode: 'preview',
+      });
+      setBacktestResult(result);
+    } catch (error) {
+      setBacktestError(error instanceof Error ? error.message : 'Failed to run backtest');
+    } finally {
+      setIsBacktestRunning(false);
+    }
+  };
+
+  useEffect(() => {
+    if (settingsPanel !== 'backtesting') return;
+    if (!backtestSymbol && trackedSymbols.length > 0) {
+      setBacktestSymbol(trackedSymbols[0].ticker);
+    }
+  }, [backtestSymbol, settingsPanel, trackedSymbols]);
+
+  useEffect(() => {
+    if (settingsPanel !== 'backtesting') return;
+    if (!backtestSymbol) return;
+    if (backtestMetadata?.symbol === backtestSymbol) return;
+    void loadBacktestMetadata();
+  }, [settingsPanel, backtestSymbol]);
+
   const title =
     settingsPanel === 'menu'
       ? 'Node Settings'
       : settingsPanel === 'versions'
         ? 'Versiones anteriores'
+        : settingsPanel === 'backtesting'
+          ? 'Back Testing'
         : settingsPanel === 'danger'
           ? 'Danger Zone'
         : settingsPanel === 'symbols'
@@ -188,7 +314,7 @@ export function NodeSettingsDrawer({
               <ListItem
                 link
                 title="Back Testing"
-                after={<span className="text-[11px] text-zinc-500">Soon</span>}
+                after={<span className="text-[11px] text-zinc-500">MVP</span>}
                 onClick={onOpenBacktesting}
               />
               <ListItem
@@ -370,15 +496,123 @@ export function NodeSettingsDrawer({
           </div>
         )}
 
+        {settingsPanel === 'backtesting' && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+              <p className="text-xs font-semibold text-zinc-100">Symbol</p>
+              <select
+                value={backtestSymbol}
+                onChange={(event) => setBacktestSymbol(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+              >
+                {trackedSymbols.length === 0 ? (
+                  <option value="">No symbols configured</option>
+                ) : (
+                  trackedSymbols.map((item) => (
+                    <option key={item.ticker} value={item.ticker}>{item.ticker} · {item.name}</option>
+                  ))
+                )}
+              </select>
+
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <label className="text-xs text-zinc-400">
+                  From
+                  <input
+                    type="date"
+                    value={backtestFromDate}
+                    onChange={(event) => setBacktestFromDate(event.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400">
+                  To
+                  <input
+                    type="date"
+                    value={backtestToDate}
+                    onChange={(event) => setBacktestToDate(event.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400">
+                  Max Bars
+                  <input
+                    type="number"
+                    min={100}
+                    max={20000}
+                    step={100}
+                    value={backtestMaxBars}
+                    onChange={(event) => setBacktestMaxBars(Math.max(100, Number(event.target.value) || 5000))}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { void loadBacktestMetadata(); }}
+                  disabled={isBacktestLoadingMetadata || trackedSymbols.length === 0}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-60"
+                >
+                  {isBacktestLoadingMetadata ? 'Loading...' : 'Refresh Range'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void runBacktest(); }}
+                  disabled={isBacktestRunning || trackedSymbols.length === 0}
+                  className="flex-1 rounded-lg border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-60"
+                >
+                  {isBacktestRunning ? 'Running...' : 'Run Backtest'}
+                </button>
+              </div>
+            </div>
+
+            {backtestMetadata && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
+                <p><span className="text-zinc-500">Base TF:</span> {backtestMetadata.base_timeframe}</p>
+                {backtestMetadata.timeframe_stats.map((item) => (
+                  <p key={item.timeframe}>
+                    <span className="text-zinc-500">{item.timeframe}:</span> {item.count} candles
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {backtestResult && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
+                <p><span className="text-zinc-500">Evaluated:</span> {backtestResult.bars_evaluated} / {backtestResult.bars_available}</p>
+                <p><span className="text-zinc-500">Events:</span> {backtestResult.stats.events_total}</p>
+                <p><span className="text-zinc-500">True:</span> {backtestResult.stats.true_events}</p>
+                <p><span className="text-zinc-500">Rating:</span> {backtestResult.stats.rating_events}</p>
+                <p><span className="text-zinc-500">Avg rating:</span> {backtestResult.stats.avg_rating ?? 'N/A'}</p>
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                  {backtestResult.events.slice(0, 40).map((event, idx) => (
+                    <p key={`${event.anchor_time}-${event.output_node_id}-${idx}`} className="truncate">
+                      {event.anchor_time} · {event.signal_kind}{event.rating !== null ? ` (${event.rating})` : ''}
+                    </p>
+                  ))}
+                  {backtestResult.events.length === 0 && (
+                    <p className="text-zinc-500">No events in selected range.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-3 text-[11px] text-amber-200/90">
+              Backtesting can differ from live behavior, especially with multi-timeframe nodes and unfinished candles.
+            </div>
+          </div>
+        )}
+
         {(!isOwner && settingsPanel === 'menu') && (
           <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
             Solo el dueño de la estrategia puede editar Symbols.
           </div>
         )}
 
-        {(nodeVersionsError || symbolsError) && (
+        {(nodeVersionsError || symbolsError || backtestError) && (
           <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-            {nodeVersionsError || symbolsError}
+            {nodeVersionsError || symbolsError || backtestError}
           </div>
         )}
       </div>
