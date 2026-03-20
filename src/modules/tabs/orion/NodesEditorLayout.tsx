@@ -110,6 +110,17 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
             </button>
             <button
               type="button"
+              onClick={model.onAddSection}
+              className="flex h-11 items-center gap-2 rounded-full border border-zinc-600 bg-zinc-900/85 px-4 text-sm font-semibold text-zinc-200 shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+              aria-label="Add section"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16v12H4zM9 10h6" />
+              </svg>
+              Section
+            </button>
+            <button
+              type="button"
               onClick={model.onOpenNodeTypesDrawer}
               className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
               aria-label="Add node"

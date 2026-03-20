@@ -6,6 +6,7 @@ import dagre from '@dagrejs/dagre';
 import {
   addEdge,
   Handle,
+  NodeResizer,
   Position,
   type Connection,
   type Edge as RFEdge,
@@ -89,6 +90,8 @@ function getSourceHandleClass(port: EditorNodeField | undefined): string {
 
 const AUTO_LAYOUT_NODE_WIDTH = 126;
 const AUTO_LAYOUT_NODE_HEIGHT = 98;
+const SECTION_NODE_DEFAULT_WIDTH = 420;
+const SECTION_NODE_DEFAULT_HEIGHT = 240;
 
 function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: UseNodesEditorControllerProps) {
   const areSameIds = (prev: string[], next: string[]) => {
@@ -116,11 +119,37 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       const category = normalizeNodeCategory(data?.category);
       const isTrigger = category === 'trigger';
       const isOutput = category === 'output';
+      const isSection = category === 'section';
       const inputPorts = Array.isArray(data?.inputs) ? data.inputs : [];
       const outputPorts = Array.isArray(data?.outputs) ? data.outputs : [];
-      const leftPorts = isTrigger ? [] : (inputPorts.length > 0 ? inputPorts : [{ id: 'left', name: 'Input' } as EditorNodeField]);
-      const rightPorts = isOutput ? [] : (outputPorts.length > 0 ? outputPorts : [{ id: 'right', name: 'Output' } as EditorNodeField]);
+      const leftPorts = isTrigger || isSection ? [] : (inputPorts.length > 0 ? inputPorts : [{ id: 'left', name: 'Input' } as EditorNodeField]);
+      const rightPorts = isOutput || isSection ? [] : (outputPorts.length > 0 ? outputPorts : [{ id: 'right', name: 'Output' } as EditorNodeField]);
       const executionStatus = executionStatusByNodeIdRef.current[id];
+      const sectionTitle = isSection
+        ? (
+          (data?.attributes ?? []).find((field) => field.key === 'title')?.value?.trim()
+          || data?.label
+          || 'Section'
+        )
+        : null;
+
+      if (isSection) {
+        return (
+          <div className="h-full w-full rounded-2xl border border-dashed border-zinc-600/90 bg-zinc-900/25 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(63,63,70,0.15)]">
+            <NodeResizer
+              minWidth={220}
+              minHeight={140}
+              handleClassName="!h-3 !w-3 !rounded-full !border !border-zinc-500 !bg-zinc-800"
+              lineClassName="!border-zinc-600/60"
+              color="#52525b"
+            />
+            <p className="pointer-events-none select-none truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
+              {sectionTitle}
+            </p>
+          </div>
+        );
+      }
+
       const executionClassName = executionStatus === 'running'
         ? 'border-blue-400 bg-blue-950/35 shadow-[0_0_0_2px_rgba(59,130,246,0.35)]'
         : executionStatus === 'success'
@@ -589,6 +618,44 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     setIsNodeTypesDrawerOpen(false);
   }, [setNodes]);
 
+  const handleAddSection = useCallback(() => {
+    setNodes((prev) => {
+      const nextLabel = nodeCounterRef.current;
+      nodeCounterRef.current += 1;
+
+      const nextNode: RFNode = {
+        id: `node-${nextLabel}`,
+        type: 'editorNode',
+        position: {
+          x: 120 + (prev.length % 3) * 80,
+          y: 120 + Math.floor(prev.length / 3) * 60,
+        },
+        style: {
+          width: SECTION_NODE_DEFAULT_WIDTH,
+          height: SECTION_NODE_DEFAULT_HEIGHT,
+        },
+        zIndex: -1,
+        data: {
+          label: 'Section',
+          category: 'section',
+          inputs: [],
+          outputs: [],
+          attributes: [
+            {
+              id: 'section-title',
+              key: 'title',
+              name: 'Title',
+              type: 'text',
+              value: 'Section',
+            },
+          ],
+        } satisfies EditorNodeData,
+      };
+
+      return [...prev, nextNode];
+    });
+  }, [setNodes]);
+
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
 
@@ -602,8 +669,14 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       marginy: 30,
     });
 
+    const layoutableNodes = nodes.filter((node) => {
+      const data = (node.data ?? {}) as EditorNodeData;
+      return normalizeNodeCategory(data.category) !== 'section';
+    });
+    if (layoutableNodes.length === 0) return;
+
     const sizeById = new Map<string, { width: number; height: number }>();
-    for (const node of nodes) {
+    for (const node of layoutableNodes) {
       const width = typeof node.width === 'number' ? node.width : AUTO_LAYOUT_NODE_WIDTH;
       const height = typeof node.height === 'number' ? node.height : AUTO_LAYOUT_NODE_HEIGHT;
       sizeById.set(node.id, { width, height });
@@ -619,6 +692,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     dagre.layout(graph);
 
     const nextNodes = nodes.map((node, index) => {
+      if (!sizeById.has(node.id)) return node;
       const dims = sizeById.get(node.id) ?? { width: AUTO_LAYOUT_NODE_WIDTH, height: AUTO_LAYOUT_NODE_HEIGHT };
       const positioned = graph.node(node.id) as { x?: number; y?: number } | undefined;
       if (!positioned || typeof positioned.x !== 'number' || typeof positioned.y !== 'number') {
@@ -1002,7 +1076,11 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     const category = normalizeNodeCategory(nodeEditorData?.category);
     const baseItems: NodeDetailsPanelItem[] = [];
 
-    if (category === 'trigger') {
+    if (category === 'section') {
+      baseItems.push(
+        { key: 'attributes', label: 'Attributes' },
+      );
+    } else if (category === 'trigger') {
       baseItems.push(
         { key: 'attributes', label: 'Attributes' },
         { key: 'outputs', label: 'Result' },
@@ -1162,6 +1240,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         onRunLocalExecution: () => { void runLocalExecution(); },
         isLocalExecutionRunning: localExecutionStatus === 'running',
         selectedExecutionTicker,
+        onAddSection: handleAddSection,
         onOpenNodeTypesDrawer: () => setIsNodeTypesDrawerOpen(true),
         isExecutionSymbolDrawerOpen,
         onExecutionSymbolDrawerOpenChange: (open: boolean) => {

@@ -68,6 +68,9 @@ export default function OrionNodesCanvas({
           edgesUpdatable={!isPreviewMode}
           onSelectionChange={onSelectionChange}
           proOptions={{ hideAttribution: true }}
+          minZoom={0.03}
+          maxZoom={2.2}
+          fitViewOptions={{ padding: 0.25, minZoom: 0.03 }}
           fitView
         >
           <Background color="#27272a" gap={16} />
