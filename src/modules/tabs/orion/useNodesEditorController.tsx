@@ -97,6 +97,7 @@ const AUTO_LAYOUT_HORIZONTAL_GAP = 20;
 const AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE = 90;
 const AUTO_LAYOUT_EDGE_OVERLAP_PADDING = 10;
 const AUTO_LAYOUT_EDGE_AVOIDANCE_ITERATIONS = 4;
+const AUTO_LAYOUT_SIBLING_ORDER_ITERATIONS = 3;
 
 type LayoutBox = {
   left: number;
@@ -410,6 +411,100 @@ function optimizeEdgeNodeOverlaps(
       if (bestY !== currentY) movedInIteration = true;
     }
     if (!movedInIteration) break;
+  }
+
+  return yById;
+}
+
+function enforceSiblingOutputOrder(
+  nodes: RFNode[],
+  edges: RFEdge[],
+  sizeById: Map<string, { width: number; height: number }>,
+  parentOutputOrderByNode: Map<string, Map<string, number>>,
+  incomingCountByTarget: Map<string, number>,
+): Map<string, number> {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const yById = new Map(nodes.map((node) => [node.id, node.position.y]));
+
+  for (let iteration = 0; iteration < AUTO_LAYOUT_SIBLING_ORDER_ITERATIONS; iteration += 1) {
+    let moved = false;
+    for (const parent of nodes) {
+      if (!sizeById.has(parent.id)) continue;
+
+      const entries = new Map<string, { targetId: string; order: number }>();
+      for (const edge of edges) {
+        if (edge.source !== parent.id || !edge.target) continue;
+        if (!sizeById.has(edge.target) || edge.target === parent.id) continue;
+        const child = nodeById.get(edge.target);
+        if (!child) continue;
+        // Maintain order only for forward edges in LR.
+        if (child.position.x <= parent.position.x) continue;
+        const handleOrder = parentOutputOrderByNode.get(parent.id);
+        const order = handleOrder?.get(edge.sourceHandle || 'right') ?? 0;
+        const existing = entries.get(edge.target);
+        if (!existing || order < existing.order) {
+          entries.set(edge.target, { targetId: edge.target, order });
+        }
+      }
+
+      const children = [...entries.values()]
+        .map((entry) => {
+          const node = nodeById.get(entry.targetId);
+          const dims = sizeById.get(entry.targetId);
+          if (!node || !dims) return null;
+          return {
+            targetId: entry.targetId,
+            order: entry.order,
+            height: dims.height,
+            incoming: incomingCountByTarget.get(entry.targetId) ?? 1,
+          };
+        })
+        .filter((item): item is { targetId: string; order: number; height: number; incoming: number } => item !== null)
+        .sort((a, b) => {
+          if (a.order !== b.order) return a.order - b.order;
+          const ay = yById.get(a.targetId) ?? 0;
+          const by = yById.get(b.targetId) ?? 0;
+          if (ay !== by) return ay - by;
+          return a.targetId.localeCompare(b.targetId);
+        });
+
+      if (children.length < 2) continue;
+
+      // Forward pass: enforce strict top-to-bottom order with gap.
+      for (let i = 1; i < children.length; i += 1) {
+        const prev = children[i - 1];
+        const current = children[i];
+        const prevY = yById.get(prev.targetId) ?? 0;
+        const currentY = yById.get(current.targetId) ?? 0;
+        const minY = prevY + prev.height + AUTO_LAYOUT_VERTICAL_GAP;
+        if (currentY < minY) {
+          const blend = current.incoming > 1 ? 0.45 : 1;
+          const nextY = Math.round(currentY * (1 - blend) + minY * blend);
+          if (nextY !== currentY) {
+            yById.set(current.targetId, nextY);
+            moved = true;
+          }
+        }
+      }
+
+      // Backward pass: compact without breaking order.
+      for (let i = children.length - 2; i >= 0; i -= 1) {
+        const current = children[i];
+        const next = children[i + 1];
+        const currentY = yById.get(current.targetId) ?? 0;
+        const nextY = yById.get(next.targetId) ?? 0;
+        const maxY = nextY - current.height - AUTO_LAYOUT_VERTICAL_GAP;
+        if (currentY > maxY) {
+          const blend = current.incoming > 1 ? 0.45 : 1;
+          const nextYValue = Math.round(currentY * (1 - blend) + maxY * blend);
+          if (nextYValue !== currentY) {
+            yById.set(current.targetId, nextYValue);
+            moved = true;
+          }
+        }
+      }
+    }
+    if (!moved) break;
   }
 
   return yById;
@@ -1152,8 +1247,59 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       };
     });
 
-    const resolvedYById = resolveNodeRectCollisions(overlapOptimizedNodes, sizeById);
-    const finalNodes = overlapOptimizedNodes.map((node) => {
+    const siblingOrderedYById = enforceSiblingOutputOrder(
+      overlapOptimizedNodes,
+      edges,
+      sizeById,
+      parentOutputOrderByNode,
+      incomingCountByTarget,
+    );
+    const siblingOrderedNodes = overlapOptimizedNodes.map((node) => {
+      const orderedY = siblingOrderedYById.get(node.id);
+      if (typeof orderedY !== 'number' || orderedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: orderedY,
+        },
+      };
+    });
+
+    const firstResolvedYById = resolveNodeRectCollisions(siblingOrderedNodes, sizeById);
+    const firstCollisionResolvedNodes = siblingOrderedNodes.map((node) => {
+      const resolvedY = firstResolvedYById.get(node.id);
+      if (typeof resolvedY !== 'number' || resolvedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: resolvedY,
+        },
+      };
+    });
+
+    const finalOrderedYById = enforceSiblingOutputOrder(
+      firstCollisionResolvedNodes,
+      edges,
+      sizeById,
+      parentOutputOrderByNode,
+      incomingCountByTarget,
+    );
+    const finalOrderedNodes = firstCollisionResolvedNodes.map((node) => {
+      const orderedY = finalOrderedYById.get(node.id);
+      if (typeof orderedY !== 'number' || orderedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: orderedY,
+        },
+      };
+    });
+
+    const resolvedYById = resolveNodeRectCollisions(finalOrderedNodes, sizeById);
+    const finalNodes = finalOrderedNodes.map((node) => {
       const resolvedY = resolvedYById.get(node.id);
       if (typeof resolvedY !== 'number') return node;
       if (resolvedY === node.position.y) return node;
