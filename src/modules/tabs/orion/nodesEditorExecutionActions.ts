@@ -2,6 +2,7 @@ import { type Edge as RFEdge, type Node as RFNode } from '@xyflow/react';
 import { type EditorNodeData, type EditorNodeField, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
 import { getValueType } from '@/modules/tabs/orion/OrionValueView';
 import { type LocalExecutionNodeStatus, type LocalExecutionNodeTrace, parseNodeReferenceToken, makeNodeReferenceToken } from '@/modules/tabs/orion/nodesEditorUtils';
+import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService } from '@/services/StrategiesService';
 
 type StateHistoryItem = { nodeId: string; data: unknown };
@@ -14,6 +15,7 @@ type ReferenceSourceItem = {
   dataType: string;
   refToken: string;
 };
+type LocalEvalSpec = { op?: unknown };
 
 function normalizeHandleId(raw: string): string {
   return raw
@@ -47,6 +49,244 @@ function shouldFollowEdge(edge: RFEdge, routeHandles: Set<string> | null, siblin
   if (!hasNamedHandles) return true;
   if (!edge.sourceHandle) return false;
   return routeHandles.has(normalizeHandleId(edge.sourceHandle));
+}
+
+function normalizeFieldKey(field: EditorNodeField): string {
+  if (field.key && field.key.trim()) return field.key.trim();
+  const base = (field.name ?? '').trim().toLowerCase();
+  return base.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function parseFieldValue(field: EditorNodeField): unknown {
+  const resolved = (field as EditorNodeField & { resolved?: unknown }).resolved;
+  if (resolved !== undefined) return resolved;
+  const raw = field.value ?? '';
+  const type = (field.type ?? '').toLowerCase();
+  if (type === 'number') {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (type === 'boolean') {
+    const value = raw.trim().toLowerCase();
+    if (['true', '1', 'yes'].includes(value)) return true;
+    if (['false', '0', 'no'].includes(value)) return false;
+    return null;
+  }
+  return raw;
+}
+
+function fieldsToObject(fields: EditorNodeField[] | undefined): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const field of fields ?? []) {
+    const key = normalizeFieldKey(field);
+    if (!key) continue;
+    output[key] = parseFieldValue(field);
+  }
+  return output;
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (isPlainObject(value)) {
+    const numericKeys = ['value', 'result', 'percentage', 'change', 'close', 'open', 'high', 'low'];
+    for (const key of numericKeys) {
+      const nested = normalizeNumber(value[key]);
+      if (nested !== null) return nested;
+    }
+  }
+  return null;
+}
+
+function findNodeDataByIdInHistory(history: StateHistoryItem[], nodeId: string): unknown {
+  for (const entry of history) {
+    if (entry.nodeId === nodeId) return entry.data;
+  }
+  return null;
+}
+
+function resolveExpressionReferences(expression: string, history: StateHistoryItem[]): string {
+  const pattern = /ref:\/\/node\/([A-Za-z0-9_-]+)\/data/g;
+  return expression.replace(pattern, (_full, nodeId: string) => {
+    const data = findNodeDataByIdInHistory(history, nodeId);
+    const numeric = normalizeNumber(data);
+    if (numeric === null) {
+      throw new Error(`Reference ${nodeId} is not a valid number`);
+    }
+    return String(numeric);
+  });
+}
+
+function tokenizeMathExpression(expression: string): string[] {
+  const tokens: string[] = [];
+  let index = 0;
+
+  while (index < expression.length) {
+    const ch = expression[index];
+    if (/\s/.test(ch)) {
+      index += 1;
+      continue;
+    }
+
+    if ('+-*/()'.includes(ch)) {
+      tokens.push(ch);
+      index += 1;
+      continue;
+    }
+
+    if (/[0-9.]/.test(ch)) {
+      let end = index;
+      while (end < expression.length && /[0-9.]/.test(expression[end])) end += 1;
+      if (end < expression.length && /[eE]/.test(expression[end])) {
+        end += 1;
+        if (end < expression.length && /[+-]/.test(expression[end])) end += 1;
+        while (end < expression.length && /[0-9]/.test(expression[end])) end += 1;
+      }
+      const numericToken = expression.slice(index, end);
+      const parsed = Number(numericToken);
+      if (!Number.isFinite(parsed)) throw new Error(`Invalid number token: ${numericToken}`);
+      tokens.push(numericToken);
+      index = end;
+      continue;
+    }
+
+    throw new Error(`Unexpected character in expression: ${ch}`);
+  }
+
+  return tokens;
+}
+
+function evaluateArithmeticExpression(expression: string): number {
+  const tokens = tokenizeMathExpression(expression);
+  if (tokens.length === 0) throw new Error('Expression is empty');
+
+  const values: number[] = [];
+  const ops: string[] = [];
+  const precedence = (op: string): number => (op === '+' || op === '-') ? 1 : 2;
+
+  const applyOp = () => {
+    const op = ops.pop();
+    if (!op || op === '(') throw new Error('Invalid expression');
+    const right = values.pop();
+    const left = values.pop();
+    if (left === undefined || right === undefined) throw new Error('Invalid expression');
+
+    if (op === '+') values.push(left + right);
+    else if (op === '-') values.push(left - right);
+    else if (op === '*') values.push(left * right);
+    else if (op === '/') {
+      if (right === 0) throw new Error('Division by zero');
+      values.push(left / right);
+    }
+  };
+
+  let previous: 'start' | 'number' | 'operator' | 'lparen' | 'rparen' = 'start';
+  for (const token of tokens) {
+    const numeric = Number(token);
+    const isNumber = Number.isFinite(numeric) && !'+-*/()'.includes(token);
+    if (isNumber) {
+      values.push(numeric);
+      previous = 'number';
+      continue;
+    }
+
+    if (token === '(') {
+      ops.push(token);
+      previous = 'lparen';
+      continue;
+    }
+
+    if (token === ')') {
+      while (ops.length > 0 && ops[ops.length - 1] !== '(') applyOp();
+      if (ops.pop() !== '(') throw new Error('Unbalanced parentheses');
+      previous = 'rparen';
+      continue;
+    }
+
+    if (!'+-*/'.includes(token)) throw new Error('Invalid expression token');
+
+    const isUnaryMinus = token === '-' && (previous === 'start' || previous === 'operator' || previous === 'lparen');
+    if (isUnaryMinus) {
+      values.push(0);
+    } else if (previous !== 'number' && previous !== 'rparen') {
+      throw new Error('Invalid expression');
+    }
+
+    while (ops.length > 0 && ops[ops.length - 1] !== '(' && precedence(ops[ops.length - 1]) >= precedence(token)) {
+      applyOp();
+    }
+    ops.push(token);
+    previous = 'operator';
+  }
+
+  while (ops.length > 0) {
+    if (ops[ops.length - 1] === '(') throw new Error('Unbalanced parentheses');
+    applyOp();
+  }
+
+  if (values.length !== 1 || !Number.isFinite(values[0])) throw new Error('Invalid expression result');
+  return values[0];
+}
+
+function localEvalKey(nodeTypeKey: string, nodeTypeVersion: number | null): string {
+  return nodeTypeVersion === null ? nodeTypeKey : `${nodeTypeKey}@${nodeTypeVersion}`;
+}
+
+function buildNodeTypeLookup(nodeTypesCatalog: StrategyNodeTypeRecord[] | undefined): Map<string, StrategyNodeTypeRecord> {
+  const map = new Map<string, StrategyNodeTypeRecord>();
+  for (const item of nodeTypesCatalog ?? []) {
+    map.set(localEvalKey(item.key, item.version), item);
+    if (item.is_latest) map.set(item.key, item);
+  }
+  return map;
+}
+
+function normalizeLocalEvalSpec(value: unknown): LocalEvalSpec | null {
+  if (!isPlainObject(value)) return null;
+  return value as LocalEvalSpec;
+}
+
+function executeLocalNodeIfSupported(params: {
+  nodeData: EditorNodeData;
+  resolvedAttributes: EditorNodeField[] | undefined;
+  history: StateHistoryItem[];
+  nodeTypeLookup: Map<string, StrategyNodeTypeRecord>;
+}): { handled: boolean; output?: unknown } {
+  const { nodeData, resolvedAttributes, history, nodeTypeLookup } = params;
+  const key = nodeData.nodeTypeKey ?? '';
+  const version = typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null;
+  if (!key) return { handled: false };
+
+  const nodeTypeDef = nodeTypeLookup.get(localEvalKey(key, version)) ?? nodeTypeLookup.get(key);
+  if (!nodeTypeDef || nodeTypeDef.local_eval_kind !== 'dsl_v1') return { handled: false };
+
+  const spec = normalizeLocalEvalSpec(nodeTypeDef.local_eval_spec);
+  const op = typeof spec?.op === 'string' ? spec.op : '';
+
+  if (key === 'logic.expression' && op === 'math_expression_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const rawExpression = String(attributesObj.expression ?? attributesObj.formula ?? '').trim();
+    if (!rawExpression) throw new Error('expression is required');
+    if (rawExpression.length > 600) throw new Error('expression is too long');
+
+    const resolvedExpression = resolveExpressionReferences(rawExpression, history);
+    const value = evaluateArithmeticExpression(resolvedExpression);
+
+    return {
+      handled: true,
+      output: {
+        result: value,
+        value,
+        expression: rawExpression,
+        resolved_expression: resolvedExpression,
+      },
+    };
+  }
+
+  return { handled: false };
 }
 
 export function resolveAttributeReferences(fields: EditorNodeField[] | undefined, history: StateHistoryItem[]): EditorNodeField[] | undefined {
@@ -177,6 +417,7 @@ export async function runLocalExecution(params: {
   strategyId: string;
   nodes: RFNode[];
   edges: RFEdge[];
+  nodeTypesCatalog?: StrategyNodeTypeRecord[];
   localExecutionStatus: 'idle' | 'running' | 'completed' | 'failed';
   selectedExecutionTicker: string;
   selectedExecutionSymbol: SelectedExecutionSymbol;
@@ -189,6 +430,7 @@ export async function runLocalExecution(params: {
     strategyId,
     nodes,
     edges,
+    nodeTypesCatalog,
     localExecutionStatus,
     selectedExecutionTicker,
     selectedExecutionSymbol,
@@ -266,6 +508,7 @@ export async function runLocalExecution(params: {
 
   const tracesById = new Map<string, LocalExecutionNodeTrace>();
   const executionStatusByNodeId: Record<string, LocalExecutionNodeStatus> = {};
+  const nodeTypeLookup = buildNodeTypeLookup(nodeTypesCatalog);
   for (const nodeId of orderedNodeIds) {
     const node = nodeById.get(nodeId)!;
     const nodeData = (node.data ?? {}) as EditorNodeData;
@@ -310,26 +553,37 @@ export async function runLocalExecution(params: {
     trace.inputSnapshot = frozenHistory;
 
     try {
-      const execution = await strategiesService.executeStrategyNode({
-        strategy_id: strategyId,
-        node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
-        node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
-        attributes: resolvedAttributes,
-        input_context: {
-          execution_symbol: selectedExecutionSymbol
-            ? {
-              ticker: selectedExecutionSymbol.ticker,
-              name: selectedExecutionSymbol.name,
-              market: selectedExecutionSymbol.market,
-            }
-            : { ticker: selectedExecutionTicker },
-          state_history: frozenHistory,
-        },
-        mode: 'preview',
-        execution_time: executionTime,
+      const localResult = executeLocalNodeIfSupported({
+        nodeData,
+        resolvedAttributes,
+        history: frozenHistory,
+        nodeTypeLookup,
       });
 
-      trace.outputSnapshot = execution.output;
+      if (localResult.handled) {
+        trace.outputSnapshot = localResult.output;
+      } else {
+        const execution = await strategiesService.executeStrategyNode({
+          strategy_id: strategyId,
+          node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
+          node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
+          attributes: resolvedAttributes,
+          input_context: {
+            execution_symbol: selectedExecutionSymbol
+              ? {
+                ticker: selectedExecutionSymbol.ticker,
+                name: selectedExecutionSymbol.name,
+                market: selectedExecutionSymbol.market,
+              }
+              : { ticker: selectedExecutionTicker },
+            state_history: frozenHistory,
+          },
+          mode: 'preview',
+          execution_time: executionTime,
+        });
+        trace.outputSnapshot = execution.output;
+      }
+
       trace.status = 'success';
       executionStatusByNodeId[nodeId] = 'success';
       trace.error = null;

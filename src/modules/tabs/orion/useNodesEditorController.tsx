@@ -670,6 +670,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       strategyId,
       nodes,
       edges,
+      nodeTypesCatalog: availableNodeTypes,
       localExecutionStatus,
       selectedExecutionTicker,
       selectedExecutionSymbol: selectedExecutionSymbol
@@ -691,7 +692,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         executionStatusByNodeIdRef.current = byNode;
       },
     });
-  }, [edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+  }, [availableNodeTypes, edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
   useEffect(() => {
     if (localExecutionStatus !== 'completed') return;

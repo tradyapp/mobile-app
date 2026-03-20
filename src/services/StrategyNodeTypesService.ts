@@ -29,15 +29,30 @@ export interface StrategyNodeTypeRecord {
   properties?: StrategyNodePropertyRecord[];
   is_active: boolean;
   is_latest: boolean;
+  local_eval_kind?: string;
+  local_eval_spec?: Record<string, unknown> | null;
 }
 
 class StrategyNodeTypesService {
   private hasIsLatestColumn: boolean | null = null;
+  private hasLocalEvalColumns: boolean | null = null;
 
   private isMissingIsLatestColumn(error: unknown): boolean {
     if (!error || typeof error !== "object") return false;
     const message = String((error as { message?: unknown }).message ?? "").toLowerCase();
     return message.includes("is_latest") && (
+      message.includes("column") ||
+      message.includes("schema cache") ||
+      message.includes("does not exist")
+    );
+  }
+
+  private isMissingLocalEvalColumns(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const message = String((error as { message?: unknown }).message ?? "").toLowerCase();
+    const mentionsLocalEval = message.includes("local_eval_kind") || message.includes("local_eval_spec");
+    if (!mentionsLocalEval) return false;
+    return (
       message.includes("column") ||
       message.includes("schema cache") ||
       message.includes("does not exist")
@@ -116,16 +131,23 @@ class StrategyNodeTypesService {
       properties: normalizeProperties(row.properties),
       is_active: row.is_active ?? true,
       is_latest: row.is_latest ?? true,
+      local_eval_kind: typeof row.local_eval_kind === "string" ? row.local_eval_kind : "none",
+      local_eval_spec:
+        row.local_eval_spec && typeof row.local_eval_spec === "object" && !Array.isArray(row.local_eval_spec)
+          ? row.local_eval_spec as Record<string, unknown>
+          : null,
     };
   }
 
   async listActiveNodeTypes(): Promise<StrategyNodeTypeRecord[]> {
     const withLatest = this.hasIsLatestColumn !== false;
+    const withLocalEval = this.hasLocalEvalColumns !== false;
+    const localEvalSelect = withLocalEval ? ",local_eval_kind,local_eval_spec" : "";
 
     if (withLatest) {
       const { data, error } = await supabase
         .from("strategy_node_types")
-        .select("id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active,is_latest")
+        .select(`id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active,is_latest${localEvalSelect}`)
         .eq("is_active", true)
         .eq("is_latest", true)
         .order("category", { ascending: true })
@@ -133,7 +155,13 @@ class StrategyNodeTypesService {
 
       if (!error) {
         if (this.hasIsLatestColumn === null) this.hasIsLatestColumn = true;
+        if (this.hasLocalEvalColumns === null && withLocalEval) this.hasLocalEvalColumns = true;
         return ((data ?? []) as Partial<StrategyNodeTypeRecord>[]).map((item) => this.normalizeRow(item));
+      }
+
+      if (withLocalEval && this.isMissingLocalEvalColumns(error)) {
+        this.hasLocalEvalColumns = false;
+        return this.listActiveNodeTypes();
       }
 
       if (!this.isMissingIsLatestColumn(error)) {
@@ -145,10 +173,15 @@ class StrategyNodeTypesService {
 
     const { data, error } = await supabase
       .from("strategy_node_types")
-      .select("id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active")
+      .select(`id,key,version,name,description,category,icon_url,input_ports,output_ports,properties,is_active${localEvalSelect}`)
       .eq("is_active", true)
       .order("category", { ascending: true })
       .order("name", { ascending: true });
+
+    if (error && withLocalEval && this.isMissingLocalEvalColumns(error)) {
+      this.hasLocalEvalColumns = false;
+      return this.listActiveNodeTypes();
+    }
 
     if (error) {
       throw new Error(this.toErrorMessage(error, "Failed to load node types"));
