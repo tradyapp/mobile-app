@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BlockTitle, Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -1284,8 +1284,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       </div>
                     ) : (
                       <>
-                        <BlockTitle className="mb-1 mt-0 text-zinc-400">Attributes</BlockTitle>
-                        <List strongIos insetIos>
+                        <List strongIos className="[&_.list]:mx-0 [&_.list]:rounded-none [&_.list]:px-0 [&_.list-ios]:mx-0 [&_.list-ios]:rounded-none [&_.list-ios]:px-0">
                           {panelFields.map((field, index) => (
                             (() => {
                               const fieldType = (field.type || '').trim().toLowerCase();
