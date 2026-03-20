@@ -26,7 +26,6 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
           executionStatusTone={model.executionStatusTone}
           safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
           onClose={model.onClose}
-          onAutoLayout={model.isPreviewMode ? undefined : model.onAutoLayout}
           onOpenSettings={model.onOpenSettings}
         />
 
@@ -95,35 +94,45 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
             </button>
           </div>
         ) : !model.selectedNodeForEditor ? (
-          <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex items-center gap-3">
+          <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex flex-col items-center gap-3">
             <button
               type="button"
               onClick={model.onRunLocalExecution}
               disabled={model.isLocalExecutionRunning || !model.selectedExecutionTicker}
-              className="flex h-11 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-950/70 px-4 text-sm font-semibold text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-60"
-              aria-label="Run local simulation"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-60"
+              aria-label={model.isLocalExecutionRunning ? 'Running simulation...' : 'Run local simulation'}
+              title={model.isLocalExecutionRunning ? 'Running...' : 'Play'}
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              {model.isLocalExecutionRunning ? 'Running...' : 'Play'}
+              {model.isLocalExecutionRunning ? (
+                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
             </button>
             <button
               type="button"
-              onClick={model.onAddSection}
-              className="flex h-11 items-center gap-2 rounded-full border border-zinc-600 bg-zinc-900/85 px-4 text-sm font-semibold text-zinc-200 shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
-              aria-label="Add section"
+              onClick={model.onAutoLayout}
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900/85 text-zinc-200 shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+              aria-label="Tidy nodes"
+              title="Tidy"
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16v12H4zM9 10h6" />
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="m16 22-1-4" />
+                <path d="M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1" />
+                <path d="M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z" />
+                <path d="m8 22 1-4" />
               </svg>
-              Section
             </button>
             <button
               type="button"
               onClick={model.onOpenNodeTypesDrawer}
               className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl font-light text-zinc-950 shadow-[0_10px_25px_rgba(16,185,129,0.35)]"
               aria-label="Add node"
+              title="Add node"
             >
               +
             </button>
@@ -169,6 +178,7 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
         nodeTypeGroups={model.nodeTypeGroups}
         onRetryLoadNodeTypes={model.onRetryLoadNodeTypes}
         onAddNodeFromType={model.onAddNodeFromType}
+        onAddSection={model.onAddSection}
       />
 
       <NodeSettingsDrawer

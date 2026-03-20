@@ -50,6 +50,7 @@ interface NodeTypesDrawerProps {
   nodeTypeGroups: NodeTypeCategoryGroup[];
   onRetryLoadNodeTypes: () => void;
   onAddNodeFromType: (nodeType: StrategyNodeTypeRecord) => void;
+  onAddSection?: () => void;
 }
 
 export default function NodeTypesDrawer({
@@ -61,6 +62,7 @@ export default function NodeTypesDrawer({
   nodeTypeGroups,
   onRetryLoadNodeTypes,
   onAddNodeFromType,
+  onAddSection,
 }: NodeTypesDrawerProps) {
   const [activeCategoryKey, setActiveCategoryKey] = useState<'all' | string>('all');
   const [isLandscape, setIsLandscape] = useState(false);
@@ -140,6 +142,28 @@ export default function NodeTypesDrawer({
                 })}
               </div>
             </div>
+
+            {onAddSection && activeCategoryKey === 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAddSection();
+                  onOpenChange(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-600 bg-zinc-800">
+                  <svg className="h-5 w-5 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 12h6" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-zinc-100">Section</p>
+                  <p className="text-[11px] text-zinc-500">Group nodes visually</p>
+                </div>
+              </button>
+            )}
 
             {visibleNodeTypes.length === 0 ? (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-5 text-sm text-zinc-400">
