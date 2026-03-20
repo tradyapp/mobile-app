@@ -830,20 +830,17 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setLocalExecutionError(null);
 
     const nodeById = new Map<string, RFNode>();
-    const incomingByNodeId = new Map<string, string[]>();
     const outgoingByNodeId = new Map<string, string[]>();
     const indegree = new Map<string, number>();
 
     for (const node of nodes) {
       nodeById.set(node.id, node);
-      incomingByNodeId.set(node.id, []);
       outgoingByNodeId.set(node.id, []);
       indegree.set(node.id, 0);
     }
 
     for (const edge of edges) {
       if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
-      incomingByNodeId.set(edge.target, [...(incomingByNodeId.get(edge.target) ?? []), edge.source]);
       outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
       indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
     }
@@ -907,8 +904,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     syncTracesState();
 
-    const outputsByNodeId = new Map<string, unknown>();
-    const stateHistory: Array<{ nodeId: string; nodeTypeKey: string; label: string; output: unknown }> = [];
+    const stateHistory: Array<{ nodeId: string; data: unknown }> = [];
     const executionTime = new Date().toISOString();
 
     for (let i = 0; i < orderedNodeIds.length; i += 1) {
@@ -922,18 +918,8 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       syncTracesState();
       await new Promise((resolve) => window.setTimeout(resolve, 120));
 
-      const incomingIds = incomingByNodeId.get(nodeId) ?? [];
-      const inputs: Record<string, unknown> = {};
-      for (const incomingId of incomingIds) {
-        if (outputsByNodeId.has(incomingId)) {
-          const incomingNode = nodeById.get(incomingId);
-          const incomingData = (incomingNode?.data ?? {}) as EditorNodeData;
-          const key = incomingData.nodeTypeKey || incomingData.label || incomingId;
-          inputs[`${incomingId}:${key}`] = outputsByNodeId.get(incomingId);
-        }
-      }
-
       const nodeData = (node.data ?? {}) as EditorNodeData;
+      const frozenHistory = [...stateHistory];
 
       trace.inputSnapshot = {
         execution_symbol: selectedExecutionSymbol
@@ -943,9 +929,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             market: selectedExecutionSymbol.market,
           }
           : { ticker: selectedExecutionTicker },
-        upstreamCount: incomingIds.length,
-        upstream: inputs,
-        state_history: [...stateHistory],
+        state_history: frozenHistory,
       };
 
       try {
@@ -962,9 +946,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 market: selectedExecutionSymbol.market,
               }
               : { ticker: selectedExecutionTicker },
-            upstreamCount: incomingIds.length,
-            upstream: inputs,
-            state_history: [...stateHistory],
+            state_history: frozenHistory,
           },
           mode: 'preview',
           execution_time: executionTime,
@@ -978,23 +960,16 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               market: selectedExecutionSymbol.market,
             }
             : { ticker: selectedExecutionTicker },
-          upstreamCount: incomingIds.length,
-          upstream: inputs,
-          input_schema: execution.input_schema,
-          attributes_used: execution.attributes,
-          state_history: [...stateHistory],
+          state_history: frozenHistory,
         };
         trace.outputSnapshot = execution.output;
 
-        outputsByNodeId.set(nodeId, trace.outputSnapshot);
         trace.status = 'success';
         executionStatusByNodeId[nodeId] = 'success';
         trace.error = null;
         stateHistory.push({
           nodeId,
-          nodeTypeKey: trace.nodeTypeKey,
-          label: trace.label,
-          output: trace.outputSnapshot,
+          data: trace.outputSnapshot,
         });
       } catch (error) {
         trace.status = 'error';
