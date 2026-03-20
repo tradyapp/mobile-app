@@ -55,6 +55,34 @@ interface UseNodesEditorControllerProps {
   onClose: () => void;
 }
 
+function normalizePortHandleId(raw: string, fallback: string): string {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || fallback;
+}
+
+function getPortHandleId(port: EditorNodeField | undefined, side: 'target' | 'source', index: number, total: number): string {
+  if (total <= 1) return side === 'source' ? 'right' : 'left';
+  const raw = `${port?.key || port?.name || port?.type || ''}`;
+  return normalizePortHandleId(raw, `${side}-${index}`);
+}
+
+function getPortHandleTop(index: number, total: number): string {
+  if (total <= 1) return '50%';
+  const step = 100 / (total + 1);
+  return `${Math.round((index + 1) * step)}%`;
+}
+
+function getSourceHandleClass(port: EditorNodeField | undefined): string {
+  const identity = `${port?.key || ''} ${port?.name || ''}`.toLowerCase();
+  if (identity.includes('green') || identity.includes('true')) return '!border-emerald-400 !bg-emerald-400';
+  if (identity.includes('red') || identity.includes('false')) return '!border-red-400 !bg-red-400';
+  return '!border-zinc-100 !bg-zinc-100';
+}
+
 function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: UseNodesEditorControllerProps) {
   const areSameIds = (prev: string[], next: string[]) => {
     if (prev.length !== next.length) return false;
@@ -81,8 +109,10 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       const category = normalizeNodeCategory(data?.category);
       const isTrigger = category === 'trigger';
       const isOutput = category === 'output';
-      const showLeftHandle = !isTrigger;
-      const showRightHandle = !isOutput;
+      const inputPorts = Array.isArray(data?.inputs) ? data.inputs : [];
+      const outputPorts = Array.isArray(data?.outputs) ? data.outputs : [];
+      const leftPorts = isTrigger ? [] : (inputPorts.length > 0 ? inputPorts : [{ id: 'left', name: 'Input' } as EditorNodeField]);
+      const rightPorts = isOutput ? [] : (outputPorts.length > 0 ? outputPorts : [{ id: 'right', name: 'Output' } as EditorNodeField]);
       const executionStatus = executionStatusByNodeIdRef.current[id];
       const executionClassName = executionStatus === 'running'
         ? 'border-blue-400 bg-blue-950/35 shadow-[0_0_0_2px_rgba(59,130,246,0.35)]'
@@ -96,15 +126,16 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         <div
           className={`relative flex min-h-[98px] min-w-[126px] flex-col items-center justify-center gap-2 border px-3 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ${executionClassName} ${isTrigger ? 'rounded-[24px] rounded-l-[34px]' : isOutput ? 'rounded-[24px] rounded-r-[34px]' : 'rounded-[24px]'}`}
         >
-          {showLeftHandle && (
+          {leftPorts.map((port, index) => (
             <Handle
-              id="left"
+              key={`${id}-left-${getPortHandleId(port, 'target', index, leftPorts.length)}`}
+              id={getPortHandleId(port, 'target', index, leftPorts.length)}
               type="target"
               position={Position.Left}
-              className="!h-4 !w-4 !border !border-emerald-400 !bg-zinc-950"
-              style={{ left: -8 }}
+              className="!h-4 !w-4 !border !border-zinc-100 !bg-zinc-100"
+              style={{ left: -8, top: getPortHandleTop(index, leftPorts.length), transform: 'translateY(-50%)' }}
             />
-          )}
+          ))}
           <div className="h-8 w-8 overflow-hidden rounded-lg border border-zinc-600 bg-zinc-800">
             {data?.iconUrl ? (
               <img src={data.iconUrl} alt={data.label ?? 'Node icon'} className="h-full w-full object-cover" />
@@ -120,15 +151,16 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
               <p className="mt-0.5 truncate text-[9px] uppercase tracking-[0.08em] text-zinc-500">{data.category}</p>
             )}
           </div>
-          {showRightHandle && (
+          {rightPorts.map((port, index) => (
             <Handle
-              id="right"
+              key={`${id}-right-${getPortHandleId(port, 'source', index, rightPorts.length)}`}
+              id={getPortHandleId(port, 'source', index, rightPorts.length)}
               type="source"
               position={Position.Right}
-              className="!h-4 !w-4 !border !border-emerald-400 !bg-zinc-950"
-              style={{ right: -8 }}
+              className={`!h-4 !w-4 !border ${getSourceHandleClass(port)}`}
+              style={{ right: -8, top: getPortHandleTop(index, rightPorts.length), transform: 'translateY(-50%)' }}
             />
-          )}
+          ))}
         </div>
       );
     },
