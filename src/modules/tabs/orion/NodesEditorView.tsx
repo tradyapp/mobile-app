@@ -1298,7 +1298,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                             const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
                             return (
                               isMultiSelect ? (
-                                <div key={field.id} className="px-4 py-2">
+                                <div key={field.id} className="px-2 py-1.5">
                                   <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
                                     <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
                                     <span>{field.name || field.key || 'Attribute'}</span>
@@ -1321,7 +1321,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                             next[index] = { ...next[index], value: nextValues.join(',') };
                                             return next;
                                           })}
-                                          className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
+                                          className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
                                         >
                                           {option.label}
                                         </button>
@@ -1348,7 +1348,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                     next[index] = { ...next[index], value: event.target.value };
                                     return next;
                                   })}
-                                  className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-2.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                  className="[&_.item-input-wrap]:px-0 [&_.item-input-wrap]:mx-0 [&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
                                 >
                                   {isSelect && selectOptions.map((option) => (
                                     <option key={`${field.id}-${option.value}`} value={option.value}>
