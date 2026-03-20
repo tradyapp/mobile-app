@@ -410,6 +410,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [localExecutionStatus, setLocalExecutionStatus] = useState<LocalExecutionStatus>('idle');
   const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
   const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
+  const [selectedExecutionTicker, setSelectedExecutionTicker] = useState<string>('');
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -449,6 +450,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         .slice(0, 2)
         .toUpperCase(),
     [strategyName]
+  );
+  const selectedExecutionSymbol = useMemo(
+    () => trackedSymbols.find((item) => item.ticker.toUpperCase() === selectedExecutionTicker.toUpperCase()) ?? null,
+    [trackedSymbols, selectedExecutionTicker]
   );
   const isPreviewMode = previewVersion !== null;
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
@@ -556,6 +561,19 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   useEffect(() => {
     void loadStrategySymbols();
   }, [loadStrategySymbols]);
+
+  useEffect(() => {
+    if (trackedSymbols.length === 0) {
+      setSelectedExecutionTicker('');
+      return;
+    }
+
+    setSelectedExecutionTicker((prev) => {
+      const hasPrev = trackedSymbols.some((item) => item.ticker.toUpperCase() === prev.toUpperCase());
+      if (hasPrev) return prev;
+      return trackedSymbols[0]?.ticker ?? '';
+    });
+  }, [trackedSymbols]);
 
   useEffect(() => {
     let active = true;
@@ -773,6 +791,14 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       return;
     }
 
+    if (!selectedExecutionTicker.trim()) {
+      setLocalExecutionStatus('failed');
+      setLocalExecutionError('Select a strategy symbol before running local execution.');
+      setLocalExecutionTraces([]);
+      executionStatusByNodeIdRef.current = {};
+      return;
+    }
+
     setLocalExecutionStatus('running');
     setLocalExecutionError(null);
 
@@ -883,6 +909,13 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       const nodeData = (node.data ?? {}) as EditorNodeData;
 
       trace.inputSnapshot = {
+        execution_symbol: selectedExecutionSymbol
+          ? {
+            ticker: selectedExecutionSymbol.ticker,
+            name: selectedExecutionSymbol.name,
+            market: selectedExecutionSymbol.market,
+          }
+          : { ticker: selectedExecutionTicker },
         upstreamCount: incomingIds.length,
         upstream: inputs,
         state_history: [...stateHistory],
@@ -895,6 +928,13 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
           attributes: nodeData.attributes,
           input_context: {
+            execution_symbol: selectedExecutionSymbol
+              ? {
+                ticker: selectedExecutionSymbol.ticker,
+                name: selectedExecutionSymbol.name,
+                market: selectedExecutionSymbol.market,
+              }
+              : { ticker: selectedExecutionTicker },
             upstreamCount: incomingIds.length,
             upstream: inputs,
             state_history: [...stateHistory],
@@ -904,6 +944,13 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         });
 
         trace.inputSnapshot = {
+          execution_symbol: selectedExecutionSymbol
+            ? {
+              ticker: selectedExecutionSymbol.ticker,
+              name: selectedExecutionSymbol.name,
+              market: selectedExecutionSymbol.market,
+            }
+            : { ticker: selectedExecutionTicker },
           upstreamCount: incomingIds.length,
           upstream: inputs,
           input_schema: execution.input_schema,
@@ -927,7 +974,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         executionStatusByNodeId[nodeId] = 'error';
         trace.error = error instanceof Error ? error.message : 'Execution error';
         setLocalExecutionStatus('failed');
-        setLocalExecutionError(`Node failed: ${trace.label}`);
+        setLocalExecutionError(`Node failed: ${trace.label}${selectedExecutionTicker ? ` · ${selectedExecutionTicker}` : ''}`);
         syncTracesState();
         return;
       }
@@ -937,7 +984,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     setLocalExecutionStatus('completed');
     setLocalExecutionError(null);
-  }, [edges, localExecutionStatus, nodes, strategyId]);
+  }, [edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1471,10 +1518,30 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         </div>
       ) : !selectedNodeForEditor ? (
         <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex items-center gap-3">
+          <div className="max-w-[56vw] rounded-xl border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500">Test Symbol</p>
+            <select
+              value={selectedExecutionTicker}
+              onChange={(event) => setSelectedExecutionTicker(event.target.value)}
+              disabled={localExecutionStatus === 'running' || trackedSymbols.length === 0}
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-60"
+              aria-label="Select test symbol"
+            >
+              {trackedSymbols.length === 0 ? (
+                <option value="">No symbols configured</option>
+              ) : (
+                trackedSymbols.map((item) => (
+                  <option key={item.ticker} value={item.ticker}>
+                    {item.ticker} · {item.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
           <button
             type="button"
             onClick={() => void runLocalExecution()}
-            disabled={localExecutionStatus === 'running'}
+            disabled={localExecutionStatus === 'running' || !selectedExecutionTicker}
             className="flex h-11 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-950/70 px-4 text-sm font-semibold text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-60"
             aria-label="Run local simulation"
           >
