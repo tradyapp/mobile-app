@@ -663,6 +663,8 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     graph.setDefaultEdgeLabel(() => ({}));
     graph.setGraph({
       rankdir: 'LR',
+      acyclicer: 'greedy',
+      ranker: 'network-simplex',
       ranksep: 110,
       nodesep: 60,
       marginx: 30,
@@ -714,7 +716,90 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       };
     });
 
-    setNodes(nextNodes);
+    const parentOutputOrderByNode = new Map<string, Map<string, number>>();
+    for (const node of nextNodes) {
+      const data = (node.data ?? {}) as EditorNodeData;
+      const outputs = Array.isArray(data.outputs) ? data.outputs : [];
+      if (outputs.length === 0) continue;
+      const handleOrder = new Map<string, number>();
+      for (let i = 0; i < outputs.length; i += 1) {
+        const handleId = getPortHandleId(outputs[i], 'source', i, outputs.length);
+        handleOrder.set(handleId, i);
+      }
+      parentOutputOrderByNode.set(node.id, handleOrder);
+    }
+
+    const incomingCountByTarget = new Map<string, number>();
+    for (const edge of edges) {
+      if (!sizeById.has(edge.target)) continue;
+      incomingCountByTarget.set(edge.target, (incomingCountByTarget.get(edge.target) ?? 0) + 1);
+    }
+
+    const nodeById = new Map(nextNodes.map((node) => [node.id, node]));
+    const branchGroups = new Map<string, Array<{ targetId: string; order: number }>>();
+    for (const edge of edges) {
+      if (!sizeById.has(edge.source) || !sizeById.has(edge.target)) continue;
+      if (edge.source === edge.target) continue;
+      const parent = nodeById.get(edge.source);
+      const child = nodeById.get(edge.target);
+      if (!parent || !child) continue;
+
+      // Only enforce on forward links for LR layout.
+      if (child.position.x <= parent.position.x) continue;
+
+      const handleOrder = parentOutputOrderByNode.get(edge.source);
+      const order = handleOrder?.get(edge.sourceHandle || 'right') ?? 0;
+      const current = branchGroups.get(edge.source) ?? [];
+      // Keep one entry per target (if duplicated edges exist, keep the lower order index).
+      const existingIndex = current.findIndex((item) => item.targetId === edge.target);
+      if (existingIndex >= 0) {
+        current[existingIndex] = {
+          ...current[existingIndex],
+          order: Math.min(current[existingIndex].order, order),
+        };
+      } else {
+        current.push({ targetId: edge.target, order });
+      }
+      branchGroups.set(edge.source, current);
+    }
+
+    const targetYContributions = new Map<string, { sum: number; count: number }>();
+    const branchGap = 150;
+    for (const [parentId, branches] of branchGroups.entries()) {
+      if (branches.length < 2) continue;
+      const parent = nodeById.get(parentId);
+      if (!parent) continue;
+      const sorted = [...branches].sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return a.targetId.localeCompare(b.targetId);
+      });
+
+      const startY = parent.position.y - ((sorted.length - 1) * branchGap) / 2;
+      for (let i = 0; i < sorted.length; i += 1) {
+        const targetId = sorted[i].targetId;
+        const desiredY = startY + i * branchGap;
+        const prev = targetYContributions.get(targetId) ?? { sum: 0, count: 0 };
+        targetYContributions.set(targetId, { sum: prev.sum + desiredY, count: prev.count + 1 });
+      }
+    }
+
+    const adjustedNodes = nextNodes.map((node) => {
+      const contribution = targetYContributions.get(node.id);
+      if (!contribution || contribution.count === 0) return node;
+      const avgDesiredY = contribution.sum / contribution.count;
+      const incomingCount = incomingCountByTarget.get(node.id) ?? 1;
+      // Multi-parent nodes should move less aggressively to avoid destabilizing layout.
+      const blend = incomingCount > 1 ? 0.45 : 0.75;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: Math.round(node.position.y * (1 - blend) + avgDesiredY * blend),
+        },
+      };
+    });
+
+    setNodes(adjustedNodes);
     toast.success('Nodes organized');
   }, [edges, nodes, setNodes]);
 
