@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, List, ListInput, Searchbar, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, List, Searchbar, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -34,6 +34,15 @@ function CloseIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+function ConnectorIcon({ connected }: { connected: boolean }) {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7H7a4 4 0 000 8h2m6-8h2a4 4 0 110 8h-2m-6-3h6" />
+      {!connected && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5l14 14" />}
     </svg>
   );
 }
@@ -1565,57 +1574,66 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                     </div>
                                   </div>
                                 ) : (
-                                  <div key={field.id}>
-                                    <ListInput
-                                      type={isSelect ? 'select' : 'text'}
-                                      value={field.value ?? ''}
-                                      disabled={isPreviewMode}
-                                      label={(
-                                        <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                          <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                          <span>{field.name || field.key || 'Attribute'}</span>
-                                          {field.required && <span className="text-red-400">*</span>}
-                                        </span>
+                                  <div key={field.id} className="px-4 py-2">
+                                    <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                      <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                      <span>{field.name || field.key || 'Attribute'}</span>
+                                      {field.required && <span className="text-red-400">*</span>}
+                                    </p>
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                      {isSelect ? (
+                                        <select
+                                          value={field.value ?? ''}
+                                          disabled={isPreviewMode}
+                                          onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                            const next = [...prev];
+                                            next[index] = { ...next[index], value: event.target.value };
+                                            return next;
+                                          })}
+                                          className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100 outline-none"
+                                        >
+                                          {selectOptions.map((option) => (
+                                            <option key={`${field.id}-${option.value}`} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={field.value ?? ''}
+                                          disabled={isPreviewMode}
+                                          placeholder="Set value"
+                                          onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                            const next = [...prev];
+                                            next[index] = { ...next[index], value: event.target.value };
+                                            return next;
+                                          })}
+                                          className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100 outline-none"
+                                        />
                                       )}
-                                      placeholder="Set value"
-                                      onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                        const next = [...prev];
-                                        next[index] = { ...next[index], value: event.target.value };
-                                        return next;
-                                      })}
-                                      className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-800 [&_input]:bg-zinc-950 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-800 [&_select]:bg-zinc-950 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
-                                    >
-                                      {isSelect && selectOptions.map((option) => (
-                                        <option key={`${field.id}-${option.value}`} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </ListInput>
-                                    <div className="flex items-center gap-2 px-4 pb-2">
                                       <button
                                         type="button"
                                         disabled={isPreviewMode}
                                         onClick={() => void openReferenceDrawer(index)}
-                                        className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
+                                        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-semibold text-zinc-200 disabled:opacity-60"
                                       >
-                                        Connect
+                                        <ConnectorIcon connected={Boolean(parseNodeReferenceToken(field.value))} />
+                                        {parseNodeReferenceToken(field.value) ? 'Connected' : 'Connect'}
                                       </button>
                                       {parseNodeReferenceToken(field.value) && (
-                                        <>
-                                          <span className="truncate text-[10px] text-emerald-300">{field.value}</span>
-                                          <button
-                                            type="button"
-                                            disabled={isPreviewMode}
-                                            onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                              const next = [...prev];
-                                              next[index] = { ...next[index], value: '' };
-                                              return next;
-                                            })}
-                                            className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
-                                          >
-                                            Clear
-                                          </button>
-                                        </>
+                                        <button
+                                          type="button"
+                                          disabled={isPreviewMode}
+                                          onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                            const next = [...prev];
+                                            next[index] = { ...next[index], value: '' };
+                                            return next;
+                                          })}
+                                          className="inline-flex h-7 shrink-0 items-center rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
+                                        >
+                                          Clear
+                                        </button>
                                       )}
                                     </div>
                                   </div>
