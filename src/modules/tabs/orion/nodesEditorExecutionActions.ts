@@ -101,6 +101,33 @@ function normalizeNumber(value: unknown): number | null {
   return null;
 }
 
+function findLatestNumericInHistory(history: StateHistoryItem[]): number | null {
+  for (const entry of history) {
+    const direct = normalizeNumber(entry.data);
+    if (direct !== null) return direct;
+
+    if (isPlainObject(entry.data)) {
+      const byKeys = ['value', 'result', 'rating', 'close', 'open', 'high', 'low'];
+      for (const key of byKeys) {
+        const candidate = normalizeNumber(entry.data[key]);
+        if (candidate !== null) return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+function evaluateNumberComparison(left: number, operator: string, right: number): boolean {
+  const op = operator.trim().toLowerCase();
+  if (op === 'equals' || op === 'eq') return left === right;
+  if (op === 'not_equals' || op === 'neq') return left !== right;
+  if (op === 'greater_than' || op === 'gt') return left > right;
+  if (op === 'greater_or_equal' || op === 'gte') return left >= right;
+  if (op === 'less_than' || op === 'lt') return left < right;
+  if (op === 'less_or_equal' || op === 'lte') return left <= right;
+  return false;
+}
+
 function findNodeDataByIdInHistory(history: StateHistoryItem[], nodeId: string): unknown {
   for (const entry of history) {
     if (entry.nodeId === nodeId) return entry.data;
@@ -328,6 +355,29 @@ function executeLocalNodeIfSupported(params: {
           days_of_week: attributesObj.days_of_week ?? ['mon', 'tue', 'wed', 'thu', 'fri'],
           timezone: configuredTimezone,
         },
+      },
+    };
+  }
+
+  if (key === 'logic.compare_number' && op === 'compare_number_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const leftFromAttr = normalizeNumber(attributesObj.left_value);
+    const rightFromAttr = normalizeNumber(attributesObj.right_value);
+    const operator = String(attributesObj.operator ?? 'greater_than');
+    const left = leftFromAttr ?? findLatestNumericInHistory(history);
+
+    if (left === null || rightFromAttr === null) {
+      throw new Error('compare_number requires valid left and right numeric values');
+    }
+
+    const result = evaluateNumberComparison(left, operator, rightFromAttr);
+    return {
+      handled: true,
+      output: {
+        result,
+        left,
+        right: rightFromAttr,
+        operator,
       },
     };
   }
