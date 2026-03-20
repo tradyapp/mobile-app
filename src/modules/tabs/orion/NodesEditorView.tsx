@@ -55,6 +55,32 @@ interface LocalExecutionNodeTrace {
   error: string | null;
 }
 
+type StateHistoryItem = { nodeId: string; data: unknown };
+type ReferenceSourceItem = {
+  nodeId: string;
+  label: string;
+  nodeTypeKey: string;
+  data: unknown;
+  dataType: ReturnType<typeof getValueType>;
+  refToken: string;
+};
+
+const NODE_REFERENCE_PREFIX = 'ref://node/';
+
+function makeNodeReferenceToken(nodeId: string): string {
+  return `${NODE_REFERENCE_PREFIX}${nodeId}/data`;
+}
+
+function parseNodeReferenceToken(raw: string | undefined): { nodeId: string } | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith(NODE_REFERENCE_PREFIX)) return null;
+  const suffix = trimmed.slice(NODE_REFERENCE_PREFIX.length);
+  const [nodeId, terminal] = suffix.split('/');
+  if (!nodeId || terminal !== 'data') return null;
+  return { nodeId };
+}
+
 function makeFieldId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -444,6 +470,12 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [isExecutionSymbolDrawerOpen, setIsExecutionSymbolDrawerOpen] = useState(false);
   const [executionSymbolSearch, setExecutionSymbolSearch] = useState('');
   const [executionSymbolFilter, setExecutionSymbolFilter] = useState<NodeSymbolFilter>('ALL');
+  const [isReferenceDrawerOpen, setIsReferenceDrawerOpen] = useState(false);
+  const [referenceFieldIndex, setReferenceFieldIndex] = useState<number | null>(null);
+  const [referenceSearch, setReferenceSearch] = useState('');
+  const [referenceSources, setReferenceSources] = useState<ReferenceSourceItem[]>([]);
+  const [isReferenceSourcesLoading, setIsReferenceSourcesLoading] = useState(false);
+  const [referenceSourcesError, setReferenceSourcesError] = useState<string | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -673,6 +705,16 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [nodeEditorNodeId, nodes]);
 
   useEffect(() => {
+    if (!selectedNodeForEditor) {
+      setIsReferenceDrawerOpen(false);
+      setReferenceFieldIndex(null);
+      setReferenceSearch('');
+      setReferenceSources([]);
+      setReferenceSourcesError(null);
+    }
+  }, [selectedNodeForEditor]);
+
+  useEffect(() => {
     const validIds = new Set(nodes.map((node) => node.id));
     const next: Record<string, LocalExecutionNodeStatus> = {};
     for (const [nodeId, status] of Object.entries(executionStatusByNodeIdRef.current)) {
@@ -823,6 +865,140 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     }));
   }, [setNodes]);
 
+  const resolveAttributeReferences = useCallback((fields: EditorNodeField[] | undefined, history: StateHistoryItem[]) => {
+    if (!Array.isArray(fields) || fields.length === 0) return fields;
+    const historyByNodeId = new Map<string, unknown>();
+    for (const entry of history) {
+      historyByNodeId.set(entry.nodeId, entry.data);
+    }
+
+    return fields.map((field) => {
+      const reference = parseNodeReferenceToken(field.value);
+      if (!reference) return field;
+      if (!historyByNodeId.has(reference.nodeId)) {
+        throw new Error(`Reference not found for node ${reference.nodeId}`);
+      }
+      return {
+        ...field,
+        resolved: historyByNodeId.get(reference.nodeId),
+      } as EditorNodeField & { resolved: unknown };
+    });
+  }, []);
+
+  const loadReferenceSourcesForNode = useCallback(async (targetNodeId: string): Promise<ReferenceSourceItem[]> => {
+    if (!selectedExecutionTicker.trim()) {
+      throw new Error('Select a strategy symbol before connecting references.');
+    }
+
+    const nodeById = new Map<string, RFNode>();
+    const indegree = new Map<string, number>();
+    const outgoingByNodeId = new Map<string, string[]>();
+    const incomingByNodeId = new Map<string, string[]>();
+    for (const node of nodes) {
+      nodeById.set(node.id, node);
+      indegree.set(node.id, 0);
+      outgoingByNodeId.set(node.id, []);
+      incomingByNodeId.set(node.id, []);
+    }
+    for (const edge of edges) {
+      if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
+      outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
+      incomingByNodeId.set(edge.target, [...(incomingByNodeId.get(edge.target) ?? []), edge.source]);
+      indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+    }
+
+    const upstreamSet = new Set<string>();
+    const walk = (nodeId: string) => {
+      for (const parentId of incomingByNodeId.get(nodeId) ?? []) {
+        if (upstreamSet.has(parentId)) continue;
+        upstreamSet.add(parentId);
+        walk(parentId);
+      }
+    };
+    walk(targetNodeId);
+
+    const queue: string[] = [];
+    for (const node of nodes) {
+      if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
+    }
+    const orderedNodeIds: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      orderedNodeIds.push(current);
+      for (const next of outgoingByNodeId.get(current) ?? []) {
+        const remaining = (indegree.get(next) ?? 0) - 1;
+        indegree.set(next, remaining);
+        if (remaining === 0) queue.push(next);
+      }
+    }
+
+    const stateHistory: StateHistoryItem[] = [];
+    const executionTime = new Date().toISOString();
+
+    for (const nodeId of orderedNodeIds) {
+      if (!upstreamSet.has(nodeId)) continue;
+      const node = nodeById.get(nodeId);
+      if (!node) continue;
+      const nodeData = (node.data ?? {}) as EditorNodeData;
+      const frozenHistory = [...stateHistory].reverse();
+      const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
+
+      const execution = await strategiesService.executeStrategyNode({
+        strategy_id: strategyId,
+        node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
+        node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
+        attributes: resolvedAttributes,
+        input_context: {
+          execution_symbol: selectedExecutionSymbol
+            ? {
+              ticker: selectedExecutionSymbol.ticker,
+              name: selectedExecutionSymbol.name,
+              market: selectedExecutionSymbol.market,
+            }
+            : { ticker: selectedExecutionTicker },
+          state_history: frozenHistory,
+        },
+        mode: 'preview',
+        execution_time: executionTime,
+      });
+
+      stateHistory.push({ nodeId, data: execution.output });
+    }
+
+    return [...stateHistory]
+      .reverse()
+      .map((entry) => {
+        const sourceNode = nodeById.get(entry.nodeId);
+        const sourceData = (sourceNode?.data ?? {}) as EditorNodeData;
+        return {
+          nodeId: entry.nodeId,
+          label: sourceData.label ?? entry.nodeId,
+          nodeTypeKey: sourceData.nodeTypeKey ?? 'custom-node',
+          data: entry.data,
+          dataType: getValueType(entry.data),
+          refToken: makeNodeReferenceToken(entry.nodeId),
+        } satisfies ReferenceSourceItem;
+      });
+  }, [edges, nodes, resolveAttributeReferences, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+
+  const openReferenceDrawer = useCallback(async (fieldIndex: number) => {
+    if (!selectedNodeForEditor) return;
+    setReferenceFieldIndex(fieldIndex);
+    setReferenceSearch('');
+    setReferenceSources([]);
+    setReferenceSourcesError(null);
+    setIsReferenceDrawerOpen(true);
+    setIsReferenceSourcesLoading(true);
+    try {
+      const items = await loadReferenceSourcesForNode(selectedNodeForEditor.id);
+      setReferenceSources(items);
+    } catch (error) {
+      setReferenceSourcesError(error instanceof Error ? error.message : 'Failed to load references');
+    } finally {
+      setIsReferenceSourcesLoading(false);
+    }
+  }, [loadReferenceSourcesForNode, selectedNodeForEditor]);
+
   const runLocalExecution = useCallback(async () => {
     if (localExecutionStatus === 'running') return;
 
@@ -936,6 +1112,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
       const nodeData = (node.data ?? {}) as EditorNodeData;
       const frozenHistory = [...stateHistory].reverse();
+      const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
 
       trace.inputSnapshot = frozenHistory;
 
@@ -944,7 +1121,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           strategy_id: strategyId,
           node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
           node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
-          attributes: nodeData.attributes,
+          attributes: resolvedAttributes,
           input_context: {
             execution_symbol: selectedExecutionSymbol
               ? {
@@ -984,7 +1161,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     setLocalExecutionStatus('completed');
     setLocalExecutionError(null);
-  }, [edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+  }, [edges, localExecutionStatus, nodes, resolveAttributeReferences, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1205,6 +1382,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const panelFields = nodeEditorData
     ? (Array.isArray(nodeEditorData[nodeDetailsPanel]) ? nodeEditorData[nodeDetailsPanel] as EditorNodeField[] : [])
     : [];
+  const activeReferenceField = useMemo(
+    () => (referenceFieldIndex === null ? null : panelFields[referenceFieldIndex] ?? null),
+    [panelFields, referenceFieldIndex]
+  );
+  const filteredReferenceSources = useMemo(() => {
+    const query = referenceSearch.trim().toLowerCase();
+    if (!query) return referenceSources;
+    return referenceSources.filter((item) => (
+      item.nodeId.toLowerCase().includes(query) ||
+      item.label.toLowerCase().includes(query) ||
+      item.nodeTypeKey.toLowerCase().includes(query) ||
+      item.dataType.toLowerCase().includes(query)
+    ));
+  }, [referenceSearch, referenceSources]);
 
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
@@ -1374,32 +1565,60 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                     </div>
                                   </div>
                                 ) : (
-                                  <ListInput
-                                    key={field.id}
-                                    type={isSelect ? 'select' : 'text'}
-                                    value={field.value ?? ''}
-                                    disabled={isPreviewMode}
-                                    label={(
-                                      <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                        <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                        <span>{field.name || field.key || 'Attribute'}</span>
-                                        {field.required && <span className="text-red-400">*</span>}
-                                      </span>
-                                    )}
-                                    placeholder="Set value"
-                                    onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                      const next = [...prev];
-                                      next[index] = { ...next[index], value: event.target.value };
-                                      return next;
-                                    })}
-                                    className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-800 [&_input]:bg-zinc-950 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-800 [&_select]:bg-zinc-950 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
-                                  >
-                                    {isSelect && selectOptions.map((option) => (
-                                      <option key={`${field.id}-${option.value}`} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </ListInput>
+                                  <div key={field.id}>
+                                    <ListInput
+                                      type={isSelect ? 'select' : 'text'}
+                                      value={field.value ?? ''}
+                                      disabled={isPreviewMode}
+                                      label={(
+                                        <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                          <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                          <span>{field.name || field.key || 'Attribute'}</span>
+                                          {field.required && <span className="text-red-400">*</span>}
+                                        </span>
+                                      )}
+                                      placeholder="Set value"
+                                      onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                        const next = [...prev];
+                                        next[index] = { ...next[index], value: event.target.value };
+                                        return next;
+                                      })}
+                                      className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-800 [&_input]:bg-zinc-950 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-800 [&_select]:bg-zinc-950 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                    >
+                                      {isSelect && selectOptions.map((option) => (
+                                        <option key={`${field.id}-${option.value}`} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </ListInput>
+                                    <div className="flex items-center gap-2 px-4 pb-2">
+                                      <button
+                                        type="button"
+                                        disabled={isPreviewMode}
+                                        onClick={() => void openReferenceDrawer(index)}
+                                        className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
+                                      >
+                                        Connect
+                                      </button>
+                                      {parseNodeReferenceToken(field.value) && (
+                                        <>
+                                          <span className="truncate text-[10px] text-emerald-300">{field.value}</span>
+                                          <button
+                                            type="button"
+                                            disabled={isPreviewMode}
+                                            onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                              const next = [...prev];
+                                              next[index] = { ...next[index], value: '' };
+                                              return next;
+                                            })}
+                                            className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
+                                          >
+                                            Clear
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
                                 )
                               );
                             })()
@@ -1644,6 +1863,81 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 </button>
               );
             })
+          )}
+        </div>
+      </AppDrawer>
+
+      <AppDrawer
+        isOpen={isReferenceDrawerOpen}
+        onOpenChange={(open) => {
+          setIsReferenceDrawerOpen(open);
+          if (!open) {
+            setReferenceSearch('');
+            setReferenceSourcesError(null);
+          }
+        }}
+        title="Connect Attribute"
+        height="full"
+      >
+        <div className="mb-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400">
+          {activeReferenceField ? (
+            <span>
+              Field: <span className="font-semibold text-zinc-200">{activeReferenceField.name || activeReferenceField.key || 'Attribute'}</span>
+            </span>
+          ) : 'Select a field first.'}
+        </div>
+
+        <div className="mb-3 -mx-4 px-4 [&_input]:rounded-xl!">
+          <Searchbar
+            placeholder="Search node outputs..."
+            value={referenceSearch}
+            onInput={(event) => setReferenceSearch((event.target as HTMLInputElement).value)}
+            onClear={() => setReferenceSearch('')}
+          />
+        </div>
+
+        <div className="space-y-1.5 pb-6">
+          {isReferenceSourcesLoading ? (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
+              Loading outputs...
+            </div>
+          ) : referenceSourcesError ? (
+            <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-3 text-center text-sm text-red-300">
+              {referenceSourcesError}
+            </div>
+          ) : filteredReferenceSources.length === 0 ? (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
+              No upstream outputs available.
+            </div>
+          ) : (
+            filteredReferenceSources.map((item) => (
+              <button
+                key={`${item.nodeId}-${item.refToken}`}
+                type="button"
+                onClick={() => {
+                  if (!selectedNodeForEditor || referenceFieldIndex === null) return;
+                  updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                    const next = [...prev];
+                    next[referenceFieldIndex] = { ...next[referenceFieldIndex], value: item.refToken };
+                    return next;
+                  });
+                  setIsReferenceDrawerOpen(false);
+                }}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-left transition-colors hover:bg-zinc-800/80"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-100">{item.label}</p>
+                    <p className="truncate text-[11px] text-zinc-500">{item.nodeId} · {item.nodeTypeKey}</p>
+                  </div>
+                  <span className="rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                    {getTypeToken(item.dataType).typeLabel}
+                  </span>
+                </div>
+                <div className="mt-1 truncate text-[11px] text-zinc-400">{formatScalarValue(item.data)}</div>
+                <div className="mt-1 truncate text-[10px] text-emerald-300">{item.refToken}</div>
+              </button>
+            ))
           )}
         </div>
       </AppDrawer>
