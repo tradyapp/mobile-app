@@ -1285,8 +1285,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                     ) : (
                       <List
                         strong
-                        inset
-                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:py-1"
+                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:px-0 [&_.list-item-inner]:py-1 [&_.item-inner]:px-0 [&_.item-title]:px-0"
                       >
                         {panelFields.map((field, index) => (
                           (() => {
@@ -1348,7 +1347,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                     next[index] = { ...next[index], value: event.target.value };
                                     return next;
                                   })}
-                                  className="[&_.item-input-wrap]:px-0 [&_.item-input-wrap]:mx-0 [&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                  className="[&_.item-inner]:px-0 [&_.item-title]:px-0 [&_.item-input-wrap]:px-0 [&_.item-input-wrap]:mx-0 [&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
                                 >
                                   {isSelect && selectOptions.map((option) => (
                                     <option key={`${field.id}-${option.value}`} value={option.value}>
