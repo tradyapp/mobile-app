@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -22,9 +22,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
 import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
-import OrionAttributesPanel from '@/modules/tabs/orion/OrionAttributesPanel';
+import OrionNodeInspectorPanel from '@/modules/tabs/orion/OrionNodeInspectorPanel';
 import OrionReferenceDrawer, { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
-import { SnapshotTree, SymbolAvatar, getValueType } from '@/modules/tabs/orion/OrionValueView';
+import { SymbolAvatar, getValueType } from '@/modules/tabs/orion/OrionValueView';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
@@ -1262,6 +1262,44 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     ));
   }, [currentNodeReferenceSources, referenceSearch]);
 
+  const setSelectedNodeAttributeValue = useCallback((index: number, value: string) => {
+    if (!selectedNodeForEditor) return;
+    updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], value };
+      return next;
+    });
+  }, [selectedNodeForEditor, updateNodePanelFields]);
+
+  const toggleSelectedNodeAttributeOption = useCallback((index: number, optionValue: string) => {
+    if (!selectedNodeForEditor) return;
+    updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+      const next = [...prev];
+      const currentValues = (next[index]?.value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      const nextValues = currentValues.includes(optionValue)
+        ? currentValues.filter((item) => item !== optionValue)
+        : [...currentValues, optionValue];
+      next[index] = { ...next[index], value: nextValues.join(',') };
+      return next;
+    });
+  }, [selectedNodeForEditor, updateNodePanelFields]);
+
+  const openAttributeReferenceDrawer = useCallback((index: number) => {
+    void openReferenceDrawer(index);
+  }, [openReferenceDrawer]);
+
+  const clearSelectedNodeAttributeReference = useCallback((index: number) => {
+    if (!selectedNodeForEditor) return;
+    updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], value: '' };
+      return next;
+    });
+  }, [selectedNodeForEditor, updateNodePanelFields]);
+
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -1339,127 +1377,25 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             </div>
           )}
           {selectedNodeForEditor ? (
-            <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
-              <div className="flex items-center border-b border-zinc-800 px-3 py-2.5">
-                <button
-                  type="button"
-                  onClick={() => setNodeEditorNodeId(null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-zinc-300"
-                  aria-label="Back to node editor"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <div className="ml-2 min-w-0">
-                  <p className="truncate text-sm font-semibold text-zinc-100">{nodeEditorData?.label ?? 'Node'}</p>
-                  <p className="truncate text-[11px] text-zinc-500">
-                    {nodeEditorData?.nodeTypeKey ?? 'custom-node'}
-                    {typeof nodeEditorData?.nodeTypeVersion === 'number' ? ` @v${nodeEditorData.nodeTypeVersion}` : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void runUpstreamExecutionForEditor()}
-                  disabled={isUpstreamExecutingForNode || isPreviewMode}
-                  className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-emerald-600 bg-emerald-950/60 px-3 text-[11px] font-semibold text-emerald-300 disabled:opacity-60"
-                  aria-label="Run upstream nodes for references"
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  {isUpstreamExecutingForNode ? 'Running...' : 'Play'}
-                </button>
-              </div>
-              <div className="border-b border-zinc-800 px-3 py-2">
-                <Segmented
-                  strong
-                  className="w-full [&_button]:flex-1 [&_button]:py-1.5 [&_button]:text-[11px]"
-                >
-                {nodeDetailsPanelItems.map((item) => {
-                  const active = nodeDetailsPanel === item.key;
-                  return (
-                    <SegmentedButton
-                      key={item.key}
-                      active={active}
-                      onClick={() => setNodeDetailsPanel(item.key)}
-                    >
-                      {item.label}
-                    </SegmentedButton>
-                  );
-                })}
-                </Segmented>
-              </div>
-              <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#3f3f46_#09090b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-zinc-950 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-600">
-                <div className="space-y-2">
-                  {nodeDetailsPanel === 'attributes' ? (
-                    <OrionAttributesPanel
-                      fields={panelFields}
-                      isPreviewMode={isPreviewMode}
-                      timezoneOptions={timezoneOptions}
-                      onSetFieldValue={(index, value) => {
-                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
-                          const next = [...prev];
-                          next[index] = { ...next[index], value };
-                          return next;
-                        });
-                      }}
-                      onToggleMultiOption={(index, optionValue) => {
-                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
-                          const next = [...prev];
-                          const currentValues = (next[index]?.value || '')
-                            .split(',')
-                            .map((item) => item.trim())
-                            .filter((item) => item.length > 0);
-                          const nextValues = currentValues.includes(optionValue)
-                            ? currentValues.filter((item) => item !== optionValue)
-                            : [...currentValues, optionValue];
-                          next[index] = { ...next[index], value: nextValues.join(',') };
-                          return next;
-                        });
-                      }}
-                      onOpenReference={(index) => { void openReferenceDrawer(index); }}
-                      onClearReference={(index) => {
-                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
-                          const next = [...prev];
-                          next[index] = { ...next[index], value: '' };
-                          return next;
-                        });
-                      }}
-                    />
-                  ) : (
-                    <>
-                      {!selectedNodeExecutionTrace && (
-                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
-                          Run Play to see execution results for this panel.
-                        </div>
-                      )}
-                      {selectedNodeExecutionTrace && nodeDetailsPanel === 'inputs' && (
-                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                          <p className="text-[11px] font-semibold text-zinc-300">Execution Snapshot · Inputs</p>
-                          <div className="mt-2">
-                            <SnapshotTree label="inputs" value={selectedNodeExecutionTrace.inputSnapshot} />
-                          </div>
-                        </div>
-                      )}
-                      {selectedNodeExecutionTrace && nodeDetailsPanel === 'outputs' && (
-                        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-                          <p className={`text-[11px] font-semibold ${selectedNodeExecutionTrace.error ? 'text-red-300' : 'text-zinc-300'}`}>
-                            {selectedNodeExecutionTrace.error ? 'Execution Snapshot · Error' : 'Execution Snapshot · Output'}
-                          </p>
-                          <div className="mt-2">
-                            <SnapshotTree
-                              label={selectedNodeExecutionTrace.error ? 'error' : 'output'}
-                              value={selectedNodeExecutionTrace.error ?? selectedNodeExecutionTrace.outputSnapshot}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+            <OrionNodeInspectorPanel
+              nodeLabel={nodeEditorData?.label ?? 'Node'}
+              nodeTypeKey={nodeEditorData?.nodeTypeKey ?? 'custom-node'}
+              nodeTypeVersion={typeof nodeEditorData?.nodeTypeVersion === 'number' ? nodeEditorData.nodeTypeVersion : null}
+              isPreviewMode={isPreviewMode}
+              isUpstreamExecuting={isUpstreamExecutingForNode}
+              onBack={() => setNodeEditorNodeId(null)}
+              onRunUpstream={() => { void runUpstreamExecutionForEditor(); }}
+              nodeDetailsPanel={nodeDetailsPanel}
+              nodeDetailsPanelItems={nodeDetailsPanelItems}
+              onNodeDetailsPanelChange={setNodeDetailsPanel}
+              panelFields={panelFields}
+              timezoneOptions={timezoneOptions}
+              onSetAttributeFieldValue={setSelectedNodeAttributeValue}
+              onToggleAttributeMultiOption={toggleSelectedNodeAttributeOption}
+              onOpenReference={openAttributeReferenceDrawer}
+              onClearReference={clearSelectedNodeAttributeReference}
+              selectedNodeExecutionTrace={selectedNodeExecutionTrace}
+            />
           ) : (
             <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
               <ReactFlow
