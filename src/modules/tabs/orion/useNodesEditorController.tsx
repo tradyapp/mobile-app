@@ -92,6 +92,137 @@ const AUTO_LAYOUT_NODE_WIDTH = 126;
 const AUTO_LAYOUT_NODE_HEIGHT = 98;
 const SECTION_NODE_DEFAULT_WIDTH = 420;
 const SECTION_NODE_DEFAULT_HEIGHT = 240;
+const AUTO_LAYOUT_VERTICAL_GAP = 28;
+const AUTO_LAYOUT_HORIZONTAL_GAP = 20;
+const AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE = 90;
+
+function resolveNodeRectCollisions(
+  nodes: RFNode[],
+  sizeById: Map<string, { width: number; height: number }>,
+): Map<string, number> {
+  const layoutable = nodes
+    .filter((node) => sizeById.has(node.id))
+    .sort((a, b) => {
+      if (a.position.y !== b.position.y) return a.position.y - b.position.y;
+      return a.position.x - b.position.x;
+    });
+
+  const resolvedYById = new Map<string, number>();
+  const placed: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+  for (const node of layoutable) {
+    const dims = sizeById.get(node.id) ?? { width: AUTO_LAYOUT_NODE_WIDTH, height: AUTO_LAYOUT_NODE_HEIGHT };
+    const left = node.position.x;
+    const right = left + dims.width;
+    let top = node.position.y;
+
+    // Keep pushing down while this node intersects any previously placed node.
+    let changed = true;
+    let attempts = 0;
+    while (changed && attempts < layoutable.length + 4) {
+      changed = false;
+      attempts += 1;
+      let minTop = top;
+      for (const entry of placed) {
+        const entryRight = entry.x + entry.width;
+        const xOverlaps = left < entryRight + AUTO_LAYOUT_HORIZONTAL_GAP && right > entry.x - AUTO_LAYOUT_HORIZONTAL_GAP;
+        if (!xOverlaps) continue;
+        const bottom = top + dims.height;
+        const entryBottom = entry.y + entry.height;
+        const yOverlaps = top < entryBottom + AUTO_LAYOUT_VERTICAL_GAP && bottom > entry.y - AUTO_LAYOUT_VERTICAL_GAP;
+        if (!yOverlaps) continue;
+        minTop = Math.max(minTop, entryBottom + AUTO_LAYOUT_VERTICAL_GAP);
+      }
+      if (minTop !== top) {
+        top = minTop;
+        changed = true;
+      }
+    }
+
+    resolvedYById.set(node.id, Math.round(top));
+    placed.push({ x: left, y: top, width: dims.width, height: dims.height });
+  }
+
+  return resolvedYById;
+}
+
+function compactYByColumns(
+  nodes: RFNode[],
+  sizeById: Map<string, { width: number; height: number }>,
+): Map<string, number> {
+  type Column = {
+    centerX: number;
+    nodeIds: string[];
+  };
+
+  const centerXById = new Map<string, number>();
+  for (const node of nodes) {
+    const dims = sizeById.get(node.id);
+    if (!dims) continue;
+    centerXById.set(node.id, node.position.x + dims.width / 2);
+  }
+
+  const ranked = nodes
+    .filter((node) => centerXById.has(node.id))
+    .sort((a, b) => (centerXById.get(a.id) ?? 0) - (centerXById.get(b.id) ?? 0));
+
+  const columns: Column[] = [];
+  for (const node of ranked) {
+    const centerX = centerXById.get(node.id) ?? 0;
+    const last = columns[columns.length - 1];
+    if (!last || Math.abs(centerX - last.centerX) > AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE) {
+      columns.push({ centerX, nodeIds: [node.id] });
+      continue;
+    }
+    const count = last.nodeIds.length;
+    last.centerX = (last.centerX * count + centerX) / (count + 1);
+    last.nodeIds.push(node.id);
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const resolvedYById = new Map<string, number>();
+
+  for (const column of columns) {
+    const items = column.nodeIds
+      .map((id) => {
+        const node = nodeById.get(id);
+        const dims = sizeById.get(id);
+        if (!node || !dims) return null;
+        return {
+          id,
+          targetY: node.position.y,
+          height: dims.height,
+        };
+      })
+      .filter((item): item is { id: string; targetY: number; height: number } => item !== null)
+      .sort((a, b) => {
+        if (a.targetY !== b.targetY) return a.targetY - b.targetY;
+        return a.id.localeCompare(b.id);
+      });
+
+    if (items.length === 0) continue;
+    const ys = items.map((item) => item.targetY);
+
+    // Forward pass: enforce minimum spacing top-to-bottom.
+    for (let i = 1; i < items.length; i += 1) {
+      const prevBottom = ys[i - 1] + items[i - 1].height;
+      ys[i] = Math.max(ys[i], prevBottom + AUTO_LAYOUT_VERTICAL_GAP);
+    }
+
+    // Backward pass: pull upward to reduce excessive whitespace while preserving spacing.
+    for (let i = items.length - 2; i >= 0; i -= 1) {
+      const nextTop = ys[i + 1];
+      const maxTop = nextTop - items[i].height - AUTO_LAYOUT_VERTICAL_GAP;
+      ys[i] = Math.min(ys[i], maxTop);
+    }
+
+    for (let i = 0; i < items.length; i += 1) {
+      resolvedYById.set(items[i].id, Math.round(ys[i]));
+    }
+  }
+
+  return resolvedYById;
+}
 
 function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: UseNodesEditorControllerProps) {
   const areSameIds = (prev: string[], next: string[]) => {
@@ -679,8 +810,13 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
 
     const sizeById = new Map<string, { width: number; height: number }>();
     for (const node of layoutableNodes) {
-      const width = typeof node.width === 'number' ? node.width : AUTO_LAYOUT_NODE_WIDTH;
-      const height = typeof node.height === 'number' ? node.height : AUTO_LAYOUT_NODE_HEIGHT;
+      const measured = node.measured;
+      const width = typeof node.width === 'number'
+        ? node.width
+        : (typeof measured?.width === 'number' ? measured.width : AUTO_LAYOUT_NODE_WIDTH);
+      const height = typeof node.height === 'number'
+        ? node.height
+        : (typeof measured?.height === 'number' ? measured.height : AUTO_LAYOUT_NODE_HEIGHT);
       sizeById.set(node.id, { width, height });
       graph.setNode(node.id, { width, height });
     }
@@ -799,7 +935,34 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       };
     });
 
-    setNodes(adjustedNodes);
+    const compactedYById = compactYByColumns(adjustedNodes, sizeById);
+    const compactedNodes = adjustedNodes.map((node) => {
+      const compactedY = compactedYById.get(node.id);
+      if (typeof compactedY !== 'number' || compactedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: compactedY,
+        },
+      };
+    });
+
+    const resolvedYById = resolveNodeRectCollisions(compactedNodes, sizeById);
+    const finalNodes = compactedNodes.map((node) => {
+      const resolvedY = resolvedYById.get(node.id);
+      if (typeof resolvedY !== 'number') return node;
+      if (resolvedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: resolvedY,
+        },
+      };
+    });
+
+    setNodes(finalNodes);
     toast.success('Nodes organized');
   }, [edges, nodes, setNodes]);
 
