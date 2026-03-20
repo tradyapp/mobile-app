@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, List, Searchbar, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, List, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -21,7 +21,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
-import AppDrawer from '@/components/uiux/AppDrawer';
+import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
+import OrionReferenceDrawer, { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
+import { SnapshotTree, SymbolAvatar, getValueType } from '@/modules/tabs/orion/OrionValueView';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
@@ -65,14 +67,7 @@ interface LocalExecutionNodeTrace {
 }
 
 type StateHistoryItem = { nodeId: string; data: unknown };
-type ReferenceSourceItem = {
-  nodeId: string;
-  label: string;
-  nodeTypeKey: string;
-  data: unknown;
-  dataType: ReturnType<typeof getValueType>;
-  refToken: string;
-};
+type ReferenceSourceItem = OrionReferenceSourceItem;
 
 const NODE_REFERENCE_PREFIX = 'ref://node/';
 
@@ -178,54 +173,6 @@ function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeDa
   };
 }
 
-function formatScalarValue(value: unknown): string {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return Object.prototype.toString.call(value);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isCandleLikeObject(value: unknown): value is Record<string, unknown> {
-  if (!isPlainObject(value)) return false;
-  const hasDateTime = typeof value.datetime === 'string';
-  const hasOpen = typeof value.open === 'number';
-  const hasHigh = typeof value.high === 'number';
-  const hasLow = typeof value.low === 'number';
-  const hasClose = typeof value.close === 'number';
-  return hasDateTime && hasOpen && hasHigh && hasLow && hasClose;
-}
-
-function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'candle' | 'candle_array' | 'unknown' {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) {
-    if (value.length > 0 && value.every((item) => isCandleLikeObject(item))) return 'candle_array';
-    return 'array';
-  }
-  if (isCandleLikeObject(value)) return 'candle';
-  if (isPlainObject(value)) return 'object';
-  if (typeof value === 'string') return 'string';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  return 'unknown';
-}
-
-function getTypeToken(type: ReturnType<typeof getValueType>): { icon: string; pillClass: string; typeLabel: string } {
-  if (type === 'candle_array') return { icon: 'C[]', pillClass: 'border-teal-700 bg-teal-900/45 text-teal-200', typeLabel: 'candle[]' };
-  if (type === 'candle') return { icon: 'C', pillClass: 'border-cyan-700 bg-cyan-900/45 text-cyan-200', typeLabel: 'candle' };
-  if (type === 'string') return { icon: 'T', pillClass: 'border-sky-700 bg-sky-900/45 text-sky-200', typeLabel: 'string' };
-  if (type === 'number') return { icon: '#', pillClass: 'border-emerald-700 bg-emerald-900/45 text-emerald-200', typeLabel: 'number' };
-  if (type === 'boolean') return { icon: '?', pillClass: 'border-amber-700 bg-amber-900/45 text-amber-200', typeLabel: 'boolean' };
-  if (type === 'null') return { icon: '0', pillClass: 'border-zinc-700 bg-zinc-800/70 text-zinc-200', typeLabel: 'null' };
-  if (type === 'array') return { icon: '[]', pillClass: 'border-violet-700 bg-violet-900/45 text-violet-200', typeLabel: 'array' };
-  if (type === 'object') return { icon: '{}', pillClass: 'border-rose-700 bg-rose-900/45 text-rose-200', typeLabel: 'object' };
-  return { icon: '·', pillClass: 'border-zinc-700 bg-zinc-800/70 text-zinc-200', typeLabel: 'unknown' };
-}
-
 function getAttributeTypeIcon(type?: string): string {
   const normalized = String(type || '').trim().toLowerCase();
   if (normalized.includes('number') || normalized.includes('int') || normalized.includes('float') || normalized.includes('decimal')) return '#';
@@ -270,85 +217,6 @@ function parseMultiSelectCsv(value: string | undefined): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
-}
-
-function SymbolAvatar({ iconUrl, ticker }: { iconUrl?: string | null; ticker: string }) {
-  if (iconUrl) {
-    return <img src={iconUrl} alt={ticker} className="h-9 w-9 rounded-md object-cover" />;
-  }
-
-  return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900 text-[10px] font-semibold text-zinc-300">
-      {ticker.slice(0, 3)}
-    </div>
-  );
-}
-
-function SnapshotTree({
-  label,
-  value,
-  depth = 0,
-}: {
-  label: string;
-  value: unknown;
-  depth?: number;
-}) {
-  const isArray = Array.isArray(value);
-  const isObject = isPlainObject(value);
-  const isBranch = isArray || isObject;
-  const valueType = getValueType(value);
-  const token = getTypeToken(valueType);
-
-  if (!isBranch) {
-    return (
-      <div className="mt-1 flex flex-wrap items-start gap-2 py-1.5">
-        <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
-          <span className="inline-flex h-4 min-w-4 items-center justify-center px-0.5 text-[9px] font-semibold opacity-80">
-            {token.icon}
-          </span>
-          <span>
-            {label}
-          </span>
-        </span>
-        <p className="min-w-0 max-w-full break-words text-[11px] text-zinc-100">{formatScalarValue(value)}</p>
-      </div>
-    );
-  }
-
-  const entries = isArray
-    ? value.map((item, index) => [`[${index}]`, item] as const)
-    : Object.entries(value);
-
-  return (
-    <details
-      className="mt-1"
-      open={depth < 2}
-    >
-      <summary className="cursor-pointer py-1.5 text-[11px] font-semibold text-zinc-100 marker:text-zinc-500">
-        <span className="inline-flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${token.pillClass}`}>
-            <span className="inline-flex h-4 min-w-4 items-center justify-center px-0.5 text-[9px] font-semibold opacity-80">
-              {token.icon}
-            </span>
-            {label}
-          </span>
-          <span className="text-zinc-500">({entries.length})</span>
-          <span className={`rounded-md border px-1.5 py-0.5 text-[10px] ${token.pillClass}`}>{token.typeLabel}</span>
-        </span>
-      </summary>
-      <div className="ml-4 space-y-0.5 pl-2">
-        {entries.length === 0 ? (
-          <div className="py-1.5 text-[11px] text-zinc-500">
-            Empty
-          </div>
-        ) : (
-          entries.map(([entryKey, entryValue]) => (
-            <SnapshotTree key={`${label}-${entryKey}`} label={entryKey} value={entryValue} depth={depth + 1} />
-          ))
-        )}
-      </div>
-    </details>
-  );
 }
 interface NodesViewProps {
   strategyId: string;
@@ -1830,7 +1698,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       ) : null}
       </div>
 
-      <AppDrawer
+      <OrionExecutionSymbolDrawer
         isOpen={isExecutionSymbolDrawerOpen}
         onOpenChange={(open) => {
           setIsExecutionSymbolDrawerOpen(open);
@@ -1839,79 +1707,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             setExecutionSymbolFilter('ALL');
           }
         }}
-        title="Select Test Symbol"
-        height="full"
-      >
-        <div className="mb-3 -mx-4 px-4 [&_input]:rounded-xl!">
-          <Searchbar
-            placeholder="Search symbols..."
-            value={executionSymbolSearch}
-            onInput={(event) => setExecutionSymbolSearch((event.target as HTMLInputElement).value)}
-            onClear={() => setExecutionSymbolSearch('')}
-          />
-        </div>
+        search={executionSymbolSearch}
+        onSearchChange={setExecutionSymbolSearch}
+        filter={executionSymbolFilter}
+        onFilterChange={(value) => setExecutionSymbolFilter(value as NodeSymbolFilter)}
+        trackedSymbols={trackedSymbols}
+        filteredSymbols={filteredExecutionSymbols}
+        selectedExecutionTicker={selectedExecutionTicker}
+        onSelectSymbol={(ticker) => {
+          setSymbolForStrategy(strategyId, ticker);
+          setIsExecutionSymbolDrawerOpen(false);
+        }}
+      />
 
-        <div className="mb-3">
-          <Segmented strong className="w-full [&_button]:py-1.5 [&_button]:text-[11px]">
-            {[
-              { key: 'ALL', label: 'All' },
-              { key: 'STOCKS', label: 'NYSE' },
-              { key: 'FOREX', label: 'Forex' },
-              { key: 'CRYPTO', label: 'Crypto' },
-            ].map((item) => (
-              <SegmentedButton
-                key={item.key}
-                active={executionSymbolFilter === item.key}
-                onClick={() => setExecutionSymbolFilter(item.key as NodeSymbolFilter)}
-              >
-                {item.label}
-              </SegmentedButton>
-            ))}
-          </Segmented>
-        </div>
-
-        <div className="space-y-1.5 pb-6">
-          {trackedSymbols.length === 0 ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
-              No symbols configured for this strategy.
-            </div>
-          ) : filteredExecutionSymbols.length === 0 ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
-              No symbols found.
-            </div>
-          ) : (
-            filteredExecutionSymbols.map((item) => {
-              const active = selectedExecutionTicker.toUpperCase() === item.ticker.toUpperCase();
-              return (
-                <button
-                  key={item.ticker}
-                  type="button"
-                  onClick={() => {
-                    setSymbolForStrategy(strategyId, item.ticker);
-                    setIsExecutionSymbolDrawerOpen(false);
-                  }}
-                  className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${active ? 'border-emerald-600 bg-emerald-900/20' : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80'}`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <SymbolAvatar iconUrl={item.icon_url} ticker={item.ticker} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-zinc-100">{item.ticker}</p>
-                      <p className="truncate text-xs text-zinc-400">{item.name}</p>
-                    </div>
-                    {active && (
-                      <span className="rounded-full border border-emerald-600 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-      </AppDrawer>
-
-      <AppDrawer
+      <OrionReferenceDrawer
         isOpen={isReferenceDrawerOpen}
         onOpenChange={(open) => {
           setIsReferenceDrawerOpen(open);
@@ -1920,87 +1729,26 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             setReferenceSourcesError(null);
           }
         }}
-        title="Connect Attribute"
-        height="full"
-      >
-        <div className="mb-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400">
-          {activeReferenceField ? (
-            <span>
-              Field: <span className="font-semibold text-zinc-200">{activeReferenceField.name || activeReferenceField.key || 'Attribute'}</span>
-            </span>
-          ) : 'Select a field first.'}
-        </div>
-
-        <div className="mb-3 -mx-4 px-4 [&_input]:rounded-xl!">
-          <Searchbar
-            placeholder="Search node outputs..."
-            value={referenceSearch}
-            onInput={(event) => setReferenceSearch((event.target as HTMLInputElement).value)}
-            onClear={() => setReferenceSearch('')}
-          />
-        </div>
-
-        <div className="space-y-1.5 pb-6">
-          {isReferenceSourcesLoading ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
-              Loading outputs...
-            </div>
-          ) : referenceSourcesError ? (
-            <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-3 text-center text-sm text-red-300">
-              {referenceSourcesError}
-            </div>
-          ) : currentNodeReferenceSources.length === 0 ? (
-            <div className="space-y-2">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-400">
-                Run <span className="font-semibold text-zinc-200">Play</span> in this node panel to execute previous nodes and load connectable outputs.
-              </div>
-              <button
-                type="button"
-                onClick={() => void runUpstreamExecutionForEditor()}
-                disabled={isUpstreamExecutingForNode || isPreviewMode}
-                className="w-full rounded-lg border border-emerald-700 bg-emerald-950/50 px-3 py-2 text-sm font-semibold text-emerald-300 disabled:opacity-60"
-              >
-                {isUpstreamExecutingForNode ? 'Running...' : 'Run Upstream Now'}
-              </button>
-            </div>
-          ) : filteredReferenceSources.length === 0 ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
-              No upstream outputs available.
-            </div>
-          ) : (
-            filteredReferenceSources.map((item) => (
-              <button
-                key={`${item.nodeId}-${item.refToken}`}
-                type="button"
-                onClick={() => {
-                  if (!selectedNodeForEditor || referenceFieldIndex === null) return;
-                  updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                    const next = [...prev];
-                    next[referenceFieldIndex] = { ...next[referenceFieldIndex], value: item.refToken };
-                    return next;
-                  });
-                  setIsReferenceDrawerOpen(false);
-                }}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-left transition-colors hover:bg-zinc-800/80"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-100">{item.label}</p>
-                    <p className="truncate text-[11px] text-zinc-500">{item.nodeId} · {item.nodeTypeKey}</p>
-                  </div>
-                  <span className="rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
-                    {getTypeToken(item.dataType).typeLabel}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-400">
-                  <SnapshotTree label="output" value={item.data} />
-                </div>
-                <div className="mt-1 truncate text-[10px] text-emerald-300">{item.refToken}</div>
-              </button>
-            ))
-          )}
-        </div>
-      </AppDrawer>
+        activeFieldName={activeReferenceField?.name || activeReferenceField?.key || 'Attribute'}
+        referenceSearch={referenceSearch}
+        onReferenceSearchChange={setReferenceSearch}
+        isReferenceSourcesLoading={isReferenceSourcesLoading}
+        referenceSourcesError={referenceSourcesError}
+        currentNodeReferenceSourcesCount={currentNodeReferenceSources.length}
+        isUpstreamExecutingForNode={isUpstreamExecutingForNode}
+        isPreviewMode={isPreviewMode}
+        onRunUpstreamNow={() => void runUpstreamExecutionForEditor()}
+        filteredReferenceSources={filteredReferenceSources as OrionReferenceSourceItem[]}
+        onPickReference={(token) => {
+          if (!selectedNodeForEditor || referenceFieldIndex === null) return;
+          updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+            const next = [...prev];
+            next[referenceFieldIndex] = { ...next[referenceFieldIndex], value: token };
+            return next;
+          });
+          setIsReferenceDrawerOpen(false);
+        }}
+      />
 
       <NodeTypesDrawer
         isOpen={isNodeTypesDrawerOpen}
