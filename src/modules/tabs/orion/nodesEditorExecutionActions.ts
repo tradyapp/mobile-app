@@ -100,7 +100,7 @@ function normalizeNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   if (isPlainObject(value)) {
-    const numericKeys = ['value', 'result', 'percentage', 'change', 'close', 'open', 'high', 'low'];
+    const numericKeys = ['value', 'result', 'percentage', 'rating', 'change', 'close', 'open', 'high', 'low'];
     for (const key of numericKeys) {
       const nested = normalizeNumber(value[key]);
       if (nested !== null) return nested;
@@ -144,6 +144,13 @@ function normalizeCandle(value: unknown): Candle | null {
   return { datetime, open, high, low, close, volume };
 }
 
+function normalizeCandleArray(value: unknown): Candle[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeCandle(item))
+    .filter((item): item is Candle => item !== null);
+}
+
 function findLatestNumericInHistory(history: StateHistoryItem[]): number | null {
   for (const entry of history) {
     const direct = normalizeNumber(entry.data);
@@ -175,8 +182,35 @@ function findLatestCandleInHistory(history: StateHistoryItem[]): Candle | null {
   return null;
 }
 
+function findLatestCandleArrayInHistory(history: StateHistoryItem[]): Candle[] {
+  for (const entry of history) {
+    const candles = normalizeCandleArray(entry.data);
+    if (candles.length > 0) return candles;
+  }
+  return [];
+}
+
+function findLatestObjectInHistory(history: StateHistoryItem[]): Record<string, unknown> | null {
+  for (const entry of history) {
+    if (isPlainObject(entry.data)) return entry.data;
+  }
+  return null;
+}
+
 function getCandleChange(candle: Candle): number {
   return Math.abs(candle.close - candle.open);
+}
+
+function getCandleBodySize(candle: Candle): number {
+  return Math.abs(candle.close - candle.open);
+}
+
+function getCandleTopWickSize(candle: Candle): number {
+  return Math.max(0, candle.high - Math.max(candle.open, candle.close));
+}
+
+function getCandleBottomWickSize(candle: Candle): number {
+  return Math.max(0, Math.min(candle.open, candle.close) - candle.low);
 }
 
 function evaluateNumberComparison(left: number, operator: string, right: number): boolean {
@@ -215,6 +249,71 @@ function evaluateGenericComparison(left: unknown, operator: string, right: unkno
   if (op === 'starts_with') return leftStr.startsWith(rightStr);
   if (op === 'ends_with') return leftStr.endsWith(rightStr);
   return false;
+}
+
+function evaluateCandleFilter(candle: Candle, attribute: string, operator: string, compareValue: string): boolean {
+  const normalizedAttribute = attribute.trim().toLowerCase();
+  const normalizedOperator = operator.trim().toLowerCase();
+
+  const valueByAttr: Record<string, string | number | null> = {
+    datetime: candle.datetime,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume,
+  };
+
+  const left = normalizedAttribute in valueByAttr ? valueByAttr[normalizedAttribute] : null;
+  if (left === null || left === undefined) return false;
+
+  if (typeof left === 'string') {
+    const right = compareValue ?? '';
+    if (normalizedOperator === 'includes') return left.includes(right);
+    if (normalizedOperator === 'starts_with') return left.startsWith(right);
+    if (normalizedOperator === 'ends_with') return left.endsWith(right);
+    if (normalizedOperator === 'equals' || normalizedOperator === 'eq') return left === right;
+    if (normalizedOperator === 'not_equals' || normalizedOperator === 'neq') return left !== right;
+    return false;
+  }
+
+  const rightNum = Number(compareValue);
+  if (!Number.isFinite(rightNum)) return false;
+  if (normalizedOperator === 'equals' || normalizedOperator === 'eq') return left === rightNum;
+  if (normalizedOperator === 'not_equals' || normalizedOperator === 'neq') return left !== rightNum;
+  if (normalizedOperator === 'greater_than' || normalizedOperator === 'gt') return left > rightNum;
+  if (normalizedOperator === 'greater_or_equal' || normalizedOperator === 'gte') return left >= rightNum;
+  if (normalizedOperator === 'less_than' || normalizedOperator === 'lt') return left < rightNum;
+  if (normalizedOperator === 'less_or_equal' || normalizedOperator === 'lte') return left <= rightNum;
+  return false;
+}
+
+function getPathValue(source: unknown, path: string): unknown {
+  if (!path.trim()) return source ?? null;
+  if (source === null || source === undefined) return null;
+
+  const trimmed = path.trim();
+  const parts = trimmed
+    .replace(/\[(\d+)\]/g, '.$1')
+    .split('.')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  let current: unknown = source;
+  for (const segment of parts) {
+    if (Array.isArray(current)) {
+      const idx = Number(segment);
+      if (!Number.isFinite(idx)) return null;
+      current = current[Math.floor(idx)];
+      continue;
+    }
+    if (isPlainObject(current)) {
+      current = current[segment];
+      continue;
+    }
+    return null;
+  }
+  return current;
 }
 
 function pickValueFromNodeOutput(data: unknown): unknown {
@@ -425,8 +524,9 @@ function executeLocalNodeIfSupported(params: {
   history: StateHistoryItem[];
   nodeTypeLookup: Map<string, StrategyNodeTypeRecord>;
   executionTimeISO: string;
+  strategyId: string;
 }): { handled: boolean; output?: unknown } {
-  const { nodeData, resolvedAttributes, history, nodeTypeLookup, executionTimeISO } = params;
+  const { nodeData, resolvedAttributes, history, nodeTypeLookup, executionTimeISO, strategyId } = params;
   const key = nodeData.nodeTypeKey ?? '';
   const version = typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null;
   if (!key) return { handled: false };
@@ -638,6 +738,247 @@ function executeLocalNodeIfSupported(params: {
         selected_branch: condition ? 'true' : 'false',
         true_value: trueValue,
         false_value: falseValue,
+      },
+    };
+  }
+
+  if (key === 'logic.math' && op === 'math_generic_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const left = normalizeNumber(attributesObj.left_value) ?? findLatestNumericInHistory(history);
+    const right = normalizeNumber(attributesObj.right_value);
+    const operator = String(attributesObj.operator ?? 'add').trim().toLowerCase();
+
+    if (left === null) throw new Error('math requires a valid left numeric value');
+
+    let value: number;
+    if (operator === 'abs') {
+      value = Math.abs(left);
+    } else {
+      if (right === null) throw new Error('math requires a valid right numeric value');
+      if (operator === 'add') value = left + right;
+      else if (operator === 'subtract') value = left - right;
+      else if (operator === 'multiply') value = left * right;
+      else if (operator === 'divide') {
+        if (right === 0) throw new Error('math divide by zero');
+        value = left / right;
+      } else if (operator === 'mod') {
+        if (right === 0) throw new Error('math mod by zero');
+        value = left % right;
+      } else if (operator === 'pow') {
+        value = left ** right;
+      } else if (operator === 'min') {
+        value = Math.min(left, right);
+      } else if (operator === 'max') {
+        value = Math.max(left, right);
+      } else {
+        throw new Error(`Unsupported math operator: ${operator}`);
+      }
+    }
+
+    return {
+      handled: true,
+      output: {
+        result: value,
+        value,
+        operator,
+        left,
+        right,
+      },
+    };
+  }
+
+  if (key === 'logic.get_field' && op === 'get_field_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceObject = isPlainObject(attributesObj.source_object) || Array.isArray(attributesObj.source_object)
+      ? attributesObj.source_object
+      : findLatestObjectInHistory(history);
+    const fieldPath = String(attributesObj.field_path ?? '').trim();
+    const value = getPathValue(sourceObject, fieldPath);
+
+    return {
+      handled: true,
+      output: {
+        result: value,
+        value,
+        field_path: fieldPath,
+      },
+    };
+  }
+
+  if (key === 'logic.select_candle' && op === 'select_candle_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandles = normalizeCandleArray(attributesObj.source_candles);
+    const candles = sourceCandles.length > 0 ? sourceCandles : findLatestCandleArrayInHistory(history);
+    const attribute = String(attributesObj.candle_attribute ?? 'datetime');
+    const operator = String(attributesObj.operator ?? 'includes');
+    const compareValue = String(attributesObj.value ?? '');
+    const selected = candles.find((candle) => evaluateCandleFilter(candle, attribute, operator, compareValue)) ?? null;
+
+    return {
+      handled: true,
+      output: selected,
+    };
+  }
+
+  if (key === 'logic.pick_candle' && op === 'pick_candle_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandles = normalizeCandleArray(attributesObj.source_candles);
+    const candles = sourceCandles.length > 0 ? sourceCandles : findLatestCandleArrayInHistory(history);
+    const mode = String(attributesObj.mode ?? 'last').trim().toLowerCase();
+    const indexRaw = Number(attributesObj.index ?? 0);
+    const index = Number.isFinite(indexRaw) ? Math.max(0, Math.floor(indexRaw)) : 0;
+
+    let selected: Candle | null = null;
+    if (candles.length > 0) {
+      if (mode === 'first') selected = candles[candles.length - 1] ?? null;
+      else if (mode === 'index') selected = candles[index] ?? null;
+      else selected = candles[0] ?? null;
+    }
+
+    return {
+      handled: true,
+      output: selected,
+    };
+  }
+
+  if (key === 'logic.candle_color' && op === 'candle_color_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+
+    if (!candle) {
+      return {
+        handled: true,
+        output: {
+          result: 'none',
+          is_green: false,
+          is_red: false,
+          candle: null,
+        },
+      };
+    }
+
+    const isGreen = candle.close >= candle.open;
+    return {
+      handled: true,
+      output: {
+        result: isGreen ? 'green' : 'red',
+        is_green: isGreen,
+        is_red: !isGreen,
+        candle,
+      },
+    };
+  }
+
+  if (key === 'logic.greater_wick' && op === 'greater_wick_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+
+    if (!candle) throw new Error('greater_wick requires a candle input');
+
+    const topWick = getCandleTopWickSize(candle);
+    const bottomWick = getCandleBottomWickSize(candle);
+    let result: 'top' | 'bottom' | 'equal';
+    if (topWick > bottomWick) result = 'top';
+    else if (bottomWick > topWick) result = 'bottom';
+    else result = 'equal';
+
+    return {
+      handled: true,
+      output: {
+        result,
+        top: result === 'top',
+        bottom: result === 'bottom',
+        top_wick: topWick,
+        bottom_wick: bottomWick,
+      },
+    };
+  }
+
+  if (key === 'logic.has_wick' && op === 'has_wick_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+    const wickSelection = String(attributesObj.wick ?? 'both').trim().toLowerCase();
+
+    if (!candle) throw new Error('has_wick requires a candle input');
+
+    const body = getCandleBodySize(candle);
+    const topWick = getCandleTopWickSize(candle);
+    const bottomWick = getCandleBottomWickSize(candle);
+
+    let hasWick = false;
+    if (wickSelection === 'top') hasWick = topWick > body;
+    else if (wickSelection === 'bottom') hasWick = bottomWick > body;
+    else hasWick = topWick > body && bottomWick > body;
+
+    return {
+      handled: true,
+      output: {
+        result: hasWick,
+        has_wick: hasWick,
+        wick: wickSelection,
+        body,
+        top_wick: topWick,
+        bottom_wick: bottomWick,
+      },
+    };
+  }
+
+  if (key === 'output.true' && op === 'output_true_v1') {
+    return {
+      handled: true,
+      output: {
+        result: true,
+        delivery: {
+          notify_owner: true,
+          notify_subscribers: false,
+          publish_pubsub: false,
+          reason: 'preview_mode',
+        },
+        strategy_id: strategyId,
+        owner_user_id: null,
+      },
+    };
+  }
+
+  if (key === 'output.false' && op === 'output_false_v1') {
+    return {
+      handled: true,
+      output: {
+        result: false,
+        delivery: {
+          notify_owner: false,
+          notify_subscribers: false,
+          publish_pubsub: false,
+          reason: 'false_result',
+        },
+        strategy_id: strategyId,
+        owner_user_id: null,
+      },
+    };
+  }
+
+  if (key === 'output.percentage' && op === 'output_percentage_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const value = normalizeNumber(attributesObj.percentage);
+    if (value === null) throw new Error('percentage must be a valid number');
+    if (value < 0 || value > 5) throw new Error('percentage must be between 0 and 5');
+
+    return {
+      handled: true,
+      output: {
+        result: 'rating',
+        rating: value,
+        delivery: {
+          notify_owner: true,
+          notify_subscribers: false,
+          publish_pubsub: false,
+          reason: 'preview_mode',
+        },
+        strategy_id: strategyId,
+        owner_user_id: null,
       },
     };
   }
@@ -915,6 +1256,7 @@ export async function runLocalExecution(params: {
         history: frozenHistory,
         nodeTypeLookup,
         executionTimeISO: executionTime,
+        strategyId,
       });
 
       if (localResult.handled) {
