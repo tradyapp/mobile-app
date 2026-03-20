@@ -95,6 +95,97 @@ const SECTION_NODE_DEFAULT_HEIGHT = 240;
 const AUTO_LAYOUT_VERTICAL_GAP = 28;
 const AUTO_LAYOUT_HORIZONTAL_GAP = 20;
 const AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE = 90;
+const AUTO_LAYOUT_EDGE_OVERLAP_PADDING = 10;
+const AUTO_LAYOUT_EDGE_AVOIDANCE_ITERATIONS = 4;
+
+type LayoutBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+};
+
+function makeNodeBox(
+  node: RFNode,
+  sizeById: Map<string, { width: number; height: number }>,
+  yOverride: number | undefined,
+): LayoutBox | null {
+  const dims = sizeById.get(node.id);
+  if (!dims) return null;
+  const top = typeof yOverride === 'number' ? yOverride : node.position.y;
+  const left = node.position.x;
+  return {
+    left,
+    right: left + dims.width,
+    top,
+    bottom: top + dims.height,
+    centerX: left + dims.width / 2,
+    centerY: top + dims.height / 2,
+  };
+}
+
+function pointInBox(x: number, y: number, box: LayoutBox): boolean {
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+}
+
+function orientation(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (by - ay) * (cx - bx) - (bx - ax) * (cy - by);
+}
+
+function onSegment(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): boolean {
+  return bx <= Math.max(ax, cx) && bx >= Math.min(ax, cx) && by <= Math.max(ay, cy) && by >= Math.min(ay, cy);
+}
+
+function segmentsIntersect(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+): boolean {
+  const o1 = orientation(ax, ay, bx, by, cx, cy);
+  const o2 = orientation(ax, ay, bx, by, dx, dy);
+  const o3 = orientation(cx, cy, dx, dy, ax, ay);
+  const o4 = orientation(cx, cy, dx, dy, bx, by);
+
+  if (o1 * o2 < 0 && o3 * o4 < 0) return true;
+  if (o1 === 0 && onSegment(ax, ay, cx, cy, bx, by)) return true;
+  if (o2 === 0 && onSegment(ax, ay, dx, dy, bx, by)) return true;
+  if (o3 === 0 && onSegment(cx, cy, ax, ay, dx, dy)) return true;
+  if (o4 === 0 && onSegment(cx, cy, bx, by, dx, dy)) return true;
+  return false;
+}
+
+function segmentIntersectsBox(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  box: LayoutBox,
+  padding: number,
+): boolean {
+  const expanded: LayoutBox = {
+    left: box.left - padding,
+    right: box.right + padding,
+    top: box.top - padding,
+    bottom: box.bottom + padding,
+    centerX: box.centerX,
+    centerY: box.centerY,
+  };
+  if (pointInBox(x1, y1, expanded) || pointInBox(x2, y2, expanded)) return true;
+
+  return (
+    segmentsIntersect(x1, y1, x2, y2, expanded.left, expanded.top, expanded.right, expanded.top)
+    || segmentsIntersect(x1, y1, x2, y2, expanded.right, expanded.top, expanded.right, expanded.bottom)
+    || segmentsIntersect(x1, y1, x2, y2, expanded.right, expanded.bottom, expanded.left, expanded.bottom)
+    || segmentsIntersect(x1, y1, x2, y2, expanded.left, expanded.bottom, expanded.left, expanded.top)
+  );
+}
 
 function resolveNodeRectCollisions(
   nodes: RFNode[],
@@ -222,6 +313,106 @@ function compactYByColumns(
   }
 
   return resolvedYById;
+}
+
+function optimizeEdgeNodeOverlaps(
+  nodes: RFNode[],
+  edges: RFEdge[],
+  sizeById: Map<string, { width: number; height: number }>,
+): Map<string, number> {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const yById = new Map(nodes.map((node) => [node.id, node.position.y]));
+  const layoutableIds = nodes.filter((node) => sizeById.has(node.id)).map((node) => node.id);
+
+  const getBoxById = (id: string): LayoutBox | null => {
+    const node = nodeById.get(id);
+    if (!node) return null;
+    return makeNodeBox(node, sizeById, yById.get(id));
+  };
+
+  const countEdgePassesThroughNode = (targetNodeId: string): number => {
+    const targetBox = getBoxById(targetNodeId);
+    if (!targetBox) return 0;
+    let count = 0;
+    for (const edge of edges) {
+      const sourceId = edge.source;
+      const targetId = edge.target;
+      if (!sourceId || !targetId) continue;
+      if (sourceId === targetNodeId || targetId === targetNodeId) continue;
+      const sourceBox = getBoxById(sourceId);
+      const targetEdgeBox = getBoxById(targetId);
+      if (!sourceBox || !targetEdgeBox) continue;
+      if (segmentIntersectsBox(
+        sourceBox.centerX,
+        sourceBox.centerY,
+        targetEdgeBox.centerX,
+        targetEdgeBox.centerY,
+        targetBox,
+        AUTO_LAYOUT_EDGE_OVERLAP_PADDING,
+      )) {
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  const countNodeOverlapPenalty = (targetNodeId: string): number => {
+    const targetBox = getBoxById(targetNodeId);
+    if (!targetBox) return 0;
+    let overlaps = 0;
+    for (const otherId of layoutableIds) {
+      if (otherId === targetNodeId) continue;
+      const otherBox = getBoxById(otherId);
+      if (!otherBox) continue;
+      const xOverlaps = targetBox.left < otherBox.right + AUTO_LAYOUT_HORIZONTAL_GAP && targetBox.right > otherBox.left - AUTO_LAYOUT_HORIZONTAL_GAP;
+      if (!xOverlaps) continue;
+      const yOverlaps = targetBox.top < otherBox.bottom + AUTO_LAYOUT_VERTICAL_GAP && targetBox.bottom > otherBox.top - AUTO_LAYOUT_VERTICAL_GAP;
+      if (!yOverlaps) continue;
+      overlaps += 1;
+    }
+    return overlaps;
+  };
+
+  for (let iteration = 0; iteration < AUTO_LAYOUT_EDGE_AVOIDANCE_ITERATIONS; iteration += 1) {
+    let movedInIteration = false;
+    const ordered = [...layoutableIds].sort((a, b) => (yById.get(a) ?? 0) - (yById.get(b) ?? 0));
+    for (const nodeId of ordered) {
+      const node = nodeById.get(nodeId);
+      const dims = sizeById.get(nodeId);
+      if (!node || !dims) continue;
+      const currentY = yById.get(nodeId) ?? node.position.y;
+      const currentEdgePenalty = countEdgePassesThroughNode(nodeId);
+      if (currentEdgePenalty === 0) continue;
+
+      const step = Math.max(Math.round(dims.height * 0.6), AUTO_LAYOUT_VERTICAL_GAP + 12);
+      const candidateYs = [
+        currentY - step,
+        currentY + step,
+        currentY - step * 2,
+        currentY + step * 2,
+      ];
+
+      let bestY = currentY;
+      let bestScore = currentEdgePenalty * 10 + countNodeOverlapPenalty(nodeId) * 3;
+
+      for (const candidateY of candidateYs) {
+        yById.set(nodeId, candidateY);
+        const candidateEdgePenalty = countEdgePassesThroughNode(nodeId);
+        const candidateOverlapPenalty = countNodeOverlapPenalty(nodeId);
+        const score = candidateEdgePenalty * 10 + candidateOverlapPenalty * 3;
+        if (score < bestScore) {
+          bestScore = score;
+          bestY = candidateY;
+        }
+      }
+
+      yById.set(nodeId, bestY);
+      if (bestY !== currentY) movedInIteration = true;
+    }
+    if (!movedInIteration) break;
+  }
+
+  return yById;
 }
 
 function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: UseNodesEditorControllerProps) {
@@ -948,8 +1139,21 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       };
     });
 
-    const resolvedYById = resolveNodeRectCollisions(compactedNodes, sizeById);
-    const finalNodes = compactedNodes.map((node) => {
+    const overlapOptimizedYById = optimizeEdgeNodeOverlaps(compactedNodes, edges, sizeById);
+    const overlapOptimizedNodes = compactedNodes.map((node) => {
+      const optimizedY = overlapOptimizedYById.get(node.id);
+      if (typeof optimizedY !== 'number' || optimizedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: Math.round(optimizedY),
+        },
+      };
+    });
+
+    const resolvedYById = resolveNodeRectCollisions(overlapOptimizedNodes, sizeById);
+    const finalNodes = overlapOptimizedNodes.map((node) => {
       const resolvedY = resolvedYById.get(node.id);
       if (typeof resolvedY !== 'number') return node;
       if (resolvedY === node.position.y) return node;
