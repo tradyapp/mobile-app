@@ -482,9 +482,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [isReferenceDrawerOpen, setIsReferenceDrawerOpen] = useState(false);
   const [referenceFieldIndex, setReferenceFieldIndex] = useState<number | null>(null);
   const [referenceSearch, setReferenceSearch] = useState('');
-  const [referenceSources, setReferenceSources] = useState<ReferenceSourceItem[]>([]);
   const [isReferenceSourcesLoading, setIsReferenceSourcesLoading] = useState(false);
   const [referenceSourcesError, setReferenceSourcesError] = useState<string | null>(null);
+  const [referenceSourcesByNodeId, setReferenceSourcesByNodeId] = useState<Record<string, ReferenceSourceItem[]>>({});
+  const [isUpstreamExecutingForNode, setIsUpstreamExecutingForNode] = useState(false);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -718,7 +719,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       setIsReferenceDrawerOpen(false);
       setReferenceFieldIndex(null);
       setReferenceSearch('');
-      setReferenceSources([]);
       setReferenceSourcesError(null);
     }
   }, [selectedNodeForEditor]);
@@ -990,23 +990,33 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       });
   }, [edges, nodes, resolveAttributeReferences, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
-  const openReferenceDrawer = useCallback(async (fieldIndex: number) => {
+  const runUpstreamExecutionForEditor = useCallback(async () => {
     if (!selectedNodeForEditor) return;
-    setReferenceFieldIndex(fieldIndex);
-    setReferenceSearch('');
-    setReferenceSources([]);
-    setReferenceSourcesError(null);
-    setIsReferenceDrawerOpen(true);
+    setIsUpstreamExecutingForNode(true);
     setIsReferenceSourcesLoading(true);
+    setReferenceSourcesError(null);
     try {
       const items = await loadReferenceSourcesForNode(selectedNodeForEditor.id);
-      setReferenceSources(items);
+      setReferenceSourcesByNodeId((prev) => ({ ...prev, [selectedNodeForEditor.id]: items }));
+      if (items.length === 0) {
+        setReferenceSourcesError('No previous node outputs available for this node.');
+      }
     } catch (error) {
-      setReferenceSourcesError(error instanceof Error ? error.message : 'Failed to load references');
+      const message = error instanceof Error ? error.message : 'Failed to run upstream nodes';
+      setReferenceSourcesError(message);
     } finally {
+      setIsUpstreamExecutingForNode(false);
       setIsReferenceSourcesLoading(false);
     }
   }, [loadReferenceSourcesForNode, selectedNodeForEditor]);
+
+  const openReferenceDrawer = useCallback((fieldIndex: number) => {
+    if (!selectedNodeForEditor) return;
+    setReferenceFieldIndex(fieldIndex);
+    setReferenceSearch('');
+    setReferenceSourcesError(null);
+    setIsReferenceDrawerOpen(true);
+  }, [selectedNodeForEditor]);
 
   const runLocalExecution = useCallback(async () => {
     if (localExecutionStatus === 'running') return;
@@ -1395,16 +1405,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     () => (referenceFieldIndex === null ? null : panelFields[referenceFieldIndex] ?? null),
     [panelFields, referenceFieldIndex]
   );
+  const currentNodeReferenceSources = useMemo(
+    () => (selectedNodeForEditor ? (referenceSourcesByNodeId[selectedNodeForEditor.id] ?? []) : []),
+    [referenceSourcesByNodeId, selectedNodeForEditor]
+  );
   const filteredReferenceSources = useMemo(() => {
     const query = referenceSearch.trim().toLowerCase();
-    if (!query) return referenceSources;
-    return referenceSources.filter((item) => (
+    if (!query) return currentNodeReferenceSources;
+    return currentNodeReferenceSources.filter((item) => (
       item.nodeId.toLowerCase().includes(query) ||
       item.label.toLowerCase().includes(query) ||
       item.nodeTypeKey.toLowerCase().includes(query) ||
       item.dataType.toLowerCase().includes(query)
     ));
-  }, [referenceSearch, referenceSources]);
+  }, [currentNodeReferenceSources, referenceSearch]);
 
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
@@ -1502,6 +1516,18 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                     {typeof nodeEditorData?.nodeTypeVersion === 'number' ? ` @v${nodeEditorData.nodeTypeVersion}` : ''}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void runUpstreamExecutionForEditor()}
+                  disabled={isUpstreamExecutingForNode || isPreviewMode}
+                  className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-emerald-600 bg-emerald-950/60 px-3 text-[11px] font-semibold text-emerald-300 disabled:opacity-60"
+                  aria-label="Run upstream nodes for references"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  {isUpstreamExecutingForNode ? 'Running...' : 'Play'}
+                </button>
               </div>
               <div className="border-b border-zinc-800 px-3 py-2">
                 <Segmented
@@ -1923,6 +1949,20 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             <div className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-3 text-center text-sm text-red-300">
               {referenceSourcesError}
             </div>
+          ) : currentNodeReferenceSources.length === 0 ? (
+            <div className="space-y-2">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-400">
+                Run <span className="font-semibold text-zinc-200">Play</span> in this node panel to execute previous nodes and load connectable outputs.
+              </div>
+              <button
+                type="button"
+                onClick={() => void runUpstreamExecutionForEditor()}
+                disabled={isUpstreamExecutingForNode || isPreviewMode}
+                className="w-full rounded-lg border border-emerald-700 bg-emerald-950/50 px-3 py-2 text-sm font-semibold text-emerald-300 disabled:opacity-60"
+              >
+                {isUpstreamExecutingForNode ? 'Running...' : 'Run Upstream Now'}
+              </button>
+            </div>
           ) : filteredReferenceSources.length === 0 ? (
             <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
               No upstream outputs available.
@@ -1952,7 +1992,9 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                     {getTypeToken(item.dataType).typeLabel}
                   </span>
                 </div>
-                <div className="mt-1 truncate text-[11px] text-zinc-400">{formatScalarValue(item.data)}</div>
+                <div className="mt-1 text-[11px] text-zinc-400">
+                  <SnapshotTree label="output" value={item.data} />
+                </div>
                 <div className="mt-1 truncate text-[10px] text-emerald-300">{item.refToken}</div>
               </button>
             ))
