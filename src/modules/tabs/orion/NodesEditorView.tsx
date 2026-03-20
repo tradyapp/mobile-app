@@ -28,6 +28,7 @@ import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategor
 import dataService from '@/services/DataService';
 import { strategyNodeTypesService, type StrategyNodePropertyRecord, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
+import { useOrionExecutionStore } from '@/stores/orionExecutionStore';
 
 function CloseIcon() {
   return (
@@ -424,7 +425,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [localExecutionStatus, setLocalExecutionStatus] = useState<LocalExecutionStatus>('idle');
   const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
   const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
-  const [selectedExecutionTicker, setSelectedExecutionTicker] = useState<string>('');
   const [isExecutionSymbolDrawerOpen, setIsExecutionSymbolDrawerOpen] = useState(false);
   const [executionSymbolSearch, setExecutionSymbolSearch] = useState('');
   const [executionSymbolFilter, setExecutionSymbolFilter] = useState<NodeSymbolFilter>('ALL');
@@ -468,6 +468,9 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         .toUpperCase(),
     [strategyName]
   );
+  const selectedExecutionTicker = useOrionExecutionStore((state) => state.selectedSymbolByStrategyId[strategyId] ?? '');
+  const setSymbolForStrategy = useOrionExecutionStore((state) => state.setSymbolForStrategy);
+  const clearSymbolForStrategy = useOrionExecutionStore((state) => state.clearSymbolForStrategy);
   const selectedExecutionSymbol = useMemo(
     () => trackedSymbols.find((item) => item.ticker.toUpperCase() === selectedExecutionTicker.toUpperCase()) ?? null,
     [trackedSymbols, selectedExecutionTicker]
@@ -589,16 +592,15 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
   useEffect(() => {
     if (trackedSymbols.length === 0) {
-      setSelectedExecutionTicker('');
+      clearSymbolForStrategy(strategyId);
       return;
     }
 
-    setSelectedExecutionTicker((prev) => {
-      const hasPrev = trackedSymbols.some((item) => item.ticker.toUpperCase() === prev.toUpperCase());
-      if (hasPrev) return prev;
-      return trackedSymbols[0]?.ticker ?? '';
-    });
-  }, [trackedSymbols]);
+    const hasPersisted = trackedSymbols.some((item) => item.ticker.toUpperCase() === selectedExecutionTicker.toUpperCase());
+    if (!hasPersisted) {
+      setSymbolForStrategy(strategyId, trackedSymbols[0]?.ticker ?? '');
+    }
+  }, [clearSymbolForStrategy, selectedExecutionTicker, setSymbolForStrategy, strategyId, trackedSymbols]);
 
   useEffect(() => {
     let active = true;
@@ -1649,7 +1651,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                   key={item.ticker}
                   type="button"
                   onClick={() => {
-                    setSelectedExecutionTicker(item.ticker);
+                    setSymbolForStrategy(strategyId, item.ticker);
                     setIsExecutionSymbolDrawerOpen(false);
                   }}
                   className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${active ? 'border-emerald-600 bg-emerald-900/20' : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80'}`}
