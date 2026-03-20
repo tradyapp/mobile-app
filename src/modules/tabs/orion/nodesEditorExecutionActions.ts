@@ -6,6 +6,14 @@ import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService
 import { strategiesService } from '@/services/StrategiesService';
 
 type StateHistoryItem = { nodeId: string; data: unknown };
+type Candle = {
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+};
 type SelectedExecutionSymbol = { ticker: string; name: string; market: string } | null;
 type ReferenceSourceItem = {
   nodeId: string;
@@ -117,6 +125,25 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function normalizeCandle(value: unknown): Candle | null {
+  if (!isPlainObject(value)) return null;
+  const datetime = String(value.datetime ?? '');
+  const open = Number(value.open);
+  const high = Number(value.high);
+  const low = Number(value.low);
+  const close = Number(value.close);
+  if (!datetime || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+    return null;
+  }
+  const volumeRaw = value.volume;
+  const volume = volumeRaw === null || volumeRaw === undefined
+    ? null
+    : Number.isFinite(Number(volumeRaw))
+      ? Number(volumeRaw)
+      : null;
+  return { datetime, open, high, low, close, volume };
+}
+
 function findLatestNumericInHistory(history: StateHistoryItem[]): number | null {
   for (const entry of history) {
     const direct = normalizeNumber(entry.data);
@@ -138,6 +165,18 @@ function findLatestValueInHistory(history: StateHistoryItem[]): unknown {
     if (entry.data !== undefined) return entry.data;
   }
   return null;
+}
+
+function findLatestCandleInHistory(history: StateHistoryItem[]): Candle | null {
+  for (const entry of history) {
+    const candle = normalizeCandle(entry.data);
+    if (candle) return candle;
+  }
+  return null;
+}
+
+function getCandleChange(candle: Candle): number {
+  return Math.abs(candle.close - candle.open);
 }
 
 function evaluateNumberComparison(left: number, operator: string, right: number): boolean {
@@ -176,6 +215,47 @@ function evaluateGenericComparison(left: unknown, operator: string, right: unkno
   if (op === 'starts_with') return leftStr.startsWith(rightStr);
   if (op === 'ends_with') return leftStr.endsWith(rightStr);
   return false;
+}
+
+function pickValueFromNodeOutput(data: unknown): unknown {
+  if (!isPlainObject(data)) return data;
+  if ('value' in data) return data.value;
+  if ('result' in data) return data.result;
+  return data;
+}
+
+function pickPreferredValueFromNodeOutput(data: unknown): unknown {
+  if (!isPlainObject(data)) return data;
+  if ('value' in data) return data.value;
+  if ('rating' in data) return data.rating;
+  if ('percentage' in data) return data.percentage;
+  if ('change' in data) return data.change;
+  if ('result' in data) {
+    const result = data.result;
+    if (typeof result !== 'boolean') return result;
+    return null;
+  }
+  return null;
+}
+
+function hasArrivedValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+}
+
+function findFirstArrivedValueInHistory(history: StateHistoryItem[]): unknown {
+  for (const entry of history) {
+    const candidate = pickPreferredValueFromNodeOutput(entry.data);
+    if (hasArrivedValue(candidate)) return candidate;
+  }
+
+  for (const entry of history) {
+    const candidate = pickValueFromNodeOutput(entry.data);
+    if (hasArrivedValue(candidate)) return candidate;
+  }
+
+  return null;
 }
 
 function findNodeDataByIdInHistory(history: StateHistoryItem[], nodeId: string): unknown {
@@ -471,6 +551,93 @@ function executeLocalNodeIfSupported(params: {
         original: value,
         min,
         max,
+      },
+    };
+  }
+
+  if (key === 'logic.candle_change_compare' && op === 'candle_change_compare_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+    const operator = String(attributesObj.operator ?? 'greater_than');
+    const threshold = normalizeNumber(attributesObj.value);
+
+    if (!candle) {
+      throw new Error('candle_change_compare requires a candle input');
+    }
+    if (threshold === null) {
+      throw new Error('candle_change_compare requires a valid numeric value');
+    }
+
+    const change = getCandleChange(candle);
+    const result = evaluateNumberComparison(change, operator, threshold);
+    return {
+      handled: true,
+      output: {
+        result,
+        change,
+        threshold,
+        operator,
+        candle,
+      },
+    };
+  }
+
+  if (key === 'logic.get_change_percentage' && op === 'get_change_percentage_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+
+    if (!candle) {
+      throw new Error('get_change_percentage requires a candle input');
+    }
+    if (candle.open === 0) {
+      throw new Error('get_change_percentage cannot divide by zero open price');
+    }
+
+    const percentage = ((candle.close - candle.open) / candle.open) * 100;
+    return {
+      handled: true,
+      output: {
+        result: percentage,
+        percentage,
+        open: candle.open,
+        close: candle.close,
+      },
+    };
+  }
+
+  if (key === 'logic.first_arrived_value' && op === 'first_arrived_value_v1') {
+    const selected = findFirstArrivedValueInHistory(history);
+    const hasValue = hasArrivedValue(selected);
+    return {
+      handled: true,
+      output: {
+        value: selected,
+        has_value: hasValue,
+      },
+    };
+  }
+
+  if (key === 'logic.if_else' && op === 'if_else_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const latest = findLatestValueInHistory(history);
+    const inferredCondition = isPlainObject(latest) && typeof latest.result === 'boolean'
+      ? latest.result
+      : normalizeBoolean(latest);
+    const condition = normalizeBoolean(attributesObj.condition) ?? inferredCondition ?? false;
+    const trueValue = attributesObj.true_value;
+    const falseValue = attributesObj.false_value;
+    const selected = condition ? trueValue : falseValue;
+
+    return {
+      handled: true,
+      output: {
+        result: condition,
+        value: selected,
+        selected_branch: condition ? 'true' : 'false',
+        true_value: trueValue,
+        false_value: falseValue,
       },
     };
   }
