@@ -2,6 +2,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dagre from '@dagrejs/dagre';
 import {
   addEdge,
   Handle,
@@ -85,6 +86,9 @@ function getSourceHandleClass(port: EditorNodeField | undefined): string {
   if (identity.includes('true')) return '!border-zinc-100 !bg-zinc-100';
   return '!border-zinc-100 !bg-zinc-100';
 }
+
+const AUTO_LAYOUT_NODE_WIDTH = 126;
+const AUTO_LAYOUT_NODE_HEIGHT = 98;
 
 function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl = null, isOwner, onDeleted, onClose }: UseNodesEditorControllerProps) {
   const areSameIds = (prev: string[], next: string[]) => {
@@ -585,6 +589,61 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     setIsNodeTypesDrawerOpen(false);
   }, [setNodes]);
 
+  const handleAutoLayout = useCallback(() => {
+    if (nodes.length === 0) return;
+
+    const graph = new dagre.graphlib.Graph();
+    graph.setDefaultEdgeLabel(() => ({}));
+    graph.setGraph({
+      rankdir: 'LR',
+      ranksep: 110,
+      nodesep: 60,
+      marginx: 30,
+      marginy: 30,
+    });
+
+    const sizeById = new Map<string, { width: number; height: number }>();
+    for (const node of nodes) {
+      const width = typeof node.width === 'number' ? node.width : AUTO_LAYOUT_NODE_WIDTH;
+      const height = typeof node.height === 'number' ? node.height : AUTO_LAYOUT_NODE_HEIGHT;
+      sizeById.set(node.id, { width, height });
+      graph.setNode(node.id, { width, height });
+    }
+
+    for (const edge of edges) {
+      if (!edge.source || !edge.target) continue;
+      if (!sizeById.has(edge.source) || !sizeById.has(edge.target)) continue;
+      graph.setEdge(edge.source, edge.target);
+    }
+
+    dagre.layout(graph);
+
+    const nextNodes = nodes.map((node, index) => {
+      const dims = sizeById.get(node.id) ?? { width: AUTO_LAYOUT_NODE_WIDTH, height: AUTO_LAYOUT_NODE_HEIGHT };
+      const positioned = graph.node(node.id) as { x?: number; y?: number } | undefined;
+      if (!positioned || typeof positioned.x !== 'number' || typeof positioned.y !== 'number') {
+        return {
+          ...node,
+          position: {
+            x: 80 + (index % 4) * 220,
+            y: 80 + Math.floor(index / 4) * 150,
+          },
+        };
+      }
+
+      return {
+        ...node,
+        position: {
+          x: Math.round(positioned.x - dims.width / 2),
+          y: Math.round(positioned.y - dims.height / 2),
+        },
+      };
+    });
+
+    setNodes(nextNodes);
+    toast.success('Nodes organized');
+  }, [edges, nodes, setNodes]);
+
   const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
     setIsNodeTypesDrawerOpen(open);
   }, []);
@@ -1066,6 +1125,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           setSettingsPanel('menu');
           setIsSettingsDrawerOpen(true);
         },
+        onAutoLayout: handleAutoLayout,
         nodeMapError,
         saveError,
         selectedNodeForEditor,

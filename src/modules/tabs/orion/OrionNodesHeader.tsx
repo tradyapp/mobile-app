@@ -12,6 +12,7 @@ interface OrionNodesHeaderProps {
   executionStatusTone: 'running' | 'completed' | 'failed' | null;
   safeHorizontalInsetStyle: CSSProperties;
   onClose: () => void;
+  onAutoLayout?: () => void;
   onOpenSettings: () => void;
 }
 
@@ -32,6 +33,7 @@ export default function OrionNodesHeader({
   executionStatusTone,
   safeHorizontalInsetStyle,
   onClose,
+  onAutoLayout,
   onOpenSettings,
 }: OrionNodesHeaderProps) {
   return (
@@ -67,7 +69,21 @@ export default function OrionNodesHeader({
           )}
         </div>
       </div>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-2">
+        {onAutoLayout && (
+          <button
+            type="button"
+            onClick={onAutoLayout}
+            className="inline-flex h-10 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 text-[11px] font-semibold text-zinc-100"
+            aria-label="Auto organize nodes"
+            title="Auto organize nodes"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h9M4 17h16M11 7l2-2m-2 2 2 2M20 17l-2-2m2 2-2 2" />
+            </svg>
+            Tidy
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenSettings}

@@ -26,6 +26,7 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
           executionStatusTone={model.executionStatusTone}
           safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
           onClose={model.onClose}
+          onAutoLayout={model.isPreviewMode ? undefined : model.onAutoLayout}
           onOpenSettings={model.onOpenSettings}
         />
 
