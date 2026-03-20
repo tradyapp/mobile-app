@@ -78,8 +78,10 @@ function getPortHandleTop(index: number, total: number): string {
 
 function getSourceHandleClass(port: EditorNodeField | undefined): string {
   const identity = `${port?.key || ''} ${port?.name || ''}`.toLowerCase();
-  if (identity.includes('green') || identity.includes('true')) return '!border-emerald-400 !bg-emerald-400';
-  if (identity.includes('red') || identity.includes('false')) return '!border-red-400 !bg-red-400';
+  if (identity.includes('green')) return '!border-emerald-400 !bg-emerald-400';
+  if (identity.includes('red')) return '!border-red-400 !bg-red-400';
+  if (identity.includes('false')) return '!border-zinc-100 !bg-zinc-950';
+  if (identity.includes('true')) return '!border-zinc-100 !bg-zinc-100';
   return '!border-zinc-100 !bg-zinc-100';
 }
 
