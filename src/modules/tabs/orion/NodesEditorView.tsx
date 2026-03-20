@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, List, ListInput, Searchbar, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -21,6 +21,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
+import AppDrawer from '@/components/uiux/AppDrawer';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
@@ -38,6 +39,7 @@ function CloseIcon() {
 
 type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
 type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
+type NodeSymbolFilter = 'ALL' | StrategyTrackedSymbol['market'];
 type LocalExecutionStatus = 'idle' | 'running' | 'completed' | 'failed';
 type LocalExecutionNodeStatus = 'pending' | 'running' | 'success' | 'error';
 
@@ -216,6 +218,18 @@ function parseMultiSelectCsv(value: string | undefined): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function SymbolAvatar({ iconUrl, ticker }: { iconUrl?: string | null; ticker: string }) {
+  if (iconUrl) {
+    return <img src={iconUrl} alt={ticker} className="h-9 w-9 rounded-md object-cover" />;
+  }
+
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900 text-[10px] font-semibold text-zinc-300">
+      {ticker.slice(0, 3)}
+    </div>
+  );
 }
 
 function SnapshotTree({
@@ -411,6 +425,9 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
   const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
   const [selectedExecutionTicker, setSelectedExecutionTicker] = useState<string>('');
+  const [isExecutionSymbolDrawerOpen, setIsExecutionSymbolDrawerOpen] = useState(false);
+  const [executionSymbolSearch, setExecutionSymbolSearch] = useState('');
+  const [executionSymbolFilter, setExecutionSymbolFilter] = useState<NodeSymbolFilter>('ALL');
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -455,6 +472,14 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     () => trackedSymbols.find((item) => item.ticker.toUpperCase() === selectedExecutionTicker.toUpperCase()) ?? null,
     [trackedSymbols, selectedExecutionTicker]
   );
+  const filteredExecutionSymbols = useMemo(() => {
+    const query = executionSymbolSearch.trim().toLowerCase();
+    return trackedSymbols.filter((item) => {
+      if (executionSymbolFilter !== 'ALL' && item.market !== executionSymbolFilter) return false;
+      if (!query) return true;
+      return item.ticker.toLowerCase().includes(query) || item.name.toLowerCase().includes(query);
+    });
+  }, [executionSymbolFilter, executionSymbolSearch, trackedSymbols]);
   const isPreviewMode = previewVersion !== null;
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
   const selectedNodeForEditor = useMemo(
@@ -1491,6 +1516,31 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 }
               `}</style>
 
+              {!isPreviewMode && (
+                <button
+                  type="button"
+                  onClick={() => setIsExecutionSymbolDrawerOpen(true)}
+                  className="absolute left-3 top-3 z-[240] flex min-w-[196px] max-w-[62vw] items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 text-left shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+                  aria-label="Open test symbol selector"
+                >
+                  <SymbolAvatar
+                    iconUrl={selectedExecutionSymbol?.icon_url ?? null}
+                    ticker={selectedExecutionSymbol?.ticker ?? '---'}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-semibold text-zinc-100">
+                      {selectedExecutionSymbol?.ticker ?? 'Select symbol'}
+                    </p>
+                    <p className="truncate text-[10px] text-zinc-400">
+                      {selectedExecutionSymbol?.name ?? (trackedSymbols.length === 0 ? 'No symbols configured' : 'Tap to choose test symbol')}
+                    </p>
+                  </div>
+                  <svg className="h-4 w-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
+              )}
+
               {!isPreviewMode && hasSelection && (
                 <button
                   type="button"
@@ -1518,26 +1568,6 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         </div>
       ) : !selectedNodeForEditor ? (
         <div className="absolute bottom-[max(32px,env(safe-area-inset-bottom))] right-[max(20px,env(safe-area-inset-right))] z-[230] flex items-center gap-3">
-          <div className="max-w-[56vw] rounded-xl border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500">Test Symbol</p>
-            <select
-              value={selectedExecutionTicker}
-              onChange={(event) => setSelectedExecutionTicker(event.target.value)}
-              disabled={localExecutionStatus === 'running' || trackedSymbols.length === 0}
-              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-60"
-              aria-label="Select test symbol"
-            >
-              {trackedSymbols.length === 0 ? (
-                <option value="">No symbols configured</option>
-              ) : (
-                trackedSymbols.map((item) => (
-                  <option key={item.ticker} value={item.ticker}>
-                    {item.ticker} · {item.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
           <button
             type="button"
             onClick={() => void runLocalExecution()}
@@ -1561,6 +1591,87 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         </div>
       ) : null}
       </div>
+
+      <AppDrawer
+        isOpen={isExecutionSymbolDrawerOpen}
+        onOpenChange={(open) => {
+          setIsExecutionSymbolDrawerOpen(open);
+          if (!open) {
+            setExecutionSymbolSearch('');
+            setExecutionSymbolFilter('ALL');
+          }
+        }}
+        title="Select Test Symbol"
+        height="full"
+      >
+        <div className="mb-3 -mx-4 px-4 [&_input]:rounded-xl!">
+          <Searchbar
+            placeholder="Search symbols..."
+            value={executionSymbolSearch}
+            onInput={(event) => setExecutionSymbolSearch((event.target as HTMLInputElement).value)}
+            onClear={() => setExecutionSymbolSearch('')}
+          />
+        </div>
+
+        <div className="mb-3">
+          <Segmented strong className="w-full [&_button]:py-1.5 [&_button]:text-[11px]">
+            {[
+              { key: 'ALL', label: 'All' },
+              { key: 'STOCKS', label: 'NYSE' },
+              { key: 'FOREX', label: 'Forex' },
+              { key: 'CRYPTO', label: 'Crypto' },
+            ].map((item) => (
+              <SegmentedButton
+                key={item.key}
+                active={executionSymbolFilter === item.key}
+                onClick={() => setExecutionSymbolFilter(item.key as NodeSymbolFilter)}
+              >
+                {item.label}
+              </SegmentedButton>
+            ))}
+          </Segmented>
+        </div>
+
+        <div className="space-y-1.5 pb-6">
+          {trackedSymbols.length === 0 ? (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
+              No symbols configured for this strategy.
+            </div>
+          ) : filteredExecutionSymbols.length === 0 ? (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-center text-sm text-zinc-500">
+              No symbols found.
+            </div>
+          ) : (
+            filteredExecutionSymbols.map((item) => {
+              const active = selectedExecutionTicker.toUpperCase() === item.ticker.toUpperCase();
+              return (
+                <button
+                  key={item.ticker}
+                  type="button"
+                  onClick={() => {
+                    setSelectedExecutionTicker(item.ticker);
+                    setIsExecutionSymbolDrawerOpen(false);
+                  }}
+                  className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${active ? 'border-emerald-600 bg-emerald-900/20' : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80'}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <SymbolAvatar iconUrl={item.icon_url} ticker={item.ticker} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-zinc-100">{item.ticker}</p>
+                      <p className="truncate text-xs text-zinc-400">{item.name}</p>
+                    </div>
+                    {active && (
+                      <span className="rounded-full border border-emerald-600 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </AppDrawer>
 
       <NodeTypesDrawer
         isOpen={isNodeTypesDrawerOpen}
