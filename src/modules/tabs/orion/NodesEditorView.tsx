@@ -921,16 +921,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       const nodeData = (node.data ?? {}) as EditorNodeData;
       const frozenHistory = [...stateHistory];
 
-      trace.inputSnapshot = {
-        execution_symbol: selectedExecutionSymbol
-          ? {
-            ticker: selectedExecutionSymbol.ticker,
-            name: selectedExecutionSymbol.name,
-            market: selectedExecutionSymbol.market,
-          }
-          : { ticker: selectedExecutionTicker },
-        state_history: frozenHistory,
-      };
+      trace.inputSnapshot = frozenHistory;
 
       try {
         const execution = await strategiesService.executeStrategyNode({
@@ -952,16 +943,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           execution_time: executionTime,
         });
 
-        trace.inputSnapshot = {
-          execution_symbol: selectedExecutionSymbol
-            ? {
-              ticker: selectedExecutionSymbol.ticker,
-              name: selectedExecutionSymbol.name,
-              market: selectedExecutionSymbol.market,
-            }
-            : { ticker: selectedExecutionTicker },
-          state_history: frozenHistory,
-        };
+        trace.inputSnapshot = frozenHistory;
         trace.outputSnapshot = execution.output;
 
         trace.status = 'success';
