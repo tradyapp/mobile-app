@@ -13,6 +13,7 @@ export interface StrategyNodePropertyRecord {
   type: "number" | "text" | "boolean" | string;
   label: string;
   default?: unknown;
+  options?: Array<{ value: string; label: string }>;
 }
 
 export interface StrategyNodeTypeRecord {
@@ -74,11 +75,30 @@ class StrategyNodeTypesService {
       return value
         .map((item) => {
           if (!item || typeof item !== "object") return null;
-          const raw = item as { key?: unknown; type?: unknown; label?: unknown; default?: unknown };
+          const raw = item as { key?: unknown; type?: unknown; label?: unknown; default?: unknown; options?: unknown };
           const key = typeof raw.key === "string" ? raw.key : "";
           const type = typeof raw.type === "string" ? raw.type : "text";
           const label = typeof raw.label === "string" ? raw.label : key || "Field";
-          return { key, type, label, default: raw.default };
+          const options = Array.isArray(raw.options)
+            ? raw.options
+              .map((opt) => {
+                if (typeof opt === "string" || typeof opt === "number" || typeof opt === "boolean") {
+                  const value = String(opt);
+                  return { value, label: value };
+                }
+                if (!opt || typeof opt !== "object") return null;
+                const optionRaw = opt as { value?: unknown; label?: unknown };
+                const optionValue = optionRaw.value;
+                if (typeof optionValue !== "string" && typeof optionValue !== "number" && typeof optionValue !== "boolean") return null;
+                const value = String(optionValue);
+                const optionLabel = typeof optionRaw.label === "string" && optionRaw.label.trim().length > 0
+                  ? optionRaw.label
+                  : value;
+                return { value, label: optionLabel };
+              })
+              .filter((opt): opt is { value: string; label: string } => opt !== null)
+            : undefined;
+          return { key, type, label, default: raw.default, options };
         })
         .filter((item): item is StrategyNodePropertyRecord => item !== null);
     };

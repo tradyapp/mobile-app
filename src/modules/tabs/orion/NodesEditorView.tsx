@@ -74,6 +74,7 @@ function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefi
     name: item.label?.trim() || item.key?.trim() || `Input ${index + 1}`,
     type: item.type || 'text',
     value: toFieldDefaultValue(item.default),
+    options: Array.isArray(item.options) ? item.options : undefined,
     required: true,
   }));
 }
@@ -172,6 +173,33 @@ function getAttributeTypeIcon(type?: string): string {
   if (normalized.includes('json') || normalized.includes('object') || normalized.includes('map')) return '{}';
   if (normalized.includes('array') || normalized.includes('list')) return '[]';
   return 'T';
+}
+
+function formatTimezoneOffset(timeZone: string, date: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'shortOffset',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+    const tzName = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'UTC';
+    return tzName.replace(/^GMT/i, 'UTC');
+  } catch {
+    return 'UTC';
+  }
+}
+
+function buildTimezoneOptions(date: Date = new Date()): Array<{ value: string; label: string }> {
+  const supported = typeof Intl.supportedValuesOf === 'function'
+    ? Intl.supportedValuesOf('timeZone')
+    : ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
+
+  return supported.map((timeZone) => ({
+    value: timeZone,
+    label: `${timeZone} (${formatTimezoneOffset(timeZone, date)})`,
+  }));
 }
 
 function SnapshotTree({
@@ -1076,6 +1104,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [previewVersion, isPublishingVersion, strategyId]);
 
   const nodeEditorData = selectedNodeForEditor?.data as EditorNodeData | undefined;
+  const timezoneOptions = useMemo(() => buildTimezoneOptions(), []);
   const selectedNodeExecutionTrace = selectedNodeForEditor
     ? localExecutionTraces.find((item) => item.nodeId === selectedNodeForEditor.id) ?? null
     : null;
@@ -1241,12 +1270,17 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       <List
                         strong
                         inset
-                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:py-2"
+                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:py-1"
                       >
                         {panelFields.map((field, index) => (
+                          (() => {
+                            const isTimezone = (field.type || '').trim().toLowerCase() === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
+                            const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
+                            const isSelect = selectOptions.length > 0;
+                            return (
                           <ListInput
                             key={field.id}
-                            type="text"
+                            type={isSelect ? 'select' : 'text'}
                             value={field.value ?? ''}
                             disabled={isPreviewMode}
                             label={(
@@ -1262,8 +1296,16 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                               next[index] = { ...next[index], value: event.target.value };
                               return next;
                             })}
-                            className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1.5 [&_input]:text-xs [&_input]:text-zinc-100"
-                          />
+                            className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-2.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                          >
+                            {isSelect && selectOptions.map((option) => (
+                              <option key={`${field.id}-${option.value}`} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </ListInput>
+                            );
+                          })()
                         ))}
                       </List>
                     )

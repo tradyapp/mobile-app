@@ -18,6 +18,7 @@ export interface EditorNodeField {
   type: string;
   required?: boolean;
   value?: string;
+  options?: Array<{ value: string; label: string }>;
 }
 
 export interface NodeTypeCategoryGroup {
