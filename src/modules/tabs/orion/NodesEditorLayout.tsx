@@ -16,6 +16,44 @@ interface NodesEditorLayoutProps {
 export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
+      {model.executionToast && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-[max(12px,env(safe-area-inset-top))] z-[260] w-[min(92vw,460px)] -translate-x-1/2"
+          style={model.safeHorizontalInsetStyle}
+        >
+          <div className="pointer-events-auto rounded-2xl border border-zinc-700/80 bg-zinc-900/95 px-3 py-3 shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800">
+                {model.executionToast.nodeIconUrl ? (
+                  <img
+                    src={model.executionToast.nodeIconUrl}
+                    alt={model.executionToast.nodeLabel}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-zinc-300">
+                    {model.executionToast.nodeLabel.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-semibold text-zinc-100">{model.executionToast.nodeLabel}</p>
+                <p className="mt-0.5 line-clamp-2 text-[13px] font-medium text-emerald-300">{model.executionToast.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={model.onDismissExecutionToast}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-700 text-zinc-300"
+                aria-label="Close execution toast"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <OrionNodesHeader
           strategyName={model.strategyName}

@@ -55,6 +55,13 @@ interface UseNodesEditorControllerProps {
   onClose: () => void;
 }
 
+interface ExecutionToastState {
+  id: number;
+  nodeLabel: string;
+  nodeIconUrl: string | null;
+  message: string;
+}
+
 function normalizePortHandleId(raw: string, fallback: string): string {
   const normalized = raw
     .trim()
@@ -216,12 +223,48 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [referenceSourcesError, setReferenceSourcesError] = useState<string | null>(null);
   const [referenceSourcesByNodeId, setReferenceSourcesByNodeId] = useState<Record<string, ReferenceSourceItem[]>>({});
   const [isUpstreamExecutingForNode, setIsUpstreamExecutingForNode] = useState(false);
+  const [executionToast, setExecutionToast] = useState<ExecutionToastState | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
   const saveRequestIdRef = useRef(0);
   const draftBeforePreviewRef = useRef<StrategyNodeMap | null>(null);
   const lastNodeTapRef = useRef<{ id: string; at: number } | null>(null);
+  const executionRunIdRef = useRef(0);
+  const lastToastedRunIdRef = useRef(0);
+  const executionToastIdRef = useRef(0);
+
+  const isPlainObject = useCallback((value: unknown): value is Record<string, unknown> => (
+    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  ), []);
+
+  const getExecutionToastMessage = useCallback((value: unknown): string => {
+    if (isPlainObject(value)) {
+      const rating = value.rating;
+      if (typeof rating === 'number') return `Rating: ${rating}`;
+      if (typeof rating === 'string' && rating.trim().length > 0) return `Rating: ${rating}`;
+
+      const percentage = value.percentage;
+      if (typeof percentage === 'number') return `Percentage: ${percentage}`;
+      if (typeof percentage === 'string' && percentage.trim().length > 0) return `Percentage: ${percentage}`;
+
+      const result = value.result;
+      if (typeof result === 'boolean') return `Result: ${result ? 'True' : 'False'}`;
+      if (typeof result === 'number') return `Result: ${result}`;
+      if (typeof result === 'string' && result.trim().length > 0) return `Result: ${result}`;
+    }
+
+    if (typeof value === 'boolean') return `Result: ${value ? 'True' : 'False'}`;
+    if (typeof value === 'number') return `Result: ${value}`;
+    if (typeof value === 'string' && value.trim().length > 0) return `Result: ${value}`;
+
+    if (value === null || value === undefined) return 'Result: no value';
+    try {
+      return `Result: ${JSON.stringify(value)}`;
+    } catch {
+      return 'Result: value available';
+    }
+  }, [isPlainObject]);
 
   const nodeTypeGroups = useMemo<NodeTypeCategoryGroup[]>(() => {
     const grouped = new Map<string, StrategyNodeTypeRecord[]>();
@@ -644,7 +687,12 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           market: selectedExecutionSymbol.market,
         }
         : null,
-      onStatusChange: (status) => setLocalExecutionStatus(status),
+      onStatusChange: (status) => {
+        if (status === 'running') {
+          executionRunIdRef.current += 1;
+        }
+        setLocalExecutionStatus(status);
+      },
       onErrorChange: setLocalExecutionError,
       onTracesChange: setLocalExecutionTraces,
       onExecutionStatusByNodeChange: (byNode) => {
@@ -652,6 +700,44 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       },
     });
   }, [edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+
+  useEffect(() => {
+    if (localExecutionStatus !== 'completed') return;
+    if (executionRunIdRef.current === 0) return;
+    if (lastToastedRunIdRef.current === executionRunIdRef.current) return;
+
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const outputTrace = [...localExecutionTraces].reverse().find((trace) => {
+      if (trace.status !== 'success') return false;
+      const node = nodeById.get(trace.nodeId);
+      const category = normalizeNodeCategory((node?.data as EditorNodeData | undefined)?.category);
+      return category === 'output';
+    });
+
+    if (!outputTrace) {
+      lastToastedRunIdRef.current = executionRunIdRef.current;
+      return;
+    }
+
+    const sourceNode = nodeById.get(outputTrace.nodeId);
+    const sourceData = (sourceNode?.data ?? {}) as EditorNodeData;
+    executionToastIdRef.current += 1;
+    setExecutionToast({
+      id: executionToastIdRef.current,
+      nodeLabel: sourceData.label ?? outputTrace.label ?? 'Output',
+      nodeIconUrl: sourceData.iconUrl ?? null,
+      message: getExecutionToastMessage(outputTrace.outputSnapshot),
+    });
+    lastToastedRunIdRef.current = executionRunIdRef.current;
+  }, [getExecutionToastMessage, localExecutionStatus, localExecutionTraces, nodes]);
+
+  useEffect(() => {
+    if (!executionToast) return;
+    const timeoutId = window.setTimeout(() => {
+      setExecutionToast((current) => (current?.id === executionToast.id ? null : current));
+    }, 3600);
+    return () => window.clearTimeout(timeoutId);
+  }, [executionToast]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -957,8 +1043,10 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           : localExecutionStatus === 'running'
             ? 'running'
             : localExecutionStatus === 'completed'
-              ? 'completed'
-              : 'failed',
+            ? 'completed'
+            : 'failed',
+        executionToast,
+        onDismissExecutionToast: () => setExecutionToast(null),
         safeHorizontalInsetStyle,
         safeCanvasInsetStyle,
         onClose,
