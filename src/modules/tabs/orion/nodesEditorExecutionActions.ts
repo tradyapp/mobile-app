@@ -231,6 +231,19 @@ function evaluateArithmeticExpression(expression: string): number {
   return values[0];
 }
 
+function toTwoDigits(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function formatTimestampUTC(date: Date): string {
+  return `${date.getUTCFullYear()}-${toTwoDigits(date.getUTCMonth() + 1)}-${toTwoDigits(date.getUTCDate())} ${toTwoDigits(date.getUTCHours())}:${toTwoDigits(date.getUTCMinutes())}:${toTwoDigits(date.getUTCSeconds())}`;
+}
+
+function dayOfWeekNameUTC(dayIdx: number): string {
+  const map = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  return map[dayIdx] ?? 'unknown';
+}
+
 function localEvalKey(nodeTypeKey: string, nodeTypeVersion: number | null): string {
   return nodeTypeVersion === null ? nodeTypeKey : `${nodeTypeKey}@${nodeTypeVersion}`;
 }
@@ -254,8 +267,9 @@ function executeLocalNodeIfSupported(params: {
   resolvedAttributes: EditorNodeField[] | undefined;
   history: StateHistoryItem[];
   nodeTypeLookup: Map<string, StrategyNodeTypeRecord>;
+  executionTimeISO: string;
 }): { handled: boolean; output?: unknown } {
-  const { nodeData, resolvedAttributes, history, nodeTypeLookup } = params;
+  const { nodeData, resolvedAttributes, history, nodeTypeLookup, executionTimeISO } = params;
   const key = nodeData.nodeTypeKey ?? '';
   const version = typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null;
   if (!key) return { handled: false };
@@ -282,6 +296,38 @@ function executeLocalNodeIfSupported(params: {
         value,
         expression: rawExpression,
         resolved_expression: resolvedExpression,
+      },
+    };
+  }
+
+  if (key === 'trigger.schedule' && op === 'schedule_now_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const executionDate = new Date(executionTimeISO);
+    const configuredTimezone = typeof attributesObj.timezone === 'string' && attributesObj.timezone.trim().length > 0
+      ? attributesObj.timezone
+      : 'UTC';
+
+    return {
+      handled: true,
+      output: {
+        type: 'schedule_event',
+        timestamp: formatTimestampUTC(executionDate),
+        year: executionDate.getUTCFullYear(),
+        month: executionDate.getUTCMonth() + 1,
+        day: executionDate.getUTCDate(),
+        hour: executionDate.getUTCHours(),
+        minute: executionDate.getUTCMinutes(),
+        second: executionDate.getUTCSeconds(),
+        day_of_week: executionDate.getUTCDay(),
+        day_of_week_name: dayOfWeekNameUTC(executionDate.getUTCDay()),
+        iso_utc: executionDate.toISOString(),
+        timezone: configuredTimezone,
+        config: {
+          hour: Number(attributesObj.hour ?? 9),
+          minute: Number(attributesObj.minute ?? 0),
+          days_of_week: attributesObj.days_of_week ?? ['mon', 'tue', 'wed', 'thu', 'fri'],
+          timezone: configuredTimezone,
+        },
       },
     };
   }
@@ -558,6 +604,7 @@ export async function runLocalExecution(params: {
         resolvedAttributes,
         history: frozenHistory,
         nodeTypeLookup,
+        executionTimeISO: executionTime,
       });
 
       if (localResult.handled) {
