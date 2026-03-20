@@ -2,15 +2,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Dialog, DialogButton } from 'konsta/react';
 import {
   addEdge,
-  Background,
-  Controls,
   Handle,
   Position,
-  ReactFlow,
   type Connection,
   type Edge as RFEdge,
   type Node as RFNode,
@@ -20,177 +15,42 @@ import {
   useNodesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import CogIcon from '@/components/icons/CogIcon';
 import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
+import OrionNodesCanvas from '@/modules/tabs/orion/OrionNodesCanvas';
+import OrionDeleteDialogs from '@/modules/tabs/orion/OrionDeleteDialogs';
+import OrionNodesHeader from '@/modules/tabs/orion/OrionNodesHeader';
 import OrionNodeInspectorPanel from '@/modules/tabs/orion/OrionNodeInspectorPanel';
 import OrionReferenceDrawer, { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
-import { SymbolAvatar, getValueType } from '@/modules/tabs/orion/OrionValueView';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
 import { NodeSettingsDrawer, type StrategySymbolCatalogItem, VersionNameDialog } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
-import dataService from '@/services/DataService';
-import { strategyNodeTypesService, type StrategyNodePropertyRecord, type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
+import {
+  buildTimezoneOptions,
+  createNodeDefaults,
+  type LocalExecutionNodeStatus,
+  type LocalExecutionNodeTrace,
+  type LocalExecutionStatus,
+  type NodeDetailsPanel,
+  type NodeDetailsPanelItem,
+  type NodeSymbolFilter,
+} from '@/modules/tabs/orion/nodesEditorUtils';
+import { loadReferenceSourcesForNode as loadReferenceSourcesForNodeAction, runLocalExecution as runLocalExecutionAction } from '@/modules/tabs/orion/nodesEditorExecutionActions';
+import {
+  activatePreviewVersionAction,
+  deleteStrategyAction,
+  editPreviewAsDraftAction,
+  loadAvailableSymbolsAction,
+  loadNodeTypesAction,
+  loadNodeVersionsAction,
+  loadStrategySymbolsAction,
+  publishVersionAction,
+  saveStrategySymbolsAction,
+} from '@/modules/tabs/orion/nodesEditorDataActions';
+import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
 import { useOrionExecutionStore } from '@/stores/orionExecutionStore';
 
-function CloseIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  );
-}
-
-type NodeDetailsPanel = 'inputs' | 'attributes' | 'outputs';
-type NodeDetailsPanelItem = { key: NodeDetailsPanel; label: string };
-type NodeSymbolFilter = 'ALL' | StrategyTrackedSymbol['market'];
-type LocalExecutionStatus = 'idle' | 'running' | 'completed' | 'failed';
-type LocalExecutionNodeStatus = 'pending' | 'running' | 'success' | 'error';
-
-interface LocalExecutionNodeTrace {
-  nodeId: string;
-  label: string;
-  nodeTypeKey: string;
-  nodeTypeVersion: number | null;
-  status: LocalExecutionNodeStatus;
-  inputSnapshot: unknown;
-  outputSnapshot: unknown;
-  error: string | null;
-}
-
-type StateHistoryItem = { nodeId: string; data: unknown };
 type ReferenceSourceItem = OrionReferenceSourceItem;
-
-const NODE_REFERENCE_PREFIX = 'ref://node/';
-
-function makeNodeReferenceToken(nodeId: string): string {
-  return `${NODE_REFERENCE_PREFIX}${nodeId}/data`;
-}
-
-function parseNodeReferenceToken(raw: string | undefined): { nodeId: string } | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith(NODE_REFERENCE_PREFIX)) return null;
-  const suffix = trimmed.slice(NODE_REFERENCE_PREFIX.length);
-  const [nodeId, terminal] = suffix.split('/');
-  if (!nodeId || terminal !== 'data') return null;
-  return { nodeId };
-}
-
-function makeFieldId(prefix: string): string {
-  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function toFieldDefaultValue(value: unknown): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '';
-  }
-}
-
-function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefined): EditorNodeField[] {
-  if (!Array.isArray(properties)) return [];
-  return properties.map((item, index) => ({
-    id: makeFieldId('input'),
-    key: item.key?.trim() || undefined,
-    name: item.label?.trim() || item.key?.trim() || `Input ${index + 1}`,
-    type: item.type || 'text',
-    value: String(item.type || '').trim().toLowerCase() === 'multi_select' && Array.isArray(item.default)
-      ? item.default
-        .filter((value): value is string | number | boolean => (
-          typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-        ))
-        .map((value) => String(value))
-        .join(',')
-      : toFieldDefaultValue(item.default),
-    options: Array.isArray(item.options) ? item.options : undefined,
-    required: true,
-  }));
-}
-
-function mapPortsToFlowFields(
-  ports: Array<{ label?: string; key?: string; type?: string }> | undefined,
-  prefix: 'in' | 'out',
-  fallbackLabel: string
-): EditorNodeField[] {
-  if (!Array.isArray(ports)) return [];
-  const mapped = ports.map((item, index) => ({
-    id: makeFieldId(prefix),
-    key: item.key?.trim() || undefined,
-    name: item.label?.trim() || item.key?.trim() || `${fallbackLabel} ${index + 1}`,
-    type: item.type || 'any',
-    required: true,
-  }));
-  return mapped;
-}
-
-function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
-  const { category } = nodeType;
-  const normalized = normalizeNodeCategory(category);
-  const attributesFromProperties = mapPropertiesToInputs(nodeType.properties);
-  const inputsFromNodeType = mapPortsToFlowFields(nodeType.input_ports, 'in', 'Input');
-  const outputsFromNodeType = mapPortsToFlowFields(nodeType.output_ports, 'out', 'Output');
-
-  if (normalized === 'trigger') {
-    return {
-      inputs: [],
-      attributes: attributesFromProperties,
-      outputs: outputsFromNodeType.length > 0
-        ? outputsFromNodeType
-        : [{ id: makeFieldId('out'), name: 'event', type: 'signal' }],
-    };
-  }
-
-  if (normalized === 'output') {
-    return {
-      inputs: inputsFromNodeType.length > 0
-        ? inputsFromNodeType
-        : [{ id: makeFieldId('in'), name: 'signal', type: 'signal', required: true }],
-      attributes: attributesFromProperties,
-      outputs: [],
-    };
-  }
-
-  return {
-    inputs: inputsFromNodeType.length > 0
-      ? inputsFromNodeType
-      : [{ id: makeFieldId('in'), name: 'input', type: 'number', required: true }],
-    attributes: attributesFromProperties,
-    outputs: outputsFromNodeType.length > 0
-      ? outputsFromNodeType
-      : [{ id: makeFieldId('out'), name: 'result', type: 'number' }],
-  };
-}
-
-function formatTimezoneOffset(timeZone: string, date: Date): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      timeZoneName: 'shortOffset',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(date);
-    const tzName = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'UTC';
-    return tzName.replace(/^GMT/i, 'UTC');
-  } catch {
-    return 'UTC';
-  }
-}
-
-function buildTimezoneOptions(date: Date = new Date()): Array<{ value: string; label: string }> {
-  const supported = typeof Intl.supportedValuesOf === 'function'
-    ? Intl.supportedValuesOf('timeZone')
-    : ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
-
-  return supported.map((timeZone) => ({
-    value: timeZone,
-    label: `${timeZone} (${formatTimezoneOffset(timeZone, date)})`,
-  }));
-}
 
 interface NodesViewProps {
   strategyId: string;
@@ -431,7 +291,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setIsNodeTypesLoading(true);
     setNodeTypesError(null);
     try {
-      const items = await strategyNodeTypesService.listActiveNodeTypes();
+      const items = await loadNodeTypesAction();
       setAvailableNodeTypes(items);
     } catch (error) {
       setNodeTypesError(error instanceof Error ? error.message : 'Failed to load node types');
@@ -447,21 +307,8 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   const loadStrategySymbols = useCallback(async () => {
     setSymbolsError(null);
     try {
-      const [rows, catalog] = await Promise.all([
-        strategiesService.getStrategySymbols(strategyId),
-        dataService.loadSymbols(),
-      ]);
-      const iconByTicker = new Map<string, string | null>();
-      for (const item of catalog) {
-        const ticker = String(item.symbol ?? '').toUpperCase();
-        if (!ticker) continue;
-        iconByTicker.set(ticker, item.icon_url ?? item.photo ?? null);
-      }
-      const hydrated = rows.map((item) => ({
-        ...item,
-        icon_url: item.icon_url ?? iconByTicker.get(item.ticker.toUpperCase()) ?? null,
-      }));
-      setTrackedSymbols(hydrated);
+      const hydrated = await loadStrategySymbolsAction(strategyId);
+      setTrackedSymbols(hydrated as StrategyTrackedSymbol[]);
     } catch (error) {
       setSymbolsError(error instanceof Error ? error.message : 'Failed to load strategy symbols');
     }
@@ -471,13 +318,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setIsSymbolsLoading(true);
     setSymbolsError(null);
     try {
-      const rows = await dataService.loadSymbols();
-      const mapped: StrategySymbolCatalogItem[] = rows.map((item) => ({
-        ticker: String(item.symbol ?? '').toUpperCase(),
-        name: item.name ?? String(item.symbol ?? '').toUpperCase(),
-        icon_url: item.icon_url ?? (item.photo?.startsWith('blob:') ? null : (item.photo ?? null)),
-        market: item.type === 'FOREX' || item.type === 'CRYPTO' ? item.type : 'STOCKS',
-      })).filter((item) => item.ticker.length > 0);
+      const mapped = await loadAvailableSymbolsAction();
       setAvailableSymbols(mapped);
     } catch (error) {
       setSymbolsError(error instanceof Error ? error.message : 'Failed to load symbols catalog');
@@ -716,121 +557,22 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     }));
   }, [setNodes]);
 
-  const resolveAttributeReferences = useCallback((fields: EditorNodeField[] | undefined, history: StateHistoryItem[]) => {
-    if (!Array.isArray(fields) || fields.length === 0) return fields;
-    const historyByNodeId = new Map<string, unknown>();
-    for (const entry of history) {
-      historyByNodeId.set(entry.nodeId, entry.data);
-    }
-
-    return fields.map((field) => {
-      const reference = parseNodeReferenceToken(field.value);
-      if (!reference) return field;
-      if (!historyByNodeId.has(reference.nodeId)) {
-        throw new Error(`Reference not found for node ${reference.nodeId}`);
-      }
-      return {
-        ...field,
-        resolved: historyByNodeId.get(reference.nodeId),
-      } as EditorNodeField & { resolved: unknown };
-    });
-  }, []);
-
   const loadReferenceSourcesForNode = useCallback(async (targetNodeId: string): Promise<ReferenceSourceItem[]> => {
-    if (!selectedExecutionTicker.trim()) {
-      throw new Error('Select a strategy symbol before connecting references.');
-    }
-
-    const nodeById = new Map<string, RFNode>();
-    const indegree = new Map<string, number>();
-    const outgoingByNodeId = new Map<string, string[]>();
-    const incomingByNodeId = new Map<string, string[]>();
-    for (const node of nodes) {
-      nodeById.set(node.id, node);
-      indegree.set(node.id, 0);
-      outgoingByNodeId.set(node.id, []);
-      incomingByNodeId.set(node.id, []);
-    }
-    for (const edge of edges) {
-      if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
-      outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
-      incomingByNodeId.set(edge.target, [...(incomingByNodeId.get(edge.target) ?? []), edge.source]);
-      indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
-    }
-
-    const upstreamSet = new Set<string>();
-    const walk = (nodeId: string) => {
-      for (const parentId of incomingByNodeId.get(nodeId) ?? []) {
-        if (upstreamSet.has(parentId)) continue;
-        upstreamSet.add(parentId);
-        walk(parentId);
-      }
-    };
-    walk(targetNodeId);
-
-    const queue: string[] = [];
-    for (const node of nodes) {
-      if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
-    }
-    const orderedNodeIds: string[] = [];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      orderedNodeIds.push(current);
-      for (const next of outgoingByNodeId.get(current) ?? []) {
-        const remaining = (indegree.get(next) ?? 0) - 1;
-        indegree.set(next, remaining);
-        if (remaining === 0) queue.push(next);
-      }
-    }
-
-    const stateHistory: StateHistoryItem[] = [];
-    const executionTime = new Date().toISOString();
-
-    for (const nodeId of orderedNodeIds) {
-      if (!upstreamSet.has(nodeId)) continue;
-      const node = nodeById.get(nodeId);
-      if (!node) continue;
-      const nodeData = (node.data ?? {}) as EditorNodeData;
-      const frozenHistory = [...stateHistory].reverse();
-      const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
-
-      const execution = await strategiesService.executeStrategyNode({
-        strategy_id: strategyId,
-        node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
-        node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
-        attributes: resolvedAttributes,
-        input_context: {
-          execution_symbol: selectedExecutionSymbol
-            ? {
-              ticker: selectedExecutionSymbol.ticker,
-              name: selectedExecutionSymbol.name,
-              market: selectedExecutionSymbol.market,
-            }
-            : { ticker: selectedExecutionTicker },
-          state_history: frozenHistory,
-        },
-        mode: 'preview',
-        execution_time: executionTime,
-      });
-
-      stateHistory.push({ nodeId, data: execution.output });
-    }
-
-    return [...stateHistory]
-      .reverse()
-      .map((entry) => {
-        const sourceNode = nodeById.get(entry.nodeId);
-        const sourceData = (sourceNode?.data ?? {}) as EditorNodeData;
-        return {
-          nodeId: entry.nodeId,
-          label: sourceData.label ?? entry.nodeId,
-          nodeTypeKey: sourceData.nodeTypeKey ?? 'custom-node',
-          data: entry.data,
-          dataType: getValueType(entry.data),
-          refToken: makeNodeReferenceToken(entry.nodeId),
-        } satisfies ReferenceSourceItem;
-      });
-  }, [edges, nodes, resolveAttributeReferences, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+    return loadReferenceSourcesForNodeAction({
+      targetNodeId,
+      strategyId,
+      nodes,
+      edges,
+      selectedExecutionTicker,
+      selectedExecutionSymbol: selectedExecutionSymbol
+        ? {
+          ticker: selectedExecutionSymbol.ticker,
+          name: selectedExecutionSymbol.name,
+          market: selectedExecutionSymbol.market,
+        }
+        : null,
+    }) as Promise<ReferenceSourceItem[]>;
+  }, [edges, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
   const runUpstreamExecutionForEditor = useCallback(async () => {
     if (!selectedNodeForEditor) return;
@@ -861,168 +603,27 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   }, [selectedNodeForEditor]);
 
   const runLocalExecution = useCallback(async () => {
-    if (localExecutionStatus === 'running') return;
-
-    if (nodes.length === 0) {
-      setLocalExecutionStatus('failed');
-      setLocalExecutionError('Add at least one node before running local execution.');
-      setLocalExecutionTraces([]);
-      executionStatusByNodeIdRef.current = {};
-      return;
-    }
-
-    if (!selectedExecutionTicker.trim()) {
-      setLocalExecutionStatus('failed');
-      setLocalExecutionError('Select a strategy symbol before running local execution.');
-      setLocalExecutionTraces([]);
-      executionStatusByNodeIdRef.current = {};
-      return;
-    }
-
-    setLocalExecutionStatus('running');
-    setLocalExecutionError(null);
-
-    const nodeById = new Map<string, RFNode>();
-    const outgoingByNodeId = new Map<string, string[]>();
-    const indegree = new Map<string, number>();
-
-    for (const node of nodes) {
-      nodeById.set(node.id, node);
-      outgoingByNodeId.set(node.id, []);
-      indegree.set(node.id, 0);
-    }
-
-    for (const edge of edges) {
-      if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
-      outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
-      indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
-    }
-
-    const queue: string[] = [];
-    for (const node of nodes) {
-      if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
-    }
-    queue.sort((a, b) => {
-      const nodeA = nodeById.get(a);
-      const nodeB = nodeById.get(b);
-      const categoryA = normalizeNodeCategory((nodeA?.data as EditorNodeData | undefined)?.category);
-      const categoryB = normalizeNodeCategory((nodeB?.data as EditorNodeData | undefined)?.category);
-      if (categoryA === categoryB) return a.localeCompare(b);
-      if (categoryA === 'trigger') return -1;
-      if (categoryB === 'trigger') return 1;
-      return categoryA.localeCompare(categoryB);
-    });
-
-    const orderedNodeIds: string[] = [];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      orderedNodeIds.push(current);
-      for (const next of outgoingByNodeId.get(current) ?? []) {
-        const remaining = (indegree.get(next) ?? 0) - 1;
-        indegree.set(next, remaining);
-        if (remaining === 0) {
-          queue.push(next);
+    await runLocalExecutionAction({
+      strategyId,
+      nodes,
+      edges,
+      localExecutionStatus,
+      selectedExecutionTicker,
+      selectedExecutionSymbol: selectedExecutionSymbol
+        ? {
+          ticker: selectedExecutionSymbol.ticker,
+          name: selectedExecutionSymbol.name,
+          market: selectedExecutionSymbol.market,
         }
-      }
-    }
-
-    for (const node of nodes) {
-      if (!orderedNodeIds.includes(node.id)) {
-        orderedNodeIds.push(node.id);
-      }
-    }
-
-    const tracesById = new Map<string, LocalExecutionNodeTrace>();
-    const executionStatusByNodeId: Record<string, LocalExecutionNodeStatus> = {};
-    for (const nodeId of orderedNodeIds) {
-      const node = nodeById.get(nodeId)!;
-      const nodeData = (node.data ?? {}) as EditorNodeData;
-      tracesById.set(nodeId, {
-        nodeId,
-        label: nodeData.label ?? nodeId,
-        nodeTypeKey: nodeData.nodeTypeKey ?? 'custom-node',
-        nodeTypeVersion: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
-        status: 'pending',
-        inputSnapshot: null,
-        outputSnapshot: null,
-        error: null,
-      });
-      executionStatusByNodeId[nodeId] = 'pending';
-    }
-
-    const syncTracesState = () => {
-      executionStatusByNodeIdRef.current = { ...executionStatusByNodeId };
-      setLocalExecutionTraces(orderedNodeIds.map((nodeId) => tracesById.get(nodeId)!));
-    };
-
-    syncTracesState();
-
-    const stateHistory: Array<{ nodeId: string; data: unknown }> = [];
-    const executionTime = new Date().toISOString();
-
-    for (let i = 0; i < orderedNodeIds.length; i += 1) {
-      const nodeId = orderedNodeIds[i];
-      const trace = tracesById.get(nodeId);
-      const node = nodeById.get(nodeId);
-      if (!trace || !node) continue;
-
-      trace.status = 'running';
-      executionStatusByNodeId[nodeId] = 'running';
-      syncTracesState();
-      await new Promise((resolve) => window.setTimeout(resolve, 120));
-
-      const nodeData = (node.data ?? {}) as EditorNodeData;
-      const frozenHistory = [...stateHistory].reverse();
-      const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
-
-      trace.inputSnapshot = frozenHistory;
-
-      try {
-        const execution = await strategiesService.executeStrategyNode({
-          strategy_id: strategyId,
-          node_type_key: nodeData.nodeTypeKey ?? 'custom-node',
-          node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
-          attributes: resolvedAttributes,
-          input_context: {
-            execution_symbol: selectedExecutionSymbol
-              ? {
-                ticker: selectedExecutionSymbol.ticker,
-                name: selectedExecutionSymbol.name,
-                market: selectedExecutionSymbol.market,
-              }
-              : { ticker: selectedExecutionTicker },
-            state_history: frozenHistory,
-          },
-          mode: 'preview',
-          execution_time: executionTime,
-        });
-
-        trace.inputSnapshot = frozenHistory;
-        trace.outputSnapshot = execution.output;
-
-        trace.status = 'success';
-        executionStatusByNodeId[nodeId] = 'success';
-        trace.error = null;
-        stateHistory.push({
-          nodeId,
-          data: trace.outputSnapshot,
-        });
-      } catch (error) {
-        trace.status = 'error';
-        executionStatusByNodeId[nodeId] = 'error';
-        trace.error = error instanceof Error ? error.message : 'Execution error';
-        setLocalExecutionStatus('failed');
-        setLocalExecutionError(`Node failed: ${trace.label}${selectedExecutionTicker ? ` · ${selectedExecutionTicker}` : ''}`);
-        syncTracesState();
-        return;
-      }
-
-      syncTracesState();
-    }
-
-    setLocalExecutionStatus('completed');
-    setLocalExecutionError(null);
-  }, [edges, localExecutionStatus, nodes, resolveAttributeReferences, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
+        : null,
+      onStatusChange: (status) => setLocalExecutionStatus(status),
+      onErrorChange: setLocalExecutionError,
+      onTracesChange: setLocalExecutionTraces,
+      onExecutionStatusByNodeChange: (byNode) => {
+        executionStatusByNodeIdRef.current = byNode;
+      },
+    });
+  }, [edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1062,7 +663,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setIsDeletingStrategy(true);
     setDeleteStrategyError(null);
     try {
-      await strategiesService.deleteStrategy(strategyId);
+      await deleteStrategyAction(strategyId);
       onDeleted?.(strategyId);
       setIsDeleteStrategyDialogOpen(false);
       onClose();
@@ -1095,7 +696,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setSymbolsError(null);
 
     try {
-      await strategiesService.saveStrategySymbols(strategyId, next);
+      await saveStrategySymbolsAction(strategyId, next);
     } catch (error) {
       setTrackedSymbols(previous);
       setSymbolsError(error instanceof Error ? error.message : 'Failed to save strategy symbols');
@@ -1113,7 +714,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setIsNodeVersionsLoading(true);
     setNodeVersionsError(null);
     try {
-      const rows = await strategiesService.listStrategyNodeVersions(strategyId);
+      const rows = await loadNodeVersionsAction(strategyId);
       setNodeVersions(rows);
     } catch (error) {
       setNodeVersionsError(error instanceof Error ? error.message : 'Failed to load versions');
@@ -1134,10 +735,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
 
     try {
       const draftPayload = getCurrentNodeMap();
-      await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
-      lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
-      setLastSavedNodeMapSnapshot(JSON.stringify(draftPayload));
-      const created = await strategiesService.createStrategyNodeVersion(strategyId, versionName, true);
+      const created = await publishVersionAction({ strategyId, draftPayload, versionName });
+      const serialized = JSON.stringify(draftPayload);
+      lastSavedNodeMapRef.current = serialized;
+      setLastSavedNodeMapSnapshot(serialized);
       setNodeVersions((prev) => {
         const next = prev.map((item) => ({ ...item, is_active: false }));
         const withoutSame = next.filter((item) => item.id !== created.id);
@@ -1175,9 +776,10 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setSaveError(null);
 
     try {
-      await strategiesService.saveStrategyNodeMap(strategyId, draftPayload);
-      lastSavedNodeMapRef.current = JSON.stringify(draftPayload);
-      setLastSavedNodeMapSnapshot(JSON.stringify(draftPayload));
+      await editPreviewAsDraftAction(strategyId, draftPayload);
+      const serialized = JSON.stringify(draftPayload);
+      lastSavedNodeMapRef.current = serialized;
+      setLastSavedNodeMapSnapshot(serialized);
       setSaveStatus('saved');
     } catch (error) {
       setSaveStatus('error');
@@ -1191,7 +793,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
     setIsPublishingVersion(true);
     setNodeVersionsError(null);
     try {
-      await strategiesService.activateStrategyNodeVersion(strategyId, previewVersion.id);
+      await activatePreviewVersionAction(strategyId, previewVersion.id);
       setNodeVersions((prev) =>
         prev.map((item) => ({ ...item, is_active: item.id === previewVersion.id }))
       );
@@ -1303,64 +905,48 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
   return (
     <div className="relative z-[220] flex h-[100dvh] flex-col overflow-hidden bg-zinc-950">
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <header
-          className="flex items-center gap-3 border-b border-zinc-800 pb-3 pt-[max(16px,env(safe-area-inset-top))]"
-          style={safeHorizontalInsetStyle}
-        >
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200"
-            aria-label="Close nodes view"
-          >
-            <CloseIcon />
-          </button>
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
-              {strategyPhotoUrl ? (
-                <img src={strategyPhotoUrl} alt={strategyName} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-zinc-300">
-                  {strategyInitials || 'ST'}
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{strategyName}</p>
-              <p className="text-xs text-zinc-500">
-                {isNodeMapLoading
-                  ? 'Loading map...'
-                  : isPreviewMode
-                    ? `Preview · v${previewVersion.version_number} ${previewVersion.name}`
-                    : saveStatus === 'saving'
-                      ? `Draft · Saving...${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
-                      : saveStatus === 'saved'
-                        ? `Draft · Saved${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
-                        : saveStatus === 'error'
-                          ? 'Draft · Save error'
-                          : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`}
-              </p>
-              {localExecutionStatus !== 'idle' && (
-                <p className={`text-[11px] ${localExecutionStatus === 'running' ? 'text-blue-300' : localExecutionStatus === 'completed' ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {localExecutionStatus === 'running' ? 'Execution · Running' : localExecutionStatus === 'completed' ? 'Execution · Completed' : `Execution · Failed${localExecutionError ? ` · ${localExecutionError}` : ''}`}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="ml-auto">
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsPanel('menu');
-                setIsSettingsDrawerOpen(true);
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-100"
-              aria-label="Open nodes settings"
-            >
-              <CogIcon />
-            </button>
-          </div>
-        </header>
+        <OrionNodesHeader
+          strategyName={strategyName}
+          strategyPhotoUrl={strategyPhotoUrl}
+          strategyInitials={strategyInitials}
+          subtitle={
+            isNodeMapLoading
+              ? 'Loading map...'
+              : isPreviewMode
+                ? `Preview · v${previewVersion.version_number} ${previewVersion.name}`
+                : saveStatus === 'saving'
+                  ? `Draft · Saving...${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                  : saveStatus === 'saved'
+                    ? `Draft · Saved${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+                    : saveStatus === 'error'
+                      ? 'Draft · Save error'
+                      : `Draft${activeNodeVersion ? ` · Active v${activeNodeVersion.version_number}` : ''}`
+          }
+          executionStatusText={
+            localExecutionStatus === 'idle'
+              ? null
+              : localExecutionStatus === 'running'
+                ? 'Execution · Running'
+                : localExecutionStatus === 'completed'
+                  ? 'Execution · Completed'
+                  : `Execution · Failed${localExecutionError ? ` · ${localExecutionError}` : ''}`
+          }
+          executionStatusTone={
+            localExecutionStatus === 'idle'
+              ? null
+              : localExecutionStatus === 'running'
+                ? 'running'
+                : localExecutionStatus === 'completed'
+                  ? 'completed'
+                  : 'failed'
+          }
+          safeHorizontalInsetStyle={safeHorizontalInsetStyle}
+          onClose={onClose}
+          onOpenSettings={() => {
+            setSettingsPanel('menu');
+            setIsSettingsDrawerOpen(true);
+          }}
+        />
 
         <div
           className="min-h-0 flex-1 overflow-hidden pb-4 pt-4"
@@ -1397,94 +983,23 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               selectedNodeExecutionTrace={selectedNodeExecutionTrace}
             />
           ) : (
-            <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={isPreviewMode ? undefined : onNodesChange}
-                onEdgesChange={isPreviewMode ? undefined : onEdgesChange}
-                onConnect={isPreviewMode ? undefined : onConnect}
-                onNodeClick={isPreviewMode ? undefined : handleNodeClick}
-                onNodeDoubleClick={isPreviewMode ? undefined : (_event, node) => openNodeEditor(node.id)}
-                nodeTypes={nodeTypes}
-                nodesDraggable={!isPreviewMode}
-                nodesConnectable={!isPreviewMode}
-                elementsSelectable={!isPreviewMode}
-                edgesUpdatable={!isPreviewMode}
-                onSelectionChange={
-                  isPreviewMode
-                    ? undefined
-                    : handleSelectionChange
-                }
-                proOptions={{ hideAttribution: true }}
-                fitView
-              >
-                <Background color="#27272a" gap={16} />
-                <Controls className="orion-nodes-controls" />
-              </ReactFlow>
-              <style>{`
-                .orion-nodes-controls {
-                  box-shadow: none !important;
-                }
-                .orion-nodes-controls .react-flow__controls-button {
-                  background: #09090b !important;
-                  border-color: #27272a !important;
-                  color: #ffffff !important;
-                }
-                .orion-nodes-controls .react-flow__controls-button svg {
-                  fill: #ffffff !important;
-                }
-                .orion-nodes-controls .react-flow__controls-button:hover {
-                  background: #18181b !important;
-                }
-                .react-flow__node.selected > div {
-                  border-color: #34d399 !important;
-                  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6), 0 10px 28px rgba(0, 0, 0, 0.45) !important;
-                }
-                .react-flow__edge.selected .react-flow__edge-path {
-                  stroke: #34d399 !important;
-                  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.45));
-                }
-              `}</style>
-
-              {!isPreviewMode && (
-                <button
-                  type="button"
-                  onClick={() => setIsExecutionSymbolDrawerOpen(true)}
-                  className="absolute left-3 top-3 z-[240] flex min-w-[196px] max-w-[62vw] items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 text-left shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
-                  aria-label="Open test symbol selector"
-                >
-                  <SymbolAvatar
-                    iconUrl={selectedExecutionSymbol?.icon_url ?? null}
-                    ticker={selectedExecutionSymbol?.ticker ?? '---'}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-semibold text-zinc-100">
-                      {selectedExecutionSymbol?.ticker ?? 'Select symbol'}
-                    </p>
-                    <p className="truncate text-[10px] text-zinc-400">
-                      {selectedExecutionSymbol?.name ?? (trackedSymbols.length === 0 ? 'No symbols configured' : 'Tap to choose test symbol')}
-                    </p>
-                  </div>
-                  <svg className="h-4 w-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 6l6 6-6 6" />
-                  </svg>
-                </button>
-              )}
-
-              {!isPreviewMode && hasSelection && (
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteSelectionDialogOpen(true)}
-                  className="absolute right-3 top-3 z-[240] flex h-10 w-10 items-center justify-center rounded-full border border-red-900 bg-red-950/70 text-red-300"
-                  aria-label="Delete selected elements"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18M8 6V4h8v2m-7 4v8m4-8v8M6 6l1 14h10l1-14" />
-                  </svg>
-                </button>
-              )}
-            </div>
+            <OrionNodesCanvas
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              isPreviewMode={isPreviewMode}
+              hasSelection={hasSelection}
+              selectedExecutionSymbol={selectedExecutionSymbol}
+              trackedSymbolsCount={trackedSymbols.length}
+              onNodesChange={isPreviewMode ? undefined : onNodesChange}
+              onEdgesChange={isPreviewMode ? undefined : onEdgesChange}
+              onConnect={isPreviewMode ? undefined : onConnect}
+              onNodeClick={isPreviewMode ? undefined : handleNodeClick}
+              onNodeDoubleClick={isPreviewMode ? undefined : (_event, node) => openNodeEditor(node.id)}
+              onSelectionChange={isPreviewMode ? undefined : handleSelectionChange}
+              onOpenExecutionSymbolDrawer={() => setIsExecutionSymbolDrawerOpen(true)}
+              onDeleteSelectionRequest={() => setIsDeleteSelectionDialogOpen(true)}
+            />
           )}
         </div>
       {isPreviewMode ? (
@@ -1661,101 +1176,19 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
         isPublishingVersion={isPublishingVersion}
       />
 
-      {typeof window !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[10040] pointer-events-none">
-          <div className="pointer-events-auto">
-            <Dialog
-              backdrop
-              opened={isDeleteSelectionDialogOpen}
-              onBackdropClick={(event) => {
-                event?.stopPropagation?.();
-                setIsDeleteSelectionDialogOpen(false);
-              }}
-              title="Eliminar selección"
-              content="Se eliminarán los nodos o conexiones seleccionadas. ¿Deseas continuar?"
-              buttons={(
-                <>
-                  <DialogButton
-                    onClick={(event) => {
-                      event?.stopPropagation?.();
-                      setIsDeleteSelectionDialogOpen(false);
-                    }}
-                  >
-                    Cancelar
-                  </DialogButton>
-                  <DialogButton
-                    strong
-                    className="text-red-400"
-                    onClick={(event) => {
-                      event?.stopPropagation?.();
-                      handleDeleteSelection();
-                    }}
-                  >
-                    Eliminar
-                  </DialogButton>
-                </>
-              )}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {typeof window !== 'undefined' && isDeleteStrategyDialogOpen && createPortal(
-        <div className="fixed inset-0 z-[10060] pointer-events-none">
-          <div className="pointer-events-auto">
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/70"
-              onClick={() => {
-                if (isDeletingStrategy) return;
-                setIsDeleteStrategyDialogOpen(false);
-              }}
-              aria-label="Close delete strategy dialog"
-            />
-            <div className="absolute left-1/2 top-1/2 w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-red-900 bg-zinc-950 p-4">
-              <h3 className="text-sm font-semibold text-red-300">Delete Strategy</h3>
-              <p className="mt-1 text-xs text-zinc-400">
-                This action will delete the strategy and all related data in cascade.
-              </p>
-              <p className="mt-2 text-xs text-zinc-500">
-                Type <span className="font-semibold text-zinc-300">{strategyName}</span> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteStrategyConfirmInput}
-                onChange={(event) => setDeleteStrategyConfirmInput(event.target.value)}
-                className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
-                autoFocus
-              />
-              {deleteStrategyError && (
-                <div className="mt-3 rounded-lg border border-red-900 bg-red-950/30 px-3 py-2 text-xs text-red-300">
-                  {deleteStrategyError}
-                </div>
-              )}
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteStrategyDialogOpen(false)}
-                  disabled={isDeletingStrategy}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-60"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleConfirmDeleteStrategy()}
-                  disabled={isDeletingStrategy}
-                  className="rounded-lg bg-red-500 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-60"
-                >
-                  {isDeletingStrategy ? 'Deleting...' : 'Delete permanently'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <OrionDeleteDialogs
+        isDeleteSelectionDialogOpen={isDeleteSelectionDialogOpen}
+        onCloseDeleteSelectionDialog={() => setIsDeleteSelectionDialogOpen(false)}
+        onConfirmDeleteSelection={handleDeleteSelection}
+        isDeleteStrategyDialogOpen={isDeleteStrategyDialogOpen}
+        isDeletingStrategy={isDeletingStrategy}
+        strategyName={strategyName}
+        deleteStrategyConfirmInput={deleteStrategyConfirmInput}
+        deleteStrategyError={deleteStrategyError}
+        onDeleteStrategyConfirmInputChange={setDeleteStrategyConfirmInput}
+        onCloseDeleteStrategyDialog={() => setIsDeleteStrategyDialogOpen(false)}
+        onConfirmDeleteStrategy={() => { void handleConfirmDeleteStrategy(); }}
+      />
     </div>
   );
 }
