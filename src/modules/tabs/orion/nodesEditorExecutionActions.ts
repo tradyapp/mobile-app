@@ -15,6 +15,40 @@ type ReferenceSourceItem = {
   refToken: string;
 };
 
+function normalizeHandleId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRouteHandlesFromOutput(output: unknown): Set<string> | null {
+  if (typeof output === 'boolean') {
+    return new Set([output ? 'true' : 'false']);
+  }
+  if (!isPlainObject(output)) return null;
+  if (typeof output.result === 'string') {
+    return new Set([normalizeHandleId(output.result)]);
+  }
+  if (typeof output.result === 'boolean') {
+    return new Set([output.result ? 'true' : 'false']);
+  }
+  return null;
+}
+
+function shouldFollowEdge(edge: RFEdge, routeHandles: Set<string> | null, siblingEdges: RFEdge[]): boolean {
+  if (!routeHandles) return true;
+  const hasNamedHandles = siblingEdges.some((item) => Boolean(item.sourceHandle && item.sourceHandle.trim().length > 0));
+  if (!hasNamedHandles) return true;
+  if (!edge.sourceHandle) return false;
+  return routeHandles.has(normalizeHandleId(edge.sourceHandle));
+}
+
 export function resolveAttributeReferences(fields: EditorNodeField[] | undefined, history: StateHistoryItem[]): EditorNodeField[] | undefined {
   if (!Array.isArray(fields) || fields.length === 0) return fields;
   const historyByNodeId = new Map<string, unknown>();
@@ -186,7 +220,7 @@ export async function runLocalExecution(params: {
   onErrorChange(null);
 
   const nodeById = new Map<string, RFNode>();
-  const outgoingByNodeId = new Map<string, string[]>();
+  const outgoingByNodeId = new Map<string, RFEdge[]>();
   const indegree = new Map<string, number>();
 
   for (const node of nodes) {
@@ -196,7 +230,7 @@ export async function runLocalExecution(params: {
   }
   for (const edge of edges) {
     if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
-    outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge.target]);
+    outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge]);
     indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
   }
 
@@ -204,6 +238,7 @@ export async function runLocalExecution(params: {
   for (const node of nodes) {
     if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
   }
+  const rootNodeIds = [...queue];
   queue.sort((a, b) => {
     const nodeA = nodeById.get(a);
     const nodeB = nodeById.get(b);
@@ -219,10 +254,10 @@ export async function runLocalExecution(params: {
   while (queue.length > 0) {
     const current = queue.shift()!;
     orderedNodeIds.push(current);
-    for (const next of outgoingByNodeId.get(current) ?? []) {
-      const remaining = (indegree.get(next) ?? 0) - 1;
-      indegree.set(next, remaining);
-      if (remaining === 0) queue.push(next);
+    for (const edge of outgoingByNodeId.get(current) ?? []) {
+      const remaining = (indegree.get(edge.target) ?? 0) - 1;
+      indegree.set(edge.target, remaining);
+      if (remaining === 0) queue.push(edge.target);
     }
   }
   for (const node of nodes) {
@@ -255,9 +290,11 @@ export async function runLocalExecution(params: {
 
   const stateHistory: StateHistoryItem[] = [];
   const executionTime = new Date().toISOString();
+  const activeNodeIds = new Set<string>(rootNodeIds);
 
   for (let i = 0; i < orderedNodeIds.length; i += 1) {
     const nodeId = orderedNodeIds[i];
+    if (!activeNodeIds.has(nodeId)) continue;
     const trace = tracesById.get(nodeId);
     const node = nodeById.get(nodeId);
     if (!trace || !node) continue;
@@ -297,6 +334,13 @@ export async function runLocalExecution(params: {
       executionStatusByNodeId[nodeId] = 'success';
       trace.error = null;
       stateHistory.push({ nodeId, data: trace.outputSnapshot });
+
+      const routeHandles = getRouteHandlesFromOutput(trace.outputSnapshot);
+      const siblingEdges = outgoingByNodeId.get(nodeId) ?? [];
+      for (const edge of siblingEdges) {
+        if (!shouldFollowEdge(edge, routeHandles, siblingEdges)) continue;
+        activeNodeIds.add(edge.target);
+      }
     } catch (error) {
       trace.status = 'error';
       executionStatusByNodeId[nodeId] = 'error';
