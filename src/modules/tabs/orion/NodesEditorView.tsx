@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, List, Segmented, SegmentedButton } from 'konsta/react';
+import { Dialog, DialogButton, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -22,6 +22,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import CogIcon from '@/components/icons/CogIcon';
 import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
+import OrionAttributesPanel from '@/modules/tabs/orion/OrionAttributesPanel';
 import OrionReferenceDrawer, { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
 import { SnapshotTree, SymbolAvatar, getValueType } from '@/modules/tabs/orion/OrionValueView';
 import NodeTypesDrawer from '@/modules/tabs/orion/NodeTypesDrawer';
@@ -36,15 +37,6 @@ function CloseIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  );
-}
-
-function ConnectorIcon({ connected }: { connected: boolean }) {
-  return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7H7a4 4 0 000 8h2m6-8h2a4 4 0 110 8h-2m-6-3h6" />
-      {!connected && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5l14 14" />}
     </svg>
   );
 }
@@ -173,17 +165,6 @@ function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeDa
   };
 }
 
-function getAttributeTypeIcon(type?: string): string {
-  const normalized = String(type || '').trim().toLowerCase();
-  if (normalized.includes('number') || normalized.includes('int') || normalized.includes('float') || normalized.includes('decimal')) return '#';
-  if (normalized.includes('bool')) return '?';
-  if (normalized.includes('multi')) return '≡';
-  if (normalized.includes('date') || normalized.includes('time')) return '@';
-  if (normalized.includes('json') || normalized.includes('object') || normalized.includes('map')) return '{}';
-  if (normalized.includes('array') || normalized.includes('list')) return '[]';
-  return 'T';
-}
-
 function formatTimezoneOffset(timeZone: string, date: Date): string {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -211,13 +192,6 @@ function buildTimezoneOptions(date: Date = new Date()): Array<{ value: string; l
   }));
 }
 
-function parseMultiSelectCsv(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
 interface NodesViewProps {
   strategyId: string;
   strategyName: string;
@@ -1419,125 +1393,40 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               <div className="h-[calc(100%-92px)] overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#3f3f46_#09090b] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-zinc-950 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-600">
                 <div className="space-y-2">
                   {nodeDetailsPanel === 'attributes' ? (
-                    panelFields.length === 0 ? (
-                      <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-xs text-zinc-500">
-                        No configurable attributes for this node.
-                      </div>
-                    ) : (
-                      <>
-                        <List strongIos className="[&_.list]:mx-0 [&_.list]:rounded-none [&_.list]:px-0 [&_.list-ios]:mx-0 [&_.list-ios]:rounded-none [&_.list-ios]:px-0">
-                          {panelFields.map((field, index) => (
-                            (() => {
-                              const fieldType = (field.type || '').trim().toLowerCase();
-                              const isTimezone = (field.type || '').trim().toLowerCase() === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
-                              const isMultiSelect = fieldType === 'multi_select';
-                              const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
-                              const isSelect = !isMultiSelect && selectOptions.length > 0;
-                              const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
-                              return (
-                                isMultiSelect ? (
-                                  <div key={field.id} className="px-4 py-2">
-                                    <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                      <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                      <span>{field.name || field.key || 'Attribute'}</span>
-                                      {field.required && <span className="text-red-400">*</span>}
-                                    </p>
-                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                      {selectOptions.map((option) => {
-                                        const active = selectedMultiValues.includes(option.value);
-                                        return (
-                                          <button
-                                            key={`${field.id}-${option.value}`}
-                                            type="button"
-                                            disabled={isPreviewMode}
-                                            onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                              const next = [...prev];
-                                              const currentValues = parseMultiSelectCsv(next[index]?.value);
-                                              const nextValues = currentValues.includes(option.value)
-                                                ? currentValues.filter((item) => item !== option.value)
-                                                : [...currentValues, option.value];
-                                              next[index] = { ...next[index], value: nextValues.join(',') };
-                                              return next;
-                                            })}
-                                            className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
-                                          >
-                                            {option.label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div key={field.id} className="px-4 py-2">
-                                    <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                      <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                      <span>{field.name || field.key || 'Attribute'}</span>
-                                      {field.required && <span className="text-red-400">*</span>}
-                                    </p>
-                                    <div className="mt-1.5 flex items-center gap-2">
-                                      {isSelect ? (
-                                        <select
-                                          value={field.value ?? ''}
-                                          disabled={isPreviewMode}
-                                          onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                            const next = [...prev];
-                                            next[index] = { ...next[index], value: event.target.value };
-                                            return next;
-                                          })}
-                                          className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100 outline-none"
-                                        >
-                                          {selectOptions.map((option) => (
-                                            <option key={`${field.id}-${option.value}`} value={option.value}>
-                                              {option.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      ) : (
-                                        <input
-                                          type="text"
-                                          value={field.value ?? ''}
-                                          disabled={isPreviewMode}
-                                          placeholder="Set value"
-                                          onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                            const next = [...prev];
-                                            next[index] = { ...next[index], value: event.target.value };
-                                            return next;
-                                          })}
-                                          className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100 outline-none"
-                                        />
-                                      )}
-                                      <button
-                                        type="button"
-                                        disabled={isPreviewMode}
-                                        onClick={() => void openReferenceDrawer(index)}
-                                        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-semibold text-zinc-200 disabled:opacity-60"
-                                      >
-                                        <ConnectorIcon connected={Boolean(parseNodeReferenceToken(field.value))} />
-                                        {parseNodeReferenceToken(field.value) ? 'Connected' : 'Connect'}
-                                      </button>
-                                      {parseNodeReferenceToken(field.value) && (
-                                        <button
-                                          type="button"
-                                          disabled={isPreviewMode}
-                                          onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                            const next = [...prev];
-                                            next[index] = { ...next[index], value: '' };
-                                            return next;
-                                          })}
-                                          className="inline-flex h-7 shrink-0 items-center rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[10px] font-semibold text-zinc-300 disabled:opacity-60"
-                                        >
-                                          Clear
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              );
-                            })()
-                          ))}
-                        </List>
-                      </>
-                    )
+                    <OrionAttributesPanel
+                      fields={panelFields}
+                      isPreviewMode={isPreviewMode}
+                      timezoneOptions={timezoneOptions}
+                      onSetFieldValue={(index, value) => {
+                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+                          const next = [...prev];
+                          next[index] = { ...next[index], value };
+                          return next;
+                        });
+                      }}
+                      onToggleMultiOption={(index, optionValue) => {
+                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+                          const next = [...prev];
+                          const currentValues = (next[index]?.value || '')
+                            .split(',')
+                            .map((item) => item.trim())
+                            .filter((item) => item.length > 0);
+                          const nextValues = currentValues.includes(optionValue)
+                            ? currentValues.filter((item) => item !== optionValue)
+                            : [...currentValues, optionValue];
+                          next[index] = { ...next[index], value: nextValues.join(',') };
+                          return next;
+                        });
+                      }}
+                      onOpenReference={(index) => { void openReferenceDrawer(index); }}
+                      onClearReference={(index) => {
+                        updateNodePanelFields(selectedNodeForEditor.id, 'attributes', (prev) => {
+                          const next = [...prev];
+                          next[index] = { ...next[index], value: '' };
+                          return next;
+                        });
+                      }}
+                    />
                   ) : (
                     <>
                       {!selectedNodeExecutionTrace && (
