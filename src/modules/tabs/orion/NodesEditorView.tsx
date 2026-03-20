@@ -919,7 +919,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
       await new Promise((resolve) => window.setTimeout(resolve, 120));
 
       const nodeData = (node.data ?? {}) as EditorNodeData;
-      const frozenHistory = [...stateHistory];
+      const frozenHistory = [...stateHistory].reverse();
 
       trace.inputSnapshot = frozenHistory;
 
