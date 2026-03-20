@@ -328,7 +328,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
           ? 'border-emerald-400 bg-emerald-950/30 shadow-[0_0_0_2px_rgba(16,185,129,0.35)]'
           : executionStatus === 'error'
             ? 'border-red-400 bg-red-950/30 shadow-[0_0_0_2px_rgba(239,68,68,0.35)]'
-            : 'border-zinc-700 bg-zinc-900';
+            : 'border-zinc-700 bg-zinc-950';
 
       return (
         <div
@@ -1236,7 +1236,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
             </div>
           )}
           {selectedNodeForEditor ? (
-            <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+            <div className="h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
               <div className="flex items-center border-b border-zinc-800 px-3 py-2.5">
                 <button
                   type="button"
@@ -1318,7 +1318,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                               next[index] = { ...next[index], value: nextValues.join(',') };
                                               return next;
                                             })}
-                                            className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
+                                            className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
                                           >
                                             {option.label}
                                           </button>
@@ -1394,7 +1394,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
               </div>
             </div>
           ) : (
-            <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+            <div className="relative h-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1416,7 +1416,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                 proOptions={{ hideAttribution: true }}
                 fitView
               >
-                <Background color="#3f3f46" gap={16} />
+                <Background color="#27272a" gap={16} />
                 <Controls className="orion-nodes-controls" />
               </ReactFlow>
               <style>{`
