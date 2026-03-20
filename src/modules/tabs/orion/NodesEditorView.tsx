@@ -73,7 +73,14 @@ function mapPropertiesToInputs(properties: StrategyNodePropertyRecord[] | undefi
     key: item.key?.trim() || undefined,
     name: item.label?.trim() || item.key?.trim() || `Input ${index + 1}`,
     type: item.type || 'text',
-    value: toFieldDefaultValue(item.default),
+    value: String(item.type || '').trim().toLowerCase() === 'multi_select' && Array.isArray(item.default)
+      ? item.default
+        .filter((value): value is string | number | boolean => (
+          typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ))
+        .map((value) => String(value))
+        .join(',')
+      : toFieldDefaultValue(item.default),
     options: Array.isArray(item.options) ? item.options : undefined,
     required: true,
   }));
@@ -169,6 +176,7 @@ function getAttributeTypeIcon(type?: string): string {
   const normalized = String(type || '').trim().toLowerCase();
   if (normalized.includes('number') || normalized.includes('int') || normalized.includes('float') || normalized.includes('decimal')) return '#';
   if (normalized.includes('bool')) return '?';
+  if (normalized.includes('multi')) return '≡';
   if (normalized.includes('date') || normalized.includes('time')) return '@';
   if (normalized.includes('json') || normalized.includes('object') || normalized.includes('map')) return '{}';
   if (normalized.includes('array') || normalized.includes('list')) return '[]';
@@ -200,6 +208,14 @@ function buildTimezoneOptions(date: Date = new Date()): Array<{ value: string; l
     value: timeZone,
     label: `${timeZone} (${formatTimezoneOffset(timeZone, date)})`,
   }));
+}
+
+function parseMultiSelectCsv(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }
 
 function SnapshotTree({
@@ -1274,36 +1290,73 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                       >
                         {panelFields.map((field, index) => (
                           (() => {
+                            const fieldType = (field.type || '').trim().toLowerCase();
                             const isTimezone = (field.type || '').trim().toLowerCase() === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
+                            const isMultiSelect = fieldType === 'multi_select';
                             const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
-                            const isSelect = selectOptions.length > 0;
+                            const isSelect = !isMultiSelect && selectOptions.length > 0;
+                            const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
                             return (
-                          <ListInput
-                            key={field.id}
-                            type={isSelect ? 'select' : 'text'}
-                            value={field.value ?? ''}
-                            disabled={isPreviewMode}
-                            label={(
-                              <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                <span>{field.name || field.key || 'Attribute'}</span>
-                                {field.required && <span className="text-red-400">*</span>}
-                              </span>
-                            )}
-                            placeholder="Set value"
-                            onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], value: event.target.value };
-                              return next;
-                            })}
-                            className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-2.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
-                          >
-                            {isSelect && selectOptions.map((option) => (
-                              <option key={`${field.id}-${option.value}`} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </ListInput>
+                              isMultiSelect ? (
+                                <div key={field.id} className="px-4 py-2">
+                                  <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                    <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                    <span>{field.name || field.key || 'Attribute'}</span>
+                                    {field.required && <span className="text-red-400">*</span>}
+                                  </p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                    {selectOptions.map((option) => {
+                                      const active = selectedMultiValues.includes(option.value);
+                                      return (
+                                        <button
+                                          key={`${field.id}-${option.value}`}
+                                          type="button"
+                                          disabled={isPreviewMode}
+                                          onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                            const next = [...prev];
+                                            const currentValues = parseMultiSelectCsv(next[index]?.value);
+                                            const nextValues = currentValues.includes(option.value)
+                                              ? currentValues.filter((item) => item !== option.value)
+                                              : [...currentValues, option.value];
+                                            next[index] = { ...next[index], value: nextValues.join(',') };
+                                            return next;
+                                          })}
+                                          className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <ListInput
+                                  key={field.id}
+                                  type={isSelect ? 'select' : 'text'}
+                                  value={field.value ?? ''}
+                                  disabled={isPreviewMode}
+                                  label={(
+                                    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                      <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                      <span>{field.name || field.key || 'Attribute'}</span>
+                                      {field.required && <span className="text-red-400">*</span>}
+                                    </span>
+                                  )}
+                                  placeholder="Set value"
+                                  onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                    const next = [...prev];
+                                    next[index] = { ...next[index], value: event.target.value };
+                                    return next;
+                                  })}
+                                  className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-2.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-2.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                >
+                                  {isSelect && selectOptions.map((option) => (
+                                    <option key={`${field.id}-${option.value}`} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </ListInput>
+                              )
                             );
                           })()
                         ))}
