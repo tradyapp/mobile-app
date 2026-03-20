@@ -500,6 +500,60 @@ function dayOfWeekNameUTC(dayIdx: number): string {
   return map[dayIdx] ?? 'unknown';
 }
 
+type JavascriptExecutionContext = {
+  attributes: Record<string, unknown>;
+  input: {
+    state_history: StateHistoryItem[];
+  };
+  history: StateHistoryItem[];
+  ctx: {
+    latest: () => unknown;
+    get: (nodeId: string) => unknown;
+  };
+};
+
+function validateJavascriptScript(script: string): void {
+  if (script.trim().length === 0) throw new Error('javascript script is required');
+  if (script.length > 10000) throw new Error('javascript script is too long');
+  const forbidden = /\b(?:import|export|Function|eval|globalThis|window|document|fetch|XMLHttpRequest|WebSocket|setTimeout|setInterval)\b/;
+  if (forbidden.test(script)) {
+    throw new Error('javascript script contains forbidden tokens');
+  }
+}
+
+function executeJavascriptNodeScript(params: {
+  script: string;
+  attributes: Record<string, unknown>;
+  history: StateHistoryItem[];
+}): unknown {
+  const { script, attributes, history } = params;
+  validateJavascriptScript(script);
+
+  const context = {
+    attributes,
+    input: {
+      state_history: history,
+    },
+    history,
+    ctx: {
+      latest: () => findLatestValueInHistory(history),
+      get: (nodeId: string) => findNodeDataByIdInHistory(history, String(nodeId ?? '')),
+    },
+  } satisfies JavascriptExecutionContext;
+
+  try {
+    const executor = new Function(
+      'context',
+      '"use strict";\nconst { attributes, input, history, ctx } = context;\n' + script,
+    ) as (context: JavascriptExecutionContext) => unknown;
+    const result = executor(context);
+    return result === undefined ? null : result;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Execution error';
+    throw new Error(`javascript execution error: ${detail}`);
+  }
+}
+
 function localEvalKey(nodeTypeKey: string, nodeTypeVersion: number | null): string {
   return nodeTypeVersion === null ? nodeTypeKey : `${nodeTypeKey}@${nodeTypeVersion}`;
 }
@@ -553,6 +607,25 @@ function executeLocalNodeIfSupported(params: {
         value,
         expression: rawExpression,
         resolved_expression: resolvedExpression,
+      },
+    };
+  }
+
+  if (key === 'logic.javascript' && op === 'javascript_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const script = String(attributesObj.script ?? '').trim();
+    const output = executeJavascriptNodeScript({
+      script,
+      attributes: attributesObj,
+      history,
+    });
+
+    return {
+      handled: true,
+      output: {
+        result: output,
+        value: output,
+        script,
       },
     };
   }

@@ -68,6 +68,7 @@ export default function OrionAttributesPanel({
         const fieldType = (field.type || '').trim().toLowerCase();
         const isTimezone = fieldType === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
         const isMultiSelect = fieldType === 'multi_select';
+        const isCode = fieldType === 'code' || fieldType === 'textarea';
         const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
         const isSelect = !isMultiSelect && selectOptions.length > 0;
         const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
@@ -122,6 +123,14 @@ export default function OrionAttributesPanel({
                     </option>
                   ))}
                 </select>
+              ) : isCode ? (
+                <textarea
+                  value={field.value ?? ''}
+                  disabled={isPreviewMode}
+                  placeholder="Write script"
+                  onChange={(event) => onSetFieldValue(index, event.target.value)}
+                  className="min-h-[120px] min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-100 outline-none"
+                />
               ) : (
                 <input
                   type="text"
