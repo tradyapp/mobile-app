@@ -163,13 +163,13 @@ function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' 
 }
 
 function getTypeToken(type: ReturnType<typeof getValueType>): { icon: string; pillClass: string; typeLabel: string } {
-  if (type === 'string') return { icon: 'T', pillClass: 'border-sky-300 bg-sky-100/80 text-sky-900', typeLabel: 'string' };
-  if (type === 'number') return { icon: '#', pillClass: 'border-emerald-300 bg-emerald-100/80 text-emerald-900', typeLabel: 'number' };
-  if (type === 'boolean') return { icon: '?', pillClass: 'border-amber-300 bg-amber-100/80 text-amber-900', typeLabel: 'boolean' };
-  if (type === 'null') return { icon: '0', pillClass: 'border-zinc-300 bg-zinc-100/80 text-zinc-900', typeLabel: 'null' };
-  if (type === 'array') return { icon: '[]', pillClass: 'border-violet-300 bg-violet-100/80 text-violet-900', typeLabel: 'array' };
-  if (type === 'object') return { icon: '{}', pillClass: 'border-rose-300 bg-rose-100/80 text-rose-900', typeLabel: 'object' };
-  return { icon: '·', pillClass: 'border-zinc-300 bg-zinc-100/80 text-zinc-900', typeLabel: 'unknown' };
+  if (type === 'string') return { icon: 'T', pillClass: 'border-sky-700 bg-sky-900/45 text-sky-200', typeLabel: 'string' };
+  if (type === 'number') return { icon: '#', pillClass: 'border-emerald-700 bg-emerald-900/45 text-emerald-200', typeLabel: 'number' };
+  if (type === 'boolean') return { icon: '?', pillClass: 'border-amber-700 bg-amber-900/45 text-amber-200', typeLabel: 'boolean' };
+  if (type === 'null') return { icon: '0', pillClass: 'border-zinc-700 bg-zinc-800/70 text-zinc-200', typeLabel: 'null' };
+  if (type === 'array') return { icon: '[]', pillClass: 'border-violet-700 bg-violet-900/45 text-violet-200', typeLabel: 'array' };
+  if (type === 'object') return { icon: '{}', pillClass: 'border-rose-700 bg-rose-900/45 text-rose-200', typeLabel: 'object' };
+  return { icon: '·', pillClass: 'border-zinc-700 bg-zinc-800/70 text-zinc-200', typeLabel: 'unknown' };
 }
 
 function getAttributeTypeIcon(type?: string): string {
@@ -1345,7 +1345,7 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                                       next[index] = { ...next[index], value: event.target.value };
                                       return next;
                                     })}
-                                    className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                    className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-800 [&_input]:bg-zinc-950 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-800 [&_select]:bg-zinc-950 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
                                   >
                                     {isSelect && selectOptions.map((option) => (
                                       <option key={`${field.id}-${option.value}`} value={option.value}>
