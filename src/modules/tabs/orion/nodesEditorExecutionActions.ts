@@ -983,6 +983,29 @@ function executeLocalNodeIfSupported(params: {
     };
   }
 
+  if (key === 'output.rating' && op === 'output_rating_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const value = normalizeNumber(attributesObj.rating);
+    if (value === null) throw new Error('rating must be a valid number');
+    if (value < 0 || value > 5) throw new Error('rating must be between 0 and 5');
+
+    return {
+      handled: true,
+      output: {
+        result: 'rating',
+        rating: value,
+        delivery: {
+          notify_owner: true,
+          notify_subscribers: false,
+          publish_pubsub: false,
+          reason: 'preview_mode',
+        },
+        strategy_id: strategyId,
+        owner_user_id: null,
+      },
+    };
+  }
+
   return { handled: false };
 }
 
