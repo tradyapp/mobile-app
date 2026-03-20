@@ -16,13 +16,11 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
-import { type OrionAiMessage } from '@/modules/tabs/orion/OrionAiAssistantDrawer';
 import { type StrategySymbolCatalogItem } from '@/modules/tabs/orion/NodeSettingsDrawer';
 import { compareNodeCategory, EditorNodeData, EditorNodeField, formatNodeCategoryLabel, NodeTypeCategoryGroup, normalizeNodeCategory } from '@/modules/tabs/orion/nodesEditorTypes';
 import {
   buildTimezoneOptions,
   createNodeDefaults,
-  makeNodeReferenceToken,
   type LocalExecutionNodeStatus,
   type LocalExecutionNodeTrace,
   type LocalExecutionStatus,
@@ -218,9 +216,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [referenceSourcesError, setReferenceSourcesError] = useState<string | null>(null);
   const [referenceSourcesByNodeId, setReferenceSourcesByNodeId] = useState<Record<string, ReferenceSourceItem[]>>({});
   const [isUpstreamExecutingForNode, setIsUpstreamExecutingForNode] = useState(false);
-  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
-  const [isAiAssistantBusy, setIsAiAssistantBusy] = useState(false);
-  const [aiMessages, setAiMessages] = useState<OrionAiMessage[]>([]);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -307,110 +302,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((prev) => addEdge(connection, prev));
-  }, [setEdges]);
-
-  const appendAiMessage = useCallback((role: 'user' | 'assistant', text: string) => {
-    setAiMessages((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role,
-        text,
-      },
-    ]);
-  }, []);
-
-  const addNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord): string => {
-    let createdNodeId = '';
-    setNodes((prev) => {
-      const index = prev.length;
-      const nextLabel = nodeCounterRef.current;
-      nodeCounterRef.current += 1;
-      createdNodeId = `node-${nextLabel}`;
-      const nextNode: RFNode = {
-        id: createdNodeId,
-        type: 'editorNode',
-        position: {
-          x: 80 + (index % 4) * 180,
-          y: 80 + Math.floor(index / 4) * 120,
-        },
-        data: {
-          label: nodeType.name,
-          nodeTypeKey: nodeType.key,
-          nodeTypeVersion: nodeType.version,
-          category: nodeType.category,
-          iconUrl: nodeType.icon_url,
-          ...createNodeDefaults(nodeType),
-        } satisfies EditorNodeData,
-      };
-      return [...prev, nextNode];
-    });
-    return createdNodeId;
-  }, [setNodes]);
-
-  const setNodeAttributeValueByKey = useCallback((nodeId: string, key: string, value: string) => {
-    setNodes((prev) => prev.map((node) => {
-      if (node.id !== nodeId) return node;
-      const data = (node.data ?? {}) as EditorNodeData;
-      const attributes = Array.isArray(data.attributes) ? data.attributes : [];
-      const index = attributes.findIndex((field) => (field.key ?? '').toLowerCase() === key.toLowerCase());
-      if (index < 0) return node;
-      const next = [...attributes];
-      next[index] = { ...next[index], value };
-      return {
-        ...node,
-        data: {
-          ...data,
-          attributes: next,
-        } satisfies EditorNodeData,
-      };
-    }));
-  }, [setNodes]);
-
-  const findNodeType = useCallback((queryRaw: string): StrategyNodeTypeRecord | null => {
-    const query = queryRaw.trim().toLowerCase();
-    if (!query) return null;
-    const exactKey = availableNodeTypes.find((item) => item.key.toLowerCase() === query);
-    if (exactKey) return exactKey;
-    const exactName = availableNodeTypes.find((item) => item.name.toLowerCase() === query);
-    if (exactName) return exactName;
-    const byIncludesKey = availableNodeTypes.find((item) => item.key.toLowerCase().includes(query));
-    if (byIncludesKey) return byIncludesKey;
-    const byIncludesName = availableNodeTypes.find((item) => item.name.toLowerCase().includes(query));
-    if (byIncludesName) return byIncludesName;
-    return null;
-  }, [availableNodeTypes]);
-
-  const findNodeByQuery = useCallback((queryRaw: string): RFNode | null => {
-    const query = queryRaw.trim().toLowerCase();
-    if (!query) return null;
-    const byId = nodes.find((node) => node.id.toLowerCase() === query);
-    if (byId) return byId;
-    const byLabel = nodes.find((node) => {
-      const data = (node.data ?? {}) as EditorNodeData;
-      return (data.label ?? '').trim().toLowerCase() === query;
-    });
-    if (byLabel) return byLabel;
-    const byLabelIncludes = nodes.find((node) => {
-      const data = (node.data ?? {}) as EditorNodeData;
-      return (data.label ?? '').trim().toLowerCase().includes(query);
-    });
-    if (byLabelIncludes) return byLabelIncludes;
-    if (/^\\d+$/.test(query)) {
-      const idx = Number(query) - 1;
-      if (idx >= 0 && idx < nodes.length) return nodes[idx];
-    }
-    return null;
-  }, [nodes]);
-
-  const connectNodes = useCallback((sourceNodeId: string, targetNodeId: string, sourceHandle?: string) => {
-    const edgeId = `e-${sourceNodeId}-${targetNodeId}-${Date.now()}`;
-    setEdges((prev) => addEdge({
-      id: edgeId,
-      source: sourceNodeId,
-      target: targetNodeId,
-      ...(sourceHandle ? { sourceHandle } : {}),
-    }, prev));
   }, [setEdges]);
 
   const handleSelectionChange = useCallback(
@@ -632,9 +523,32 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   }, [strategyId, nodes, edges, isPreviewMode, getCurrentNodeMap]);
 
   const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
-    addNodeFromType(nodeType);
+    setNodes((prev) => {
+      const index = prev.length;
+      const nextLabel = nodeCounterRef.current;
+      nodeCounterRef.current += 1;
+
+      const nextNode: RFNode = {
+        id: `node-${nextLabel}`,
+        type: 'editorNode',
+        position: {
+          x: 80 + (index % 4) * 180,
+          y: 80 + Math.floor(index / 4) * 120,
+        },
+        data: {
+          label: nodeType.name,
+          nodeTypeKey: nodeType.key,
+          nodeTypeVersion: nodeType.version,
+          category: nodeType.category,
+          iconUrl: nodeType.icon_url,
+          ...createNodeDefaults(nodeType),
+        } satisfies EditorNodeData,
+      };
+
+      return [...prev, nextNode];
+    });
     setIsNodeTypesDrawerOpen(false);
-  }, [addNodeFromType]);
+  }, [setNodes]);
 
   const handleNodeTypesDrawerOpenChange = useCallback((open: boolean) => {
     setIsNodeTypesDrawerOpen(open);
@@ -1016,136 +930,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     });
   }, [selectedNodeForEditor, updateNodePanelFields]);
 
-  const runUpstreamForNodeId = useCallback(async (targetNodeId: string): Promise<number> => {
-    const items = await loadReferenceSourcesForNode(targetNodeId);
-    setReferenceSourcesByNodeId((prev) => ({ ...prev, [targetNodeId]: items }));
-    return items.length;
-  }, [loadReferenceSourcesForNode]);
-
-  const handleAiAssistantSend = useCallback(async (message: string) => {
-    const raw = message.trim();
-    if (!raw) return;
-
-    appendAiMessage('user', raw);
-    setIsAiAssistantBusy(true);
-
-    try {
-      const lower = raw.toLowerCase();
-
-      if (lower === 'help' || lower === 'ayuda') {
-        appendAiMessage(
-          'assistant',
-          'Comandos: agrega nodo <tipo>, conecta <origen> -> <destino> [por <handle>], ejecutar, upstream <nodo>, red velvet demo.',
-        );
-        return;
-      }
-
-      if (lower.includes('red velvet') && (lower.includes('demo') || lower.includes('flow') || lower.includes('crear'))) {
-        const keys = [
-          'trigger.schedule',
-          'logic.candles',
-          'logic.select_candle',
-          'logic.red_velvet_candle_check',
-          'logic.red_velvet_score',
-          'output.true',
-          'output.false',
-        ];
-        const created: Array<{ key: string; id: string }> = [];
-        for (const key of keys) {
-          const type = findNodeType(key);
-          if (!type) throw new Error(`No encuentro el node type: ${key}`);
-          const id = addNodeFromType(type);
-          created.push({ key, id });
-        }
-
-        connectNodes(created[0].id, created[1].id);
-        connectNodes(created[1].id, created[2].id);
-        connectNodes(created[2].id, created[3].id);
-        connectNodes(created[3].id, created[4].id, 'true');
-        connectNodes(created[4].id, created[5].id);
-        connectNodes(created[3].id, created[6].id, 'false');
-
-        setNodeAttributeValueByKey(created[2].id, 'source_candles', makeNodeReferenceToken(created[1].id));
-        setNodeAttributeValueByKey(created[2].id, 'candle_attribute', 'datetime');
-        setNodeAttributeValueByKey(created[2].id, 'operator', 'includes');
-        setNodeAttributeValueByKey(created[2].id, 'value', '09:30:00');
-        setNodeAttributeValueByKey(created[3].id, 'source_candle', makeNodeReferenceToken(created[2].id));
-        setNodeAttributeValueByKey(created[3].id, 'session_time', '09:30:00');
-        setNodeAttributeValueByKey(created[3].id, 'min_candle_size', '0.45');
-        setNodeAttributeValueByKey(created[4].id, 'source_metrics', makeNodeReferenceToken(created[3].id));
-
-        appendAiMessage('assistant', `Listo. Creé flow Red Velvet con ${created.length} nodos y conexiones base.`);
-        return;
-      }
-
-      const addMatch = raw.match(/(?:agrega|añade|anade|crear|crea)\s+(?:nodo\s+)?(.+)/i);
-      if (addMatch) {
-        const nodeQuery = addMatch[1]?.trim() ?? '';
-        const nodeType = findNodeType(nodeQuery);
-        if (!nodeType) {
-          appendAiMessage('assistant', `No encontré un tipo de nodo para "${nodeQuery}". Usa key como logic.candles.`);
-          return;
-        }
-        const newId = addNodeFromType(nodeType);
-        appendAiMessage('assistant', `Nodo creado: ${nodeType.name} (${newId}).`);
-        return;
-      }
-
-      const connectMatch = raw.match(/conecta(?:r)?\s+(.+?)\s*(?:->|a|con)\s+(.+?)(?:\s+por\s+([a-zA-Z0-9_-]+))?$/i);
-      if (connectMatch) {
-        const sourceQuery = connectMatch[1]?.trim() ?? '';
-        const targetQuery = connectMatch[2]?.trim() ?? '';
-        const handle = connectMatch[3]?.trim();
-        const source = findNodeByQuery(sourceQuery);
-        const target = findNodeByQuery(targetQuery);
-        if (!source || !target) {
-          appendAiMessage('assistant', `No pude resolver nodos. Origen="${sourceQuery}" destino="${targetQuery}".`);
-          return;
-        }
-        connectNodes(source.id, target.id, handle);
-        appendAiMessage('assistant', `Conectado ${source.id} -> ${target.id}${handle ? ` por ${handle}` : ''}.`);
-        return;
-      }
-
-      if (lower.startsWith('upstream ') || lower.startsWith('previos ') || lower.startsWith('inputs de ')) {
-        const targetQuery = raw
-          .replace(/^upstream\s+/i, '')
-          .replace(/^previos\s+/i, '')
-          .replace(/^inputs\s+de\s+/i, '')
-          .trim();
-        const node = findNodeByQuery(targetQuery);
-        if (!node) {
-          appendAiMessage('assistant', `No encontré el nodo "${targetQuery}".`);
-          return;
-        }
-        const count = await runUpstreamForNodeId(node.id);
-        appendAiMessage('assistant', `Upstream ejecutado para ${node.id}. Fuentes disponibles: ${count}.`);
-        return;
-      }
-
-      if (lower === 'ejecutar' || lower === 'run' || lower === 'play' || lower.includes('ejecuta')) {
-        await runLocalExecution();
-        appendAiMessage('assistant', 'Ejecución local iniciada.');
-        return;
-      }
-
-      appendAiMessage('assistant', 'No entendí el comando. Escribe "ayuda" para ver comandos disponibles.');
-    } catch (error) {
-      appendAiMessage('assistant', error instanceof Error ? `Error: ${error.message}` : 'Error ejecutando tools.');
-    } finally {
-      setIsAiAssistantBusy(false);
-    }
-  }, [
-    addNodeFromType,
-    appendAiMessage,
-    connectNodes,
-    findNodeByQuery,
-    findNodeType,
-    runLocalExecution,
-    runUpstreamForNodeId,
-    setNodeAttributeValueByKey,
-  ]);
-
   return {
         strategyName,
         strategyPhotoUrl,
@@ -1178,16 +962,10 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         safeHorizontalInsetStyle,
         safeCanvasInsetStyle,
         onClose,
-        onOpenAiAssistant: () => setIsAiAssistantOpen(true),
         onOpenSettings: () => {
           setSettingsPanel('menu');
           setIsSettingsDrawerOpen(true);
         },
-        isAiAssistantOpen,
-        onAiAssistantOpenChange: (open: boolean) => setIsAiAssistantOpen(open),
-        isAiAssistantBusy,
-        aiMessages,
-        onAiAssistantSend: (message: string) => { void handleAiAssistantSend(message); },
         nodeMapError,
         saveError,
         selectedNodeForEditor,

@@ -1,7 +1,6 @@
 'use client';
 
 import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
-import OrionAiAssistantDrawer from '@/modules/tabs/orion/OrionAiAssistantDrawer';
 import OrionNodesCanvas from '@/modules/tabs/orion/OrionNodesCanvas';
 import OrionDeleteDialogs from '@/modules/tabs/orion/OrionDeleteDialogs';
 import OrionNodesHeader from '@/modules/tabs/orion/OrionNodesHeader';
@@ -27,7 +26,6 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
           executionStatusTone={model.executionStatusTone}
           safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
           onClose={model.onClose}
-          onOpenAiAssistant={model.onOpenAiAssistant}
           onOpenSettings={model.onOpenSettings}
         />
 
@@ -132,14 +130,6 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
         filteredSymbols={model.filteredExecutionSymbols}
         selectedExecutionTicker={model.selectedExecutionTicker}
         onSelectSymbol={model.onSelectExecutionSymbol}
-      />
-
-      <OrionAiAssistantDrawer
-        isOpen={model.isAiAssistantOpen}
-        onOpenChange={model.onAiAssistantOpenChange}
-        messages={model.aiMessages}
-        isBusy={model.isAiAssistantBusy}
-        onSend={model.onAiAssistantSend}
       />
 
       <OrionReferenceDrawer

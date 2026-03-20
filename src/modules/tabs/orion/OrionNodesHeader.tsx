@@ -12,7 +12,6 @@ interface OrionNodesHeaderProps {
   executionStatusTone: 'running' | 'completed' | 'failed' | null;
   safeHorizontalInsetStyle: CSSProperties;
   onClose: () => void;
-  onOpenAiAssistant: () => void;
   onOpenSettings: () => void;
 }
 
@@ -33,7 +32,6 @@ export default function OrionNodesHeader({
   executionStatusTone,
   safeHorizontalInsetStyle,
   onClose,
-  onOpenAiAssistant,
   onOpenSettings,
 }: OrionNodesHeaderProps) {
   return (
@@ -69,17 +67,7 @@ export default function OrionNodesHeader({
           )}
         </div>
       </div>
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onOpenAiAssistant}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-100"
-          aria-label="Open Orion AI assistant"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 3l1.8 3.9L18 8.7l-3.1 2.9.8 4.2L12 13.8l-3.7 2 .8-4.2L6 8.7l4.2-1.8L12 3z" />
-          </svg>
-        </button>
+      <div className="ml-auto">
         <button
           type="button"
           onClick={onOpenSettings}
