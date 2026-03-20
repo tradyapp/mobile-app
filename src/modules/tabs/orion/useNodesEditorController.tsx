@@ -14,6 +14,7 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
+import { toast } from 'sonner';
 import '@xyflow/react/dist/style.css';
 import { type OrionReferenceSourceItem } from '@/modules/tabs/orion/OrionReferenceDrawer';
 import { type StrategySymbolCatalogItem } from '@/modules/tabs/orion/NodeSettingsDrawer';
@@ -53,13 +54,6 @@ interface UseNodesEditorControllerProps {
   isOwner: boolean;
   onDeleted?: (strategyId: string) => void;
   onClose: () => void;
-}
-
-interface ExecutionToastState {
-  id: number;
-  nodeLabel: string;
-  nodeIconUrl: string | null;
-  message: string;
 }
 
 function normalizePortHandleId(raw: string, fallback: string): string {
@@ -223,7 +217,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [referenceSourcesError, setReferenceSourcesError] = useState<string | null>(null);
   const [referenceSourcesByNodeId, setReferenceSourcesByNodeId] = useState<Record<string, ReferenceSourceItem[]>>({});
   const [isUpstreamExecutingForNode, setIsUpstreamExecutingForNode] = useState(false);
-  const [executionToast, setExecutionToast] = useState<ExecutionToastState | null>(null);
   const hasHydratedNodeMapRef = useRef(false);
   const lastSavedNodeMapRef = useRef('');
   const [lastSavedNodeMapSnapshot, setLastSavedNodeMapSnapshot] = useState('');
@@ -232,7 +225,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const lastNodeTapRef = useRef<{ id: string; at: number } | null>(null);
   const executionRunIdRef = useRef(0);
   const lastToastedRunIdRef = useRef(0);
-  const executionToastIdRef = useRef(0);
 
   const isPlainObject = useCallback((value: unknown): value is Record<string, unknown> => (
     Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -721,23 +713,44 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
 
     const sourceNode = nodeById.get(outputTrace.nodeId);
     const sourceData = (sourceNode?.data ?? {}) as EditorNodeData;
-    executionToastIdRef.current += 1;
-    setExecutionToast({
-      id: executionToastIdRef.current,
-      nodeLabel: sourceData.label ?? outputTrace.label ?? 'Output',
-      nodeIconUrl: sourceData.iconUrl ?? null,
-      message: getExecutionToastMessage(outputTrace.outputSnapshot),
-    });
+    const nodeLabel = sourceData.label ?? outputTrace.label ?? 'Output';
+    const nodeIconUrl = sourceData.iconUrl ?? null;
+    const message = getExecutionToastMessage(outputTrace.outputSnapshot);
+    toast.custom((toastId) => (
+      <div className="w-[min(92vw,460px)] rounded-2xl border border-zinc-700/80 bg-zinc-900/95 px-3 py-3 shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800">
+            {nodeIconUrl ? (
+              <img
+                src={nodeIconUrl}
+                alt={nodeLabel}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-zinc-300">
+                {nodeLabel.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-semibold text-zinc-100">{nodeLabel}</p>
+            <p className="mt-0.5 line-clamp-2 text-[13px] font-medium text-emerald-300">{message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => toast.dismiss(toastId)}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-700 text-zinc-300"
+            aria-label="Close execution toast"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    ), { duration: 3800 });
     lastToastedRunIdRef.current = executionRunIdRef.current;
   }, [getExecutionToastMessage, localExecutionStatus, localExecutionTraces, nodes]);
-
-  useEffect(() => {
-    if (!executionToast) return;
-    const timeoutId = window.setTimeout(() => {
-      setExecutionToast((current) => (current?.id === executionToast.id ? null : current));
-    }, 3600);
-    return () => window.clearTimeout(timeoutId);
-  }, [executionToast]);
 
   const handleDeleteSelection = useCallback(() => {
     if (!hasSelection) return;
@@ -1045,8 +1058,6 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
             : localExecutionStatus === 'completed'
             ? 'completed'
             : 'failed',
-        executionToast,
-        onDismissExecutionToast: () => setExecutionToast(null),
         safeHorizontalInsetStyle,
         safeCanvasInsetStyle,
         onClose,
