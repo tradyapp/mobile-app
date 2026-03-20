@@ -101,6 +101,22 @@ function normalizeNumber(value: unknown): number | null {
   return null;
 }
 
+function normalizeBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', 'off', ''].includes(normalized)) return false;
+    return null;
+  }
+  return null;
+}
+
 function findLatestNumericInHistory(history: StateHistoryItem[]): number | null {
   for (const entry of history) {
     const direct = normalizeNumber(entry.data);
@@ -117,6 +133,13 @@ function findLatestNumericInHistory(history: StateHistoryItem[]): number | null 
   return null;
 }
 
+function findLatestValueInHistory(history: StateHistoryItem[]): unknown {
+  for (const entry of history) {
+    if (entry.data !== undefined) return entry.data;
+  }
+  return null;
+}
+
 function evaluateNumberComparison(left: number, operator: string, right: number): boolean {
   const op = operator.trim().toLowerCase();
   if (op === 'equals' || op === 'eq') return left === right;
@@ -125,6 +148,33 @@ function evaluateNumberComparison(left: number, operator: string, right: number)
   if (op === 'greater_or_equal' || op === 'gte') return left >= right;
   if (op === 'less_than' || op === 'lt') return left < right;
   if (op === 'less_or_equal' || op === 'lte') return left <= right;
+  return false;
+}
+
+function evaluateGenericComparison(left: unknown, operator: string, right: unknown): boolean {
+  const op = operator.trim().toLowerCase();
+  const leftNum = normalizeNumber(left);
+  const rightNum = normalizeNumber(right);
+
+  if (leftNum !== null && rightNum !== null) {
+    return evaluateNumberComparison(leftNum, op, rightNum);
+  }
+
+  const leftBool = normalizeBoolean(left);
+  const rightBool = normalizeBoolean(right);
+  if (leftBool !== null && rightBool !== null) {
+    if (op === 'equals' || op === 'eq') return leftBool === rightBool;
+    if (op === 'not_equals' || op === 'neq') return leftBool !== rightBool;
+    return false;
+  }
+
+  const leftStr = String(left ?? '');
+  const rightStr = String(right ?? '');
+  if (op === 'equals' || op === 'eq') return leftStr === rightStr;
+  if (op === 'not_equals' || op === 'neq') return leftStr !== rightStr;
+  if (op === 'includes') return leftStr.includes(rightStr);
+  if (op === 'starts_with') return leftStr.startsWith(rightStr);
+  if (op === 'ends_with') return leftStr.endsWith(rightStr);
   return false;
 }
 
@@ -378,6 +428,49 @@ function executeLocalNodeIfSupported(params: {
         left,
         right: rightFromAttr,
         operator,
+      },
+    };
+  }
+
+  if (key === 'logic.compare' && op === 'compare_generic_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const left = attributesObj.left_value ?? findLatestValueInHistory(history);
+    const right = attributesObj.right_value ?? '';
+    const operator = String(attributesObj.operator ?? 'equals');
+    const result = evaluateGenericComparison(left, operator, right);
+
+    return {
+      handled: true,
+      output: {
+        result,
+        left,
+        right,
+        operator,
+      },
+    };
+  }
+
+  if (key === 'logic.clamp' && op === 'clamp_number_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const value = normalizeNumber(attributesObj.value) ?? findLatestNumericInHistory(history);
+    const min = normalizeNumber(attributesObj.min) ?? 0;
+    const max = normalizeNumber(attributesObj.max) ?? 1;
+    if (value === null) {
+      throw new Error('clamp requires a valid numeric value');
+    }
+    if (min > max) {
+      throw new Error('clamp requires min <= max');
+    }
+    const clamped = Math.max(min, Math.min(max, value));
+
+    return {
+      handled: true,
+      output: {
+        result: clamped,
+        value: clamped,
+        original: value,
+        min,
+        max,
       },
     };
   }
