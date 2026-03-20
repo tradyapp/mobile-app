@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
+import { BlockTitle, Dialog, DialogButton, List, ListInput, Segmented, SegmentedButton } from 'konsta/react';
 import {
   addEdge,
   Background,
@@ -1283,83 +1283,83 @@ function NodesView({ strategyId, strategyName, strategyPhotoUrl = null, isOwner,
                         No configurable attributes for this node.
                       </div>
                     ) : (
-                      <List
-                        strong
-                        className="m-0 !bg-transparent [&_.list-group]:!bg-transparent [&_.list-group-ul]:!bg-transparent [&_.list-ios]:!bg-transparent [&_.list-item-inner]:px-0 [&_.list-item-inner]:py-1 [&_.item-inner]:px-0 [&_.item-title]:px-0"
-                      >
-                        {panelFields.map((field, index) => (
-                          (() => {
-                            const fieldType = (field.type || '').trim().toLowerCase();
-                            const isTimezone = (field.type || '').trim().toLowerCase() === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
-                            const isMultiSelect = fieldType === 'multi_select';
-                            const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
-                            const isSelect = !isMultiSelect && selectOptions.length > 0;
-                            const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
-                            return (
-                              isMultiSelect ? (
-                                <div key={field.id} className="px-2 py-1.5">
-                                  <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                                    <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
-                                    <span>{field.name || field.key || 'Attribute'}</span>
-                                    {field.required && <span className="text-red-400">*</span>}
-                                  </p>
-                                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                    {selectOptions.map((option) => {
-                                      const active = selectedMultiValues.includes(option.value);
-                                      return (
-                                        <button
-                                          key={`${field.id}-${option.value}`}
-                                          type="button"
-                                          disabled={isPreviewMode}
-                                          onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                            const next = [...prev];
-                                            const currentValues = parseMultiSelectCsv(next[index]?.value);
-                                            const nextValues = currentValues.includes(option.value)
-                                              ? currentValues.filter((item) => item !== option.value)
-                                              : [...currentValues, option.value];
-                                            next[index] = { ...next[index], value: nextValues.join(',') };
-                                            return next;
-                                          })}
-                                          className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ) : (
-                                <ListInput
-                                  key={field.id}
-                                  type={isSelect ? 'select' : 'text'}
-                                  value={field.value ?? ''}
-                                  disabled={isPreviewMode}
-                                  label={(
-                                    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                      <>
+                        <BlockTitle className="mb-1 mt-0 text-zinc-400">Attributes</BlockTitle>
+                        <List strongIos insetIos>
+                          {panelFields.map((field, index) => (
+                            (() => {
+                              const fieldType = (field.type || '').trim().toLowerCase();
+                              const isTimezone = (field.type || '').trim().toLowerCase() === 'timezone' || (field.key || '').trim().toLowerCase() === 'timezone';
+                              const isMultiSelect = fieldType === 'multi_select';
+                              const selectOptions = field.options && field.options.length > 0 ? field.options : (isTimezone ? timezoneOptions : []);
+                              const isSelect = !isMultiSelect && selectOptions.length > 0;
+                              const selectedMultiValues = isMultiSelect ? parseMultiSelectCsv(field.value) : [];
+                              return (
+                                isMultiSelect ? (
+                                  <div key={field.id} className="px-4 py-2">
+                                    <p className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
                                       <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
                                       <span>{field.name || field.key || 'Attribute'}</span>
                                       {field.required && <span className="text-red-400">*</span>}
-                                    </span>
-                                  )}
-                                  placeholder="Set value"
-                                  onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
-                                    const next = [...prev];
-                                    next[index] = { ...next[index], value: event.target.value };
-                                    return next;
-                                  })}
-                                  className="[&_.item-inner]:px-0 [&_.item-title]:px-0 [&_.item-input-wrap]:px-0 [&_.item-input-wrap]:mx-0 [&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
-                                >
-                                  {isSelect && selectOptions.map((option) => (
-                                    <option key={`${field.id}-${option.value}`} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </ListInput>
-                              )
-                            );
-                          })()
-                        ))}
-                      </List>
+                                    </p>
+                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                      {selectOptions.map((option) => {
+                                        const active = selectedMultiValues.includes(option.value);
+                                        return (
+                                          <button
+                                            key={`${field.id}-${option.value}`}
+                                            type="button"
+                                            disabled={isPreviewMode}
+                                            onClick={() => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                              const next = [...prev];
+                                              const currentValues = parseMultiSelectCsv(next[index]?.value);
+                                              const nextValues = currentValues.includes(option.value)
+                                                ? currentValues.filter((item) => item !== option.value)
+                                                : [...currentValues, option.value];
+                                              next[index] = { ...next[index], value: nextValues.join(',') };
+                                              return next;
+                                            })}
+                                            className={`rounded-md border px-1.5 py-1 text-[11px] transition-colors ${active ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300'} ${isPreviewMode ? 'opacity-60' : ''}`}
+                                          >
+                                            {option.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <ListInput
+                                    key={field.id}
+                                    type={isSelect ? 'select' : 'text'}
+                                    value={field.value ?? ''}
+                                    disabled={isPreviewMode}
+                                    label={(
+                                      <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
+                                        <span className="text-[10px] font-semibold text-zinc-400">{getAttributeTypeIcon(field.type)}</span>
+                                        <span>{field.name || field.key || 'Attribute'}</span>
+                                        {field.required && <span className="text-red-400">*</span>}
+                                      </span>
+                                    )}
+                                    placeholder="Set value"
+                                    onChange={(event) => updateNodePanelFields(selectedNodeForEditor.id, nodeDetailsPanel, (prev) => {
+                                      const next = [...prev];
+                                      next[index] = { ...next[index], value: event.target.value };
+                                      return next;
+                                    })}
+                                    className="[&_input]:rounded-md [&_input]:border [&_input]:border-zinc-700 [&_input]:bg-zinc-900 [&_input]:px-1.5 [&_input]:py-1 [&_input]:text-xs [&_input]:text-zinc-100 [&_select]:rounded-md [&_select]:border [&_select]:border-zinc-700 [&_select]:bg-zinc-900 [&_select]:px-1.5 [&_select]:py-1 [&_select]:text-xs [&_select]:text-zinc-100"
+                                  >
+                                    {isSelect && selectOptions.map((option) => (
+                                      <option key={`${field.id}-${option.value}`} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </ListInput>
+                                )
+                              );
+                            })()
+                          ))}
+                        </List>
+                      </>
                     )
                   ) : (
                     <>
