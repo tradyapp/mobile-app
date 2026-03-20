@@ -857,6 +857,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [deleteStrategyError, setDeleteStrategyError] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [trackedSymbols, setTrackedSymbols] = useState<StrategyTrackedSymbol[]>([]);
+  const [hasLoadedTrackedSymbols, setHasLoadedTrackedSymbols] = useState(false);
   const [availableSymbols, setAvailableSymbols] = useState<StrategySymbolCatalogItem[]>([]);
   const [isSymbolsLoading, setIsSymbolsLoading] = useState(false);
   const [isSymbolsSaving, setIsSymbolsSaving] = useState(false);
@@ -1035,6 +1036,9 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       setTrackedSymbols(hydrated as StrategyTrackedSymbol[]);
     } catch (error) {
       setSymbolsError(error instanceof Error ? error.message : 'Failed to load strategy symbols');
+      setTrackedSymbols([]);
+    } finally {
+      setHasLoadedTrackedSymbols(true);
     }
   }, [strategyId]);
 
@@ -1052,10 +1056,13 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   }, []);
 
   useEffect(() => {
+    setHasLoadedTrackedSymbols(false);
+    setTrackedSymbols([]);
     void loadStrategySymbols();
   }, [loadStrategySymbols]);
 
   useEffect(() => {
+    if (!hasLoadedTrackedSymbols) return;
     if (trackedSymbols.length === 0) {
       clearSymbolForStrategy(strategyId);
       return;
@@ -1065,7 +1072,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     if (!hasPersisted) {
       setSymbolForStrategy(strategyId, trackedSymbols[0]?.ticker ?? '');
     }
-  }, [clearSymbolForStrategy, selectedExecutionTicker, setSymbolForStrategy, strategyId, trackedSymbols]);
+  }, [clearSymbolForStrategy, hasLoadedTrackedSymbols, selectedExecutionTicker, setSymbolForStrategy, strategyId, trackedSymbols]);
 
   useEffect(() => {
     let active = true;
