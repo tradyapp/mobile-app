@@ -155,9 +155,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'unknown' {
+function isCandleLikeObject(value: unknown): value is Record<string, unknown> {
+  if (!isPlainObject(value)) return false;
+  const hasDateTime = typeof value.datetime === 'string';
+  const hasOpen = typeof value.open === 'number';
+  const hasHigh = typeof value.high === 'number';
+  const hasLow = typeof value.low === 'number';
+  const hasClose = typeof value.close === 'number';
+  return hasDateTime && hasOpen && hasHigh && hasLow && hasClose;
+}
+
+function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object' | 'candle' | 'candle_array' | 'unknown' {
   if (value === null) return 'null';
-  if (Array.isArray(value)) return 'array';
+  if (Array.isArray(value)) {
+    if (value.length > 0 && value.every((item) => isCandleLikeObject(item))) return 'candle_array';
+    return 'array';
+  }
+  if (isCandleLikeObject(value)) return 'candle';
   if (isPlainObject(value)) return 'object';
   if (typeof value === 'string') return 'string';
   if (typeof value === 'number') return 'number';
@@ -166,6 +180,8 @@ function getValueType(value: unknown): 'string' | 'number' | 'boolean' | 'null' 
 }
 
 function getTypeToken(type: ReturnType<typeof getValueType>): { icon: string; pillClass: string; typeLabel: string } {
+  if (type === 'candle_array') return { icon: 'C[]', pillClass: 'border-teal-700 bg-teal-900/45 text-teal-200', typeLabel: 'candle[]' };
+  if (type === 'candle') return { icon: 'C', pillClass: 'border-cyan-700 bg-cyan-900/45 text-cyan-200', typeLabel: 'candle' };
   if (type === 'string') return { icon: 'T', pillClass: 'border-sky-700 bg-sky-900/45 text-sky-200', typeLabel: 'string' };
   if (type === 'number') return { icon: '#', pillClass: 'border-emerald-700 bg-emerald-900/45 text-emerald-200', typeLabel: 'number' };
   if (type === 'boolean') return { icon: '?', pillClass: 'border-amber-700 bg-amber-900/45 text-amber-200', typeLabel: 'boolean' };
