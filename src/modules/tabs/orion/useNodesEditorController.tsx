@@ -98,6 +98,7 @@ const AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE = 90;
 const AUTO_LAYOUT_EDGE_OVERLAP_PADDING = 10;
 const AUTO_LAYOUT_EDGE_AVOIDANCE_ITERATIONS = 4;
 const AUTO_LAYOUT_SIBLING_ORDER_ITERATIONS = 3;
+const AUTO_LAYOUT_CROSSING_SWEEPS = 3;
 
 type LayoutBox = {
   left: number;
@@ -106,6 +107,11 @@ type LayoutBox = {
   bottom: number;
   centerX: number;
   centerY: number;
+};
+
+type LayoutColumn = {
+  centerX: number;
+  nodeIds: string[];
 };
 
 function makeNodeBox(
@@ -188,6 +194,124 @@ function segmentIntersectsBox(
   );
 }
 
+function buildLayoutColumns(
+  nodes: RFNode[],
+  sizeById: Map<string, { width: number; height: number }>,
+): LayoutColumn[] {
+  const centerXById = new Map<string, number>();
+  for (const node of nodes) {
+    const dims = sizeById.get(node.id);
+    if (!dims) continue;
+    centerXById.set(node.id, node.position.x + dims.width / 2);
+  }
+
+  const ranked = nodes
+    .filter((node) => centerXById.has(node.id))
+    .sort((a, b) => (centerXById.get(a.id) ?? 0) - (centerXById.get(b.id) ?? 0));
+
+  const columns: LayoutColumn[] = [];
+  for (const node of ranked) {
+    const centerX = centerXById.get(node.id) ?? 0;
+    const last = columns[columns.length - 1];
+    if (!last || Math.abs(centerX - last.centerX) > AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE) {
+      columns.push({ centerX, nodeIds: [node.id] });
+      continue;
+    }
+    const count = last.nodeIds.length;
+    last.centerX = (last.centerX * count + centerX) / (count + 1);
+    last.nodeIds.push(node.id);
+  }
+  return columns;
+}
+
+function countInversions(values: number[]): number {
+  if (values.length < 2) return 0;
+  const work = [...values];
+  const buffer = new Array<number>(work.length);
+
+  const sortAndCount = (left: number, right: number): number => {
+    if (right - left <= 1) return 0;
+    const mid = Math.floor((left + right) / 2);
+    let count = sortAndCount(left, mid) + sortAndCount(mid, right);
+
+    let i = left;
+    let j = mid;
+    let k = left;
+    while (i < mid && j < right) {
+      if (work[i] <= work[j]) {
+        buffer[k] = work[i];
+        i += 1;
+      } else {
+        buffer[k] = work[j];
+        j += 1;
+        count += mid - i;
+      }
+      k += 1;
+    }
+    while (i < mid) {
+      buffer[k] = work[i];
+      i += 1;
+      k += 1;
+    }
+    while (j < right) {
+      buffer[k] = work[j];
+      j += 1;
+      k += 1;
+    }
+    for (let idx = left; idx < right; idx += 1) {
+      work[idx] = buffer[idx];
+    }
+    return count;
+  };
+
+  return sortAndCount(0, work.length);
+}
+
+function countCrossingsBetweenColumns(
+  leftIds: string[],
+  rightIds: string[],
+  edges: RFEdge[],
+  columnIndexById: Map<string, number>,
+  yById: Map<string, number>,
+): number {
+  if (leftIds.length < 2 || rightIds.length < 2) return 0;
+
+  const leftOrder = [...leftIds].sort((a, b) => (yById.get(a) ?? 0) - (yById.get(b) ?? 0));
+  const rightOrder = [...rightIds].sort((a, b) => (yById.get(a) ?? 0) - (yById.get(b) ?? 0));
+  const leftRankById = new Map(leftOrder.map((id, index) => [id, index]));
+  const rightRankById = new Map(rightOrder.map((id, index) => [id, index]));
+
+  const pairs: Array<{ sourceRank: number; targetRank: number }> = [];
+  for (const edge of edges) {
+    const sourceId = edge.source;
+    const targetId = edge.target;
+    if (!sourceId || !targetId) continue;
+    const sourceCol = columnIndexById.get(sourceId);
+    const targetCol = columnIndexById.get(targetId);
+    if (typeof sourceCol !== 'number' || typeof targetCol !== 'number') continue;
+    if (Math.abs(sourceCol - targetCol) !== 1) continue;
+
+    let sourceRank: number | undefined;
+    let targetRank: number | undefined;
+    if (sourceCol < targetCol) {
+      sourceRank = leftRankById.get(sourceId);
+      targetRank = rightRankById.get(targetId);
+    } else {
+      sourceRank = leftRankById.get(targetId);
+      targetRank = rightRankById.get(sourceId);
+    }
+    if (typeof sourceRank !== 'number' || typeof targetRank !== 'number') continue;
+    pairs.push({ sourceRank, targetRank });
+  }
+
+  if (pairs.length < 2) return 0;
+  pairs.sort((a, b) => {
+    if (a.sourceRank !== b.sourceRank) return a.sourceRank - b.sourceRank;
+    return a.targetRank - b.targetRank;
+  });
+  return countInversions(pairs.map((item) => item.targetRank));
+}
+
 function resolveNodeRectCollisions(
   nodes: RFNode[],
   sizeById: Map<string, { width: number; height: number }>,
@@ -242,34 +366,7 @@ function compactYByColumns(
   nodes: RFNode[],
   sizeById: Map<string, { width: number; height: number }>,
 ): Map<string, number> {
-  type Column = {
-    centerX: number;
-    nodeIds: string[];
-  };
-
-  const centerXById = new Map<string, number>();
-  for (const node of nodes) {
-    const dims = sizeById.get(node.id);
-    if (!dims) continue;
-    centerXById.set(node.id, node.position.x + dims.width / 2);
-  }
-
-  const ranked = nodes
-    .filter((node) => centerXById.has(node.id))
-    .sort((a, b) => (centerXById.get(a.id) ?? 0) - (centerXById.get(b.id) ?? 0));
-
-  const columns: Column[] = [];
-  for (const node of ranked) {
-    const centerX = centerXById.get(node.id) ?? 0;
-    const last = columns[columns.length - 1];
-    if (!last || Math.abs(centerX - last.centerX) > AUTO_LAYOUT_COLUMN_CLUSTER_TOLERANCE) {
-      columns.push({ centerX, nodeIds: [node.id] });
-      continue;
-    }
-    const count = last.nodeIds.length;
-    last.centerX = (last.centerX * count + centerX) / (count + 1);
-    last.nodeIds.push(node.id);
-  }
+  const columns = buildLayoutColumns(nodes, sizeById);
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const resolvedYById = new Map<string, number>();
@@ -314,6 +411,120 @@ function compactYByColumns(
   }
 
   return resolvedYById;
+}
+
+function minimizeEdgeCrossingsByColumns(
+  nodes: RFNode[],
+  edges: RFEdge[],
+  sizeById: Map<string, { width: number; height: number }>,
+): Map<string, number> {
+  const columns = buildLayoutColumns(nodes, sizeById);
+  if (columns.length < 2) return new Map(nodes.map((node) => [node.id, node.position.y]));
+
+  const columnIndexById = new Map<string, number>();
+  for (let i = 0; i < columns.length; i += 1) {
+    for (const id of columns[i].nodeIds) columnIndexById.set(id, i);
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const yById = new Map(nodes.map((node) => [node.id, node.position.y]));
+
+  const compactColumn = (column: LayoutColumn) => {
+    const ordered = [...column.nodeIds].sort((a, b) => (yById.get(a) ?? 0) - (yById.get(b) ?? 0));
+    const items = ordered
+      .map((id) => {
+        const node = nodeById.get(id);
+        const dims = sizeById.get(id);
+        if (!node || !dims) return null;
+        return { id, desiredY: yById.get(id) ?? node.position.y, height: dims.height };
+      })
+      .filter((item): item is { id: string; desiredY: number; height: number } => item !== null);
+    if (items.length < 2) return;
+
+    const ys = items.map((item) => item.desiredY);
+    for (let i = 1; i < items.length; i += 1) {
+      const prevBottom = ys[i - 1] + items[i - 1].height;
+      ys[i] = Math.max(ys[i], prevBottom + AUTO_LAYOUT_VERTICAL_GAP);
+    }
+    for (let i = items.length - 2; i >= 0; i -= 1) {
+      const nextTop = ys[i + 1];
+      const maxTop = nextTop - items[i].height - AUTO_LAYOUT_VERTICAL_GAP;
+      ys[i] = Math.min(ys[i], maxTop);
+    }
+    for (let i = 0; i < items.length; i += 1) yById.set(items[i].id, Math.round(ys[i]));
+    column.nodeIds = items.map((item) => item.id);
+  };
+
+  const scoreAroundColumn = (index: number): number => {
+    let score = 0;
+    if (index > 0) {
+      score += countCrossingsBetweenColumns(columns[index - 1].nodeIds, columns[index].nodeIds, edges, columnIndexById, yById);
+    }
+    if (index + 1 < columns.length) {
+      score += countCrossingsBetweenColumns(columns[index].nodeIds, columns[index + 1].nodeIds, edges, columnIndexById, yById);
+    }
+    return score;
+  };
+
+  for (let sweep = 0; sweep < AUTO_LAYOUT_CROSSING_SWEEPS; sweep += 1) {
+    const leftToRight = sweep % 2 === 0;
+    const start = leftToRight ? 1 : columns.length - 2;
+    const end = leftToRight ? columns.length : -1;
+    const step = leftToRight ? 1 : -1;
+
+    for (let colIndex = start; colIndex !== end; colIndex += step) {
+      const neighborIndex = leftToRight ? colIndex - 1 : colIndex + 1;
+      if (neighborIndex < 0 || neighborIndex >= columns.length) continue;
+      const neighbor = columns[neighborIndex];
+      const column = columns[colIndex];
+
+      const neighborOrder = [...neighbor.nodeIds].sort((a, b) => (yById.get(a) ?? 0) - (yById.get(b) ?? 0));
+      const neighborRankById = new Map(neighborOrder.map((id, index) => [id, index]));
+
+      const scored = column.nodeIds.map((id) => {
+        const ranks: number[] = [];
+        for (const edge of edges) {
+          if (edge.source === id && edge.target && neighborRankById.has(edge.target)) {
+            ranks.push(neighborRankById.get(edge.target) as number);
+          } else if (edge.target === id && edge.source && neighborRankById.has(edge.source)) {
+            ranks.push(neighborRankById.get(edge.source) as number);
+          }
+        }
+        ranks.sort((a, b) => a - b);
+        const barycenter = ranks.length === 0
+          ? Number.POSITIVE_INFINITY
+          : ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
+        return { id, barycenter, currentY: yById.get(id) ?? 0 };
+      });
+
+      scored.sort((a, b) => {
+        if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
+        if (a.currentY !== b.currentY) return a.currentY - b.currentY;
+        return a.id.localeCompare(b.id);
+      });
+
+      column.nodeIds = scored.map((item) => item.id);
+      compactColumn(column);
+
+      // Adjacent swaps for local minima on crossing count.
+      for (let i = 0; i < column.nodeIds.length - 1; i += 1) {
+        const beforeScore = scoreAroundColumn(colIndex);
+        const a = column.nodeIds[i];
+        const b = column.nodeIds[i + 1];
+        column.nodeIds[i] = b;
+        column.nodeIds[i + 1] = a;
+        compactColumn(column);
+        const afterScore = scoreAroundColumn(colIndex);
+        if (afterScore > beforeScore) {
+          column.nodeIds[i] = a;
+          column.nodeIds[i + 1] = b;
+          compactColumn(column);
+        }
+      }
+    }
+  }
+
+  return yById;
 }
 
 function optimizeEdgeNodeOverlaps(
@@ -1234,8 +1445,34 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       };
     });
 
-    const overlapOptimizedYById = optimizeEdgeNodeOverlaps(compactedNodes, edges, sizeById);
-    const overlapOptimizedNodes = compactedNodes.map((node) => {
+    const crossingMinimizedYById = minimizeEdgeCrossingsByColumns(compactedNodes, edges, sizeById);
+    const crossingMinimizedNodes = compactedNodes.map((node) => {
+      const minimizedY = crossingMinimizedYById.get(node.id);
+      if (typeof minimizedY !== 'number' || minimizedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: Math.round(minimizedY),
+        },
+      };
+    });
+
+    const postCrossingCompactedYById = compactYByColumns(crossingMinimizedNodes, sizeById);
+    const postCrossingCompactedNodes = crossingMinimizedNodes.map((node) => {
+      const compactedY = postCrossingCompactedYById.get(node.id);
+      if (typeof compactedY !== 'number' || compactedY === node.position.y) return node;
+      return {
+        ...node,
+        position: {
+          x: node.position.x,
+          y: compactedY,
+        },
+      };
+    });
+
+    const overlapOptimizedYById = optimizeEdgeNodeOverlaps(postCrossingCompactedNodes, edges, sizeById);
+    const overlapOptimizedNodes = postCrossingCompactedNodes.map((node) => {
       const optimizedY = overlapOptimizedYById.get(node.id);
       if (typeof optimizedY !== 'number' || optimizedY === node.position.y) return node;
       return {
