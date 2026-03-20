@@ -213,7 +213,8 @@ export class StockDataService {
     symbolType: SymbolType = "STOCK"
   ): () => void {
     let active = true;
-    let marketOpen = true;
+    // null = unknown (waiting for market_status fetch); true/false = known state
+    let marketOpen: boolean | null = symbolType === "CRYPTO" ? true : null;
     let postMarketPrice: number | undefined;
     let candles: CandleData[] = [];
 
@@ -223,12 +224,15 @@ export class StockDataService {
     const emit = () => {
       if (!active) return;
 
-      if (symbolType === "STOCK" && !marketOpen && postMarketPrice != null) {
+      // For STOCK/FOREX: don't emit with realtime merge until we know market state
+      const effectiveOpen = marketOpen === true;
+
+      if ((symbolType === "STOCK" || symbolType === "FOREX") && !effectiveOpen && postMarketPrice != null) {
         callback(sortAsc([...candles]), { marketOpen: false, postMarketPrice });
         return;
       }
 
-      callback(sortAsc([...candles]), { marketOpen: true });
+      callback(sortAsc([...candles]), { marketOpen: effectiveOpen });
     };
 
     const unsubscribeCandles = this.subscribeToStockData(
@@ -253,7 +257,8 @@ export class StockDataService {
 
           postMarketPrice = Number(row.last_price);
 
-          if (candles.length > 0 && marketOpen) {
+          // Only patch the last candle when we KNOW the market is open
+          if (candles.length > 0 && marketOpen === true) {
             const last = candles[candles.length - 1];
             const patched: CandleData = {
               ...last,
@@ -300,10 +305,6 @@ export class StockDataService {
             emit();
           }
         });
-    }
-
-    if (symbolType === "CRYPTO") {
-      marketOpen = true;
     }
 
     return () => {
