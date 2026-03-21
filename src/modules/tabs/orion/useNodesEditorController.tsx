@@ -103,6 +103,8 @@ const AUTO_LAYOUT_EDGE_OVERLAP_PADDING = 10;
 const AUTO_LAYOUT_EDGE_AVOIDANCE_ITERATIONS = 4;
 const AUTO_LAYOUT_SIBLING_ORDER_ITERATIONS = 3;
 const AUTO_LAYOUT_CROSSING_SWEEPS = 3;
+const EDITOR_NODE_DEFAULT_WIDTH = 126;
+const EDITOR_NODE_DEFAULT_HEIGHT = 98;
 
 type LayoutBox = {
   left: number;
@@ -117,6 +119,54 @@ type LayoutColumn = {
   centerX: number;
   nodeIds: string[];
 };
+
+function parseViewportTransform(raw: string): { translateX: number; translateY: number; scale: number } | null {
+  const translateScale = raw.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/i);
+  if (translateScale) {
+    return {
+      translateX: Number(translateScale[1]),
+      translateY: Number(translateScale[2]),
+      scale: Number(translateScale[3]),
+    };
+  }
+
+  const matrix = raw.match(/matrix\(([-\d.,\s]+)\)/i);
+  if (matrix) {
+    const parts = matrix[1]
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((value) => Number.isFinite(value));
+    if (parts.length >= 6) {
+      return {
+        translateX: parts[4],
+        translateY: parts[5],
+        scale: parts[0],
+      };
+    }
+  }
+
+  return null;
+}
+
+function getVisibleCanvasCenterPosition(): { x: number; y: number } | null {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  const flowRoot = document.querySelector('.react-flow') as HTMLElement | null;
+  const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null;
+  if (!flowRoot || !viewport) return null;
+
+  const rootRect = flowRoot.getBoundingClientRect();
+  if (rootRect.width <= 0 || rootRect.height <= 0) return null;
+
+  const transform = parseViewportTransform(viewport.style.transform || window.getComputedStyle(viewport).transform || '');
+  if (!transform || !Number.isFinite(transform.scale) || transform.scale === 0) return null;
+
+  const centerXInPane = rootRect.width / 2;
+  const centerYInPane = rootRect.height / 2;
+  return {
+    x: (centerXInPane - transform.translateX) / transform.scale,
+    y: (centerYInPane - transform.translateY) / transform.scale,
+  };
+}
 
 function makeNodeBox(
   node: RFNode,
@@ -1278,16 +1328,21 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
 
   const handleAddNodeFromType = useCallback((nodeType: StrategyNodeTypeRecord) => {
     setNodes((prev) => {
-      const index = prev.length;
       const nextLabel = nodeCounterRef.current;
       nodeCounterRef.current += 1;
+      const center = getVisibleCanvasCenterPosition();
+      const fallbackX = 80 + ((prev.length % 4) * 180);
+      const fallbackY = 80 + (Math.floor(prev.length / 4) * 120);
+      const baseX = center ? center.x - (EDITOR_NODE_DEFAULT_WIDTH / 2) : fallbackX;
+      const baseY = center ? center.y - (EDITOR_NODE_DEFAULT_HEIGHT / 2) : fallbackY;
+      const stackOffset = (prev.length % 5) * 12;
 
       const nextNode: RFNode = {
         id: `node-${nextLabel}`,
         type: 'editorNode',
         position: {
-          x: 80 + (index % 4) * 180,
-          y: 80 + Math.floor(index / 4) * 120,
+          x: baseX + stackOffset,
+          y: baseY + stackOffset,
         },
         data: {
           label: nodeType.name,
