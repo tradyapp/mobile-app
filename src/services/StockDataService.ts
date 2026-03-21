@@ -84,6 +84,69 @@ function toCandle(row: Record<string, any>): CandleData {
 }
 
 export class StockDataService {
+  static async getAvailableDateRange(
+    symbol: string,
+    timeframe: Timeframe = "d",
+    symbolType: SymbolType = "STOCK"
+  ): Promise<{ oldest: string | null; newest: string | null }> {
+    const normalized = normalizeSymbol(symbol);
+    const table = tableFor(symbolType, timeframe);
+
+    const oldestQuery = await supabase
+      .from(table)
+      .select("datetime")
+      .eq("symbol", normalized)
+      .order("datetime", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (oldestQuery.error) throw oldestQuery.error;
+
+    const newestQuery = await supabase
+      .from(table)
+      .select("datetime")
+      .eq("symbol", normalized)
+      .order("datetime", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (newestQuery.error) throw newestQuery.error;
+
+    return {
+      oldest: oldestQuery.data?.datetime ? String(oldestQuery.data.datetime) : null,
+      newest: newestQuery.data?.datetime ? String(newestQuery.data.datetime) : null,
+    };
+  }
+
+  static async getCandlesInRange(
+    symbol: string,
+    timeframe: Timeframe,
+    fromIso: string,
+    toIso: string,
+    symbolType: SymbolType = "STOCK",
+    limit = 10000
+  ): Promise<CandleData[]> {
+    const normalized = normalizeSymbol(symbol);
+    const table = tableFor(symbolType, timeframe);
+
+    const selectCols = symbolType === "STOCK"
+      ? "symbol, datetime, open, high, low, close, volume"
+      : "symbol, datetime, open, high, low, close";
+
+    const { data, error } = await supabase
+      .from(table)
+      .select(selectCols)
+      .eq("symbol", normalized)
+      .gte("datetime", fromIso)
+      .lte("datetime", toIso)
+      .order("datetime", { ascending: true })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data ?? []).map((row) => toCandle(row as Record<string, any>));
+  }
+
   static async getStockData(
     symbol: string,
     timeframe: Timeframe = "d",

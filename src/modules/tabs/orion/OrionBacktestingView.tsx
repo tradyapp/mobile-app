@@ -4,6 +4,8 @@ import { Dialog, DialogButton, List, ListItem } from 'konsta/react';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SymbolAvatar } from '@/modules/tabs/orion/OrionValueView';
 import { type StrategyTrackedSymbol } from '@/services/StrategiesService';
+import { StockDataService, type CandleData, type Timeframe } from '@/services/StockDataService';
+import { type SymbolType } from '@/stores/chartStore';
 
 type MiniCandle = {
   datetime: string;
@@ -20,6 +22,8 @@ type BacktestHit = {
   rating: number | null;
   percentage: number | null;
 };
+
+const BACKTEST_TIMEFRAME: Timeframe = 'h';
 
 interface OrionBacktestingViewProps {
   isOpen: boolean;
@@ -103,6 +107,12 @@ function buildMockCandles(size = 64): MiniCandle[] {
   return out;
 }
 
+function marketToSymbolType(market: StrategyTrackedSymbol['market']): SymbolType {
+  if (market === 'CRYPTO') return 'CRYPTO';
+  if (market === 'FOREX') return 'FOREX';
+  return 'STOCK';
+}
+
 function formatStars(value: number): string {
   const rounded = Math.max(0, Math.min(5, Math.round(value)));
   return `${'★'.repeat(rounded)}${'☆'.repeat(5 - rounded)}`;
@@ -171,7 +181,7 @@ export default function OrionBacktestingView({
   trackedSymbols,
   onClose,
 }: OrionBacktestingViewProps) {
-  const candles = useMemo(() => buildMockCandles(), []);
+  const [candles, setCandles] = useState<MiniCandle[]>(() => buildMockCandles());
   const [processedCount, setProcessedCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -182,6 +192,9 @@ export default function OrionBacktestingView({
   const [showDateControls, setShowDateControls] = useState(true);
   const [isLandscape, setIsLandscape] = useState(false);
   const [hasHydratedSession, setHasHydratedSession] = useState(false);
+  const [availableRange, setAvailableRange] = useState<{ from: string; to: string } | null>(null);
+  const [isCandlesLoading, setIsCandlesLoading] = useState(false);
+  const [candlesError, setCandlesError] = useState<string | null>(null);
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -192,8 +205,8 @@ export default function OrionBacktestingView({
     return trackedSymbols[0] ?? null;
   }, [selectedExecutionSymbol?.ticker, trackedSymbols]);
   const hasDateRange = Boolean(fromDate && toDate);
-  const availableFromDate = useMemo(() => candles[0]?.datetime.slice(0, 10) ?? '', [candles]);
-  const availableToDate = useMemo(() => candles[candles.length - 1]?.datetime.slice(0, 10) ?? '', [candles]);
+  const availableFromDate = availableRange?.from ?? '';
+  const availableToDate = availableRange?.to ?? '';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -231,6 +244,90 @@ export default function OrionBacktestingView({
     setIsPaused(false);
     setShowDateControls(!hasDateRange);
   }, [hasDateRange, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !activeSymbol) return;
+    let active = true;
+    const symbolType = marketToSymbolType(activeSymbol.market);
+    setCandlesError(null);
+    void StockDataService.getAvailableDateRange(activeSymbol.ticker, BACKTEST_TIMEFRAME, symbolType)
+      .then((range) => {
+        if (!active) return;
+        const oldest = range.oldest?.slice(0, 10) ?? '';
+        const newest = range.newest?.slice(0, 10) ?? '';
+        if (!oldest || !newest) {
+          setAvailableRange(null);
+          return;
+        }
+        setAvailableRange({ from: oldest, to: newest });
+        setFromDate((prev) => {
+          if (!prev) return oldest;
+          if (prev < oldest) return oldest;
+          if (prev > newest) return newest;
+          return prev;
+        });
+        setToDate((prev) => {
+          if (!prev) return newest;
+          if (prev > newest) return newest;
+          if (prev < oldest) return oldest;
+          return prev;
+        });
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAvailableRange(null);
+        setCandlesError(error instanceof Error ? error.message : 'Failed to load available candle range');
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeSymbol, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !activeSymbol || !fromDate || !toDate) return;
+    if (fromDate > toDate) {
+      setCandlesError('From date must be earlier than To date.');
+      return;
+    }
+    let active = true;
+    const symbolType = marketToSymbolType(activeSymbol.market);
+    setIsCandlesLoading(true);
+    setCandlesError(null);
+    void StockDataService.getCandlesInRange(
+      activeSymbol.ticker,
+      BACKTEST_TIMEFRAME,
+      `${fromDate}T00:00:00.000Z`,
+      `${toDate}T23:59:59.999Z`,
+      symbolType,
+      12000,
+    )
+      .then((rows) => {
+        if (!active) return;
+        const mapped = rows.map((row: CandleData) => ({
+          datetime: row.datetime,
+          open: row.open,
+          high: row.high,
+          low: row.low,
+          close: row.close,
+        }));
+        setCandles(mapped);
+        setProcessedCount(0);
+        setHits([]);
+        setIsRunning(false);
+        setIsPaused(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setCandlesError(error instanceof Error ? error.message : 'Failed to load candles');
+        setCandles([]);
+      })
+      .finally(() => {
+        if (active) setIsCandlesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeSymbol, fromDate, isOpen, toDate]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hasHydratedSession) return;
@@ -275,12 +372,12 @@ export default function OrionBacktestingView({
 
   if (!isOpen) return null;
 
-  const min = Math.min(...candles.map((item) => item.low));
-  const max = Math.max(...candles.map((item) => item.high));
+  const min = candles.length > 0 ? Math.min(...candles.map((item) => item.low)) : 0;
+  const max = candles.length > 0 ? Math.max(...candles.map((item) => item.high)) : 1;
   const range = Math.max(0.0001, max - min);
 
   const handlePlayPause = () => {
-    if (!hasDateRange) return;
+    if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
     if (!isRunning) {
       setProcessedCount(0);
       setHits([]);
@@ -297,13 +394,17 @@ export default function OrionBacktestingView({
   };
 
   const handleFromDateChange = (value: string) => {
-    const bounded = value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
+    const bounded = !availableFromDate || !availableToDate
+      ? value
+      : value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
     setFromDate(bounded);
     if (toDate && bounded && bounded <= toDate) setShowDateControls(false);
   };
 
   const handleToDateChange = (value: string) => {
-    const bounded = value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
+    const bounded = !availableFromDate || !availableToDate
+      ? value
+      : value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
     setToDate(bounded);
     if (fromDate && bounded && fromDate <= bounded) setShowDateControls(false);
   };
@@ -370,7 +471,7 @@ export default function OrionBacktestingView({
         <button
           type="button"
           onClick={handlePlayPause}
-          disabled={!hasDateRange}
+          disabled={!hasDateRange || isCandlesLoading || candles.length === 0}
           className="ml-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
           aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
           title={isRunning && !isPaused ? 'Pause' : 'Play'}
@@ -441,30 +542,42 @@ export default function OrionBacktestingView({
                   <p className="text-xs text-zinc-400">
                     Disponible: {availableFromDate || '--'} a {availableToDate || '--'}
                   </p>
+                  {isCandlesLoading && (
+                    <p className="text-xs text-blue-300">Loading candles...</p>
+                  )}
+                  {candlesError && (
+                    <p className="text-xs text-red-300">{candlesError}</p>
+                  )}
                 </div>
               ) : (
-                <div className="flex h-full items-end gap-1 overflow-hidden">
-                  {candles.map((candle, index) => {
-                    const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
-                    const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
-                    const wickTop = ((candle.high - min) / range) * 100;
-                    const wickBottom = ((candle.low - min) / range) * 100;
-                    const isBull = candle.close >= candle.open;
-                    const isProcessed = index < processedCount;
-                    return (
-                      <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
-                        <div
-                          className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
-                          style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
-                        />
-                        <div
-                          className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
-                          style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                candles.length === 0 ? (
+                  <div className="flex h-full items-center justify-center px-3 text-center text-sm text-zinc-400">
+                    {isCandlesLoading ? 'Loading candles...' : 'No candles found in this range.'}
+                  </div>
+                ) : (
+                  <div className="flex h-full items-end gap-1 overflow-hidden">
+                    {candles.map((candle, index) => {
+                      const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
+                      const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
+                      const wickTop = ((candle.high - min) / range) * 100;
+                      const wickBottom = ((candle.low - min) / range) * 100;
+                      const isBull = candle.close >= candle.open;
+                      const isProcessed = index < processedCount;
+                      return (
+                        <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
+                          <div
+                            className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                            style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+                          />
+                          <div
+                            className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                            style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
           </div>
