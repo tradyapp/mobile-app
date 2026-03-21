@@ -983,17 +983,25 @@ function executeLocalNodeIfSupported(params: {
     const sourceCandle = normalizeCandle(attributesObj.source_candle);
     const candle = sourceCandle ?? findLatestCandleInHistory(history);
     const wickSelection = String(attributesObj.wick ?? 'both').trim().toLowerCase();
+    const rawRatioPercent = normalizeNumber(attributesObj.min_wick_body_ratio_percent);
+    const ratioPercent = rawRatioPercent === null
+      ? 100
+      : rawRatioPercent <= 1
+        ? rawRatioPercent * 100
+        : rawRatioPercent;
+    const minRatio = Math.max(0, ratioPercent) / 100;
 
     if (!candle) throw new Error('has_wick requires a candle input');
 
     const body = getCandleBodySize(candle);
     const topWick = getCandleTopWickSize(candle);
     const bottomWick = getCandleBottomWickSize(candle);
+    const bodyBaseline = Math.max(body, Number.EPSILON);
 
     let hasWick = false;
-    if (wickSelection === 'top') hasWick = topWick > body;
-    else if (wickSelection === 'bottom') hasWick = bottomWick > body;
-    else hasWick = topWick > body && bottomWick > body;
+    if (wickSelection === 'top') hasWick = topWick >= bodyBaseline * minRatio;
+    else if (wickSelection === 'bottom') hasWick = bottomWick >= bodyBaseline * minRatio;
+    else hasWick = topWick >= bodyBaseline * minRatio && bottomWick >= bodyBaseline * minRatio;
 
     return {
       handled: true,
@@ -1004,6 +1012,7 @@ function executeLocalNodeIfSupported(params: {
         body,
         top_wick: topWick,
         bottom_wick: bottomWick,
+        min_wick_body_ratio_percent: ratioPercent,
       },
     };
   }

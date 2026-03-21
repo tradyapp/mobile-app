@@ -1196,7 +1196,25 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         const currentOutputs = Array.isArray(data.outputs) ? data.outputs : [];
 
         const shouldHydrateInputs = currentInputs.length === 0 && defaults.inputs.length > 0;
-        const shouldHydrateAttributes = currentAttributes.length === 0 && defaults.attributes.length > 0;
+        const defaultAttributeKeySet = new Set(
+          defaults.attributes
+            .map((item) => String(item.key ?? '').trim().toLowerCase())
+            .filter((value) => value.length > 0),
+        );
+        const currentAttributeKeySet = new Set(
+          currentAttributes
+            .map((item) => String(item.key ?? '').trim().toLowerCase())
+            .filter((value) => value.length > 0),
+        );
+        const missingDefaultAttributes = defaults.attributes.filter((item) => {
+          const keyName = String(item.key ?? '').trim().toLowerCase();
+          if (!keyName) return false;
+          return defaultAttributeKeySet.has(keyName) && !currentAttributeKeySet.has(keyName);
+        });
+        const shouldHydrateAttributes = (
+          (currentAttributes.length === 0 && defaults.attributes.length > 0)
+          || missingDefaultAttributes.length > 0
+        );
         const shouldHydrateOutputs = currentOutputs.length === 0 && defaults.outputs.length > 0;
 
         if (!shouldHydrateInputs && !shouldHydrateAttributes && !shouldHydrateOutputs) {
@@ -1209,7 +1227,13 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           data: {
             ...data,
             ...(shouldHydrateInputs ? { inputs: defaults.inputs } : {}),
-            ...(shouldHydrateAttributes ? { attributes: defaults.attributes } : {}),
+            ...(shouldHydrateAttributes
+              ? {
+                attributes: currentAttributes.length === 0
+                  ? defaults.attributes
+                  : [...currentAttributes, ...missingDefaultAttributes],
+              }
+              : {}),
             ...(shouldHydrateOutputs ? { outputs: defaults.outputs } : {}),
           } satisfies EditorNodeData,
         };

@@ -87,6 +87,19 @@ function mapPortsToFlowFields(
 export function createNodeDefaults(nodeType: StrategyNodeTypeRecord): Pick<EditorNodeData, 'inputs' | 'attributes' | 'outputs'> {
   const normalized = normalizeNodeCategory(nodeType.category);
   const attributesFromProperties = mapPropertiesToInputs(nodeType.properties);
+  if (
+    nodeType.key === 'logic.has_wick'
+    && !attributesFromProperties.some((item) => String(item.key ?? '').trim().toLowerCase() === 'min_wick_body_ratio_percent')
+  ) {
+    attributesFromProperties.push({
+      id: makeFieldId('attr'),
+      key: 'min_wick_body_ratio_percent',
+      name: 'Wick % of Body',
+      type: 'text',
+      value: '100',
+      required: true,
+    });
+  }
   const inputsFromNodeType = mapPortsToFlowFields(nodeType.input_ports, 'in', 'Input');
   const outputsFromNodeType = mapPortsToFlowFields(nodeType.output_ports, 'out', 'Output');
 
