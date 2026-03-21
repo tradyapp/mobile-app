@@ -31,7 +31,11 @@ import {
   type NodeDetailsPanelItem,
   type NodeSymbolFilter,
 } from '@/modules/tabs/orion/nodesEditorUtils';
-import { loadReferenceSourcesForNode as loadReferenceSourcesForNodeAction, runLocalExecution as runLocalExecutionAction } from '@/modules/tabs/orion/nodesEditorExecutionActions';
+import {
+  loadReferenceSourcesForNode as loadReferenceSourcesForNodeAction,
+  runCompiledPlanSingleExecution as runCompiledPlanSingleExecutionAction,
+  runLocalExecution as runLocalExecutionAction,
+} from '@/modules/tabs/orion/nodesEditorExecutionActions';
 import {
   activatePreviewVersionAction,
   deleteStrategyAction,
@@ -44,7 +48,7 @@ import {
   saveStrategySymbolsAction,
 } from '@/modules/tabs/orion/nodesEditorDataActions';
 import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
-import { strategiesService, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
+import { strategiesService, type StrategyCompilePlan, type StrategyNodeMap, type StrategyNodeVersionRecord, type StrategyTrackedSymbol } from '@/services/StrategiesService';
 import { useOrionExecutionStore } from '@/stores/orionExecutionStore';
 
 type ReferenceSourceItem = OrionReferenceSourceItem;
@@ -1676,6 +1680,31 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     });
   }, [availableNodeTypes, edges, localExecutionStatus, nodes, selectedExecutionSymbol, selectedExecutionTicker, strategyId]);
 
+  const runCompiledSingleExecutionBenchmark = useCallback(async (compiledPlan: StrategyCompilePlan, ticker: string) => {
+    const normalizedTicker = ticker.trim().toUpperCase();
+    const selected = trackedSymbols.find((item) => item.ticker.toUpperCase() === normalizedTicker) ?? null;
+
+    return runCompiledPlanSingleExecutionAction({
+      strategyId,
+      plan: compiledPlan,
+      nodeTypesCatalog: availableNodeTypes,
+      selectedExecutionTicker: normalizedTicker || selectedExecutionTicker,
+      selectedExecutionSymbol: selected
+        ? {
+          ticker: selected.ticker,
+          name: selected.name,
+          market: selected.market,
+        }
+        : selectedExecutionSymbol
+          ? {
+            ticker: selectedExecutionSymbol.ticker,
+            name: selectedExecutionSymbol.name,
+            market: selectedExecutionSymbol.market,
+          }
+          : null,
+    });
+  }, [availableNodeTypes, selectedExecutionSymbol, selectedExecutionTicker, strategyId, trackedSymbols]);
+
   useEffect(() => {
     if (localExecutionStatus !== 'completed') return;
     if (executionRunIdRef.current === 0) return;
@@ -2172,6 +2201,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         onOpenBacktesting: () => {
           setSettingsPanel('backtesting');
         },
+        onRunCompiledSingleExecutionBenchmark: runCompiledSingleExecutionBenchmark,
         isOwner,
         availableSymbols,
         isSymbolsLoading,

@@ -7,6 +7,7 @@ import AppDrawer from '@/components/uiux/AppDrawer';
 import {
   strategiesService,
   type StrategyCompileResult,
+  type StrategyCompilePlan,
   type StrategyBacktestMetadataResult,
   type StrategyBacktestRunResult,
   type StrategyNodeVersionRecord,
@@ -93,6 +94,7 @@ interface NodeSettingsDrawerProps {
   isLive: boolean;
   onToggleLive: () => void;
   onOpenBacktesting: () => void;
+  onRunCompiledSingleExecutionBenchmark: (compiledPlan: StrategyCompilePlan, ticker: string) => Promise<{ durationMs: number; status: 'completed' | 'failed'; error: string | null }>;
   isOwner: boolean;
   trackedSymbols: StrategyTrackedSymbol[];
   availableSymbols: StrategySymbolCatalogItem[];
@@ -125,6 +127,7 @@ export function NodeSettingsDrawer({
   isLive,
   onToggleLive,
   onOpenBacktesting,
+  onRunCompiledSingleExecutionBenchmark,
   isOwner,
   trackedSymbols,
   availableSymbols,
@@ -151,13 +154,11 @@ export function NodeSettingsDrawer({
   const [backtestJobId, setBacktestJobId] = useState<string | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [benchmarkSymbol, setBenchmarkSymbol] = useState('');
-  const [benchmarkIterations, setBenchmarkIterations] = useState(5000);
   const [isBenchmarkRunning, setIsBenchmarkRunning] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<StrategyCompileResult | null>(null);
-  const [benchmarkClientRunMs, setBenchmarkClientRunMs] = useState<number | null>(null);
-  const [legacyBenchmarkRuns, setLegacyBenchmarkRuns] = useState(3);
+  const [compiledSingleRunMs, setCompiledSingleRunMs] = useState<number | null>(null);
   const [isLegacyBenchmarkRunning, setIsLegacyBenchmarkRunning] = useState(false);
-  const [legacyBenchmarkMs, setLegacyBenchmarkMs] = useState<{ samples: number[]; avg: number; min: number; max: number } | null>(null);
+  const [legacySingleRunMs, setLegacySingleRunMs] = useState<number | null>(null);
   const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
 
   const selectedTickerSet = useMemo(
@@ -289,30 +290,13 @@ export function NodeSettingsDrawer({
 
     setBenchmarkError(null);
     setIsBenchmarkRunning(true);
-    setBenchmarkClientRunMs(null);
+    setCompiledSingleRunMs(null);
     try {
       const result = await strategiesService.compileStrategy({
         strategy_id: strategyId,
-        benchmark_iterations: Math.max(1, Math.min(50000, Math.floor(benchmarkIterations))),
+        benchmark_iterations: 1,
       });
       setBenchmarkResult(result);
-
-      const perfStart = performance.now();
-      const moduleObj = new Function(`return ${result.runner_code}`)() as {
-        createRunner: (runtime: { exec: (_node: unknown, attrs: Record<string, unknown>) => unknown }) => (_ctx: unknown) => unknown;
-      };
-      const runner = moduleObj.createRunner({
-        exec: (_node: unknown, attrs: Record<string, unknown>) => attrs.value ?? attrs.left_value ?? attrs.condition ?? null,
-      });
-      const totalIters = Math.max(1, Math.min(50000, Math.floor(benchmarkIterations)));
-      for (let i = 0; i < totalIters; i += 1) {
-        runner({
-          execution_symbol: benchmarkSymbol ? { ticker: benchmarkSymbol } : null,
-          index: i,
-        });
-      }
-      const perfMs = Number((performance.now() - perfStart).toFixed(3));
-      setBenchmarkClientRunMs(perfMs);
     } catch (error) {
       setBenchmarkError(error instanceof Error ? error.message : 'Failed to run benchmark');
     } finally {
@@ -345,26 +329,42 @@ export function NodeSettingsDrawer({
     setBenchmarkError(null);
     setIsLegacyBenchmarkRunning(true);
     try {
-      const runs = Math.max(1, Math.min(10, Math.floor(legacyBenchmarkRuns)));
-      const samples: number[] = [];
-      for (let i = 0; i < runs; i += 1) {
-        const started = performance.now();
-        await strategiesService.runStrategyRunner({
-          strategy_id: strategyId,
-          mode: 'preview',
-          symbol: benchmarkSymbol,
-          execution_time: new Date().toISOString(),
-        });
-        samples.push(Number((performance.now() - started).toFixed(3)));
-      }
-      const avg = Number((samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(3));
-      const min = Number(Math.min(...samples).toFixed(3));
-      const max = Number(Math.max(...samples).toFixed(3));
-      setLegacyBenchmarkMs({ samples, avg, min, max });
+      const started = performance.now();
+      await strategiesService.runStrategyRunner({
+        strategy_id: strategyId,
+        mode: 'preview',
+        symbol: benchmarkSymbol,
+        execution_time: new Date().toISOString(),
+      });
+      setLegacySingleRunMs(Number((performance.now() - started).toFixed(3)));
     } catch (error) {
       setBenchmarkError(error instanceof Error ? error.message : 'Failed to run legacy comparison');
     } finally {
       setIsLegacyBenchmarkRunning(false);
+    }
+  };
+
+  const runCompiledSingleExecution = async () => {
+    if (!benchmarkResult?.plan) {
+      setBenchmarkError('Compile first, then run single execution.');
+      return;
+    }
+    if (!benchmarkSymbol.trim()) {
+      setBenchmarkError('Select a symbol for compiled execution.');
+      return;
+    }
+    setBenchmarkError(null);
+    setIsBenchmarkRunning(true);
+    try {
+      const result = await onRunCompiledSingleExecutionBenchmark(benchmarkResult.plan, benchmarkSymbol);
+      if (result.status === 'failed') {
+        throw new Error(result.error || 'Compiled execution failed');
+      }
+      setCompiledSingleRunMs(result.durationMs);
+    } catch (error) {
+      setBenchmarkError(error instanceof Error ? error.message : 'Failed to run compiled execution');
+    } finally {
+      setIsBenchmarkRunning(false);
     }
   };
 
@@ -757,30 +757,6 @@ export function NodeSettingsDrawer({
                     )}
                   </select>
                 </label>
-                <label className="text-xs text-zinc-400">
-                  Iterations
-                  <input
-                    type="number"
-                    min={100}
-                    max={50000}
-                    step={100}
-                    value={benchmarkIterations}
-                    onChange={(event) => setBenchmarkIterations(Math.max(100, Number(event.target.value) || 5000))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                  />
-                </label>
-                <label className="text-xs text-zinc-400">
-                  Legacy Runs
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    step={1}
-                    value={legacyBenchmarkRuns}
-                    onChange={(event) => setLegacyBenchmarkRuns(Math.max(1, Math.min(10, Number(event.target.value) || 3)))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                  />
-                </label>
               </div>
 
               <div className="mt-3 flex gap-2">
@@ -790,18 +766,26 @@ export function NodeSettingsDrawer({
                   disabled={isBenchmarkRunning}
                   className="flex-1 rounded-lg border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-60"
                 >
-                  {isBenchmarkRunning ? 'Benchmarking...' : 'Run Benchmark'}
+                  {isBenchmarkRunning ? 'Compiling...' : 'Compile'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { void runCompiledSingleExecution(); }}
+                  disabled={isBenchmarkRunning || !benchmarkResult?.plan}
+                  className="flex-1 rounded-lg border border-blue-800 bg-blue-950/50 px-3 py-2 text-xs font-semibold text-blue-300 disabled:opacity-60"
+                >
+                  {isBenchmarkRunning ? 'Running...' : 'Run Compiled (1x)'}
+                </button>
+              </div>
+              <div className="mt-2 flex gap-2">
                 <button
                   type="button"
                   onClick={() => { void runLegacyComparison(); }}
                   disabled={isLegacyBenchmarkRunning}
                   className="flex-1 rounded-lg border border-amber-800 bg-amber-950/50 px-3 py-2 text-xs font-semibold text-amber-300 disabled:opacity-60"
                 >
-                  {isLegacyBenchmarkRunning ? 'Comparing...' : 'Compare Legacy'}
+                  {isLegacyBenchmarkRunning ? 'Running...' : 'Run Legacy (1x)'}
                 </button>
-              </div>
-              <div className="mt-2">
                 <button
                   type="button"
                   onClick={logBenchmarkRunner}
@@ -817,19 +801,11 @@ export function NodeSettingsDrawer({
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
                 <p><span className="text-zinc-500">Nodes:</span> {benchmarkResult.plan.node_count}</p>
                 <p><span className="text-zinc-500">Edges:</span> {benchmarkResult.plan.edge_count}</p>
-                <p><span className="text-zinc-500">Iterations:</span> {benchmarkResult.benchmark.iterations}</p>
-                <p><span className="text-zinc-500">Edge compile:</span> {benchmarkResult.benchmark.compile_ms} ms</p>
-                <p><span className="text-zinc-500">Edge run:</span> {benchmarkResult.benchmark.run_ms} ms</p>
-                <p><span className="text-zinc-500">Client run:</span> {benchmarkClientRunMs ?? 'N/A'} ms</p>
-                <p><span className="text-zinc-500">Per iter (client):</span> {benchmarkClientRunMs !== null ? `${(benchmarkClientRunMs / Math.max(1, benchmarkResult.benchmark.iterations)).toFixed(6)} ms` : 'N/A'}</p>
-                {legacyBenchmarkMs && (
-                  <>
-                    <p><span className="text-zinc-500">Legacy avg:</span> {legacyBenchmarkMs.avg} ms</p>
-                    <p><span className="text-zinc-500">Legacy min/max:</span> {legacyBenchmarkMs.min} / {legacyBenchmarkMs.max} ms</p>
-                    {benchmarkClientRunMs !== null && (
-                      <p><span className="text-zinc-500">Speedup (legacy avg / client run):</span> {(legacyBenchmarkMs.avg / Math.max(benchmarkClientRunMs, 0.0001)).toFixed(2)}x</p>
-                    )}
-                  </>
+                <p><span className="text-zinc-500">Compile time:</span> {benchmarkResult.benchmark.compile_ms} ms</p>
+                <p><span className="text-zinc-500">Compiled run (1x, real data):</span> {compiledSingleRunMs ?? 'N/A'} ms</p>
+                <p><span className="text-zinc-500">Legacy run (1x):</span> {legacySingleRunMs ?? 'N/A'} ms</p>
+                {compiledSingleRunMs !== null && legacySingleRunMs !== null && (
+                  <p><span className="text-zinc-500">Speedup:</span> {(legacySingleRunMs / Math.max(compiledSingleRunMs, 0.0001)).toFixed(2)}x</p>
                 )}
                 <p><span className="text-zinc-500">Unsupported node types:</span> {benchmarkResult.plan.unsupported_node_types.length === 0 ? 'None' : benchmarkResult.plan.unsupported_node_types.join(', ')}</p>
               </div>

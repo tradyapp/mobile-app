@@ -3,7 +3,7 @@ import { type EditorNodeData, type EditorNodeField, normalizeNodeCategory } from
 import { getValueType } from '@/modules/tabs/orion/OrionValueView';
 import { type LocalExecutionNodeStatus, type LocalExecutionNodeTrace, parseNodeReferenceToken, makeNodeReferenceToken } from '@/modules/tabs/orion/nodesEditorUtils';
 import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
-import { strategiesService } from '@/services/StrategiesService';
+import { strategiesService, type StrategyCompilePlan } from '@/services/StrategiesService';
 
 type StateHistoryItem = { nodeId: string; data: unknown };
 type Candle = {
@@ -24,6 +24,7 @@ type ReferenceSourceItem = {
   refToken: string;
 };
 type LocalEvalSpec = { op?: unknown };
+type CompiledEdge = { target: string; source_handle: string | null };
 
 function normalizeHandleId(raw: string): string {
   return raw
@@ -57,6 +58,14 @@ function shouldFollowEdge(edge: RFEdge, routeHandles: Set<string> | null, siblin
   if (!hasNamedHandles) return true;
   if (!edge.sourceHandle) return false;
   return routeHandles.has(normalizeHandleId(edge.sourceHandle));
+}
+
+function shouldFollowCompiledEdge(edge: CompiledEdge, routeHandles: Set<string> | null, siblingEdges: CompiledEdge[]): boolean {
+  if (!routeHandles) return true;
+  const hasNamedHandles = siblingEdges.some((item) => Boolean(item.source_handle && item.source_handle.trim().length > 0));
+  if (!hasNamedHandles) return true;
+  if (!edge.source_handle) return false;
+  return routeHandles.has(normalizeHandleId(edge.source_handle));
 }
 
 function normalizeFieldKey(field: EditorNodeField): string {
@@ -1405,4 +1414,118 @@ export async function runLocalExecution(params: {
 
   onStatusChange('completed');
   onErrorChange(null);
+}
+
+export async function runCompiledPlanSingleExecution(params: {
+  strategyId: string;
+  plan: StrategyCompilePlan;
+  nodeTypesCatalog?: StrategyNodeTypeRecord[];
+  selectedExecutionTicker: string;
+  selectedExecutionSymbol: SelectedExecutionSymbol;
+}): Promise<{ durationMs: number; status: 'completed' | 'failed'; error: string | null }> {
+  const {
+    strategyId,
+    plan,
+    nodeTypesCatalog,
+    selectedExecutionTicker,
+    selectedExecutionSymbol,
+  } = params;
+
+  if (!selectedExecutionTicker.trim()) {
+    return { durationMs: 0, status: 'failed', error: 'Select a strategy symbol before running benchmark.' };
+  }
+
+  const startedAt = performance.now();
+  const executionTime = new Date().toISOString();
+  const nodeTypeLookup = buildNodeTypeLookup(nodeTypesCatalog);
+  const compiledNodeById = new Map(plan.compiled_nodes.map((node) => [node.id, node]));
+  const stateHistory: StateHistoryItem[] = [];
+  const stateById = new Map<string, unknown>();
+  const activeNodeIds = new Set<string>(plan.entry_nodes);
+
+  for (const nodeId of plan.topological_order) {
+    if (!activeNodeIds.has(nodeId)) continue;
+    const compiledNode = compiledNodeById.get(nodeId);
+    if (!compiledNode) continue;
+
+    const resolvedAttributes: EditorNodeField[] = compiledNode.attributes.map((attr, index) => {
+      const resolved = attr.kind === 'ref'
+        ? stateById.get(attr.ref_node_id ?? '') ?? null
+        : attr.value ?? null;
+
+      return {
+        id: `${compiledNode.id}-${index}`,
+        key: attr.key,
+        name: attr.key,
+        type: 'text',
+        value: typeof resolved === 'string' ? resolved : '',
+        resolved,
+      } as EditorNodeField & { resolved: unknown };
+    });
+
+    const nodeData = {
+      nodeTypeKey: compiledNode.node_type_key,
+      nodeTypeVersion: compiledNode.node_type_version ?? undefined,
+      attributes: resolvedAttributes,
+    } as EditorNodeData;
+
+    const frozenHistory = [...stateHistory].reverse();
+
+    let output: unknown;
+    try {
+      const localResult = executeLocalNodeIfSupported({
+        nodeData,
+        resolvedAttributes,
+        history: frozenHistory,
+        nodeTypeLookup,
+        executionTimeISO: executionTime,
+        strategyId,
+      });
+
+      if (localResult.handled) {
+        output = localResult.output;
+      } else {
+        const execution = await strategiesService.executeStrategyNode({
+          strategy_id: strategyId,
+          node_type_key: compiledNode.node_type_key,
+          node_type_version: compiledNode.node_type_version,
+          attributes: resolvedAttributes,
+          input_context: {
+            execution_symbol: selectedExecutionSymbol
+              ? {
+                ticker: selectedExecutionSymbol.ticker,
+                name: selectedExecutionSymbol.name,
+                market: selectedExecutionSymbol.market,
+              }
+              : { ticker: selectedExecutionTicker },
+            state_history: frozenHistory,
+          },
+          mode: 'preview',
+          execution_time: executionTime,
+        });
+        output = execution.output;
+      }
+    } catch (error) {
+      return {
+        durationMs: Number((performance.now() - startedAt).toFixed(3)),
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Execution error',
+      };
+    }
+
+    stateById.set(nodeId, output);
+    stateHistory.push({ nodeId, data: output });
+
+    const routeHandles = getRouteHandlesFromOutput(output);
+    for (const edge of compiledNode.edges ?? []) {
+      if (!shouldFollowCompiledEdge(edge, routeHandles, compiledNode.edges ?? [])) continue;
+      activeNodeIds.add(edge.target);
+    }
+  }
+
+  return {
+    durationMs: Number((performance.now() - startedAt).toFixed(3)),
+    status: 'completed',
+    error: null,
+  };
 }

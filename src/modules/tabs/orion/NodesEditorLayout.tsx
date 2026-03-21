@@ -198,6 +198,7 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
         isLive={model.isLive}
         onToggleLive={model.onToggleLive}
         onOpenBacktesting={model.onOpenBacktesting}
+        onRunCompiledSingleExecutionBenchmark={model.onRunCompiledSingleExecutionBenchmark}
         isOwner={model.isOwner}
         trackedSymbols={model.trackedSymbols}
         availableSymbols={model.availableSymbols}
