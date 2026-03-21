@@ -83,6 +83,15 @@ function StopIcon() {
   );
 }
 
+function ClockIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="12" cy="12" r="9" strokeWidth={2} />
+      <path d="M12 7v5l3 2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function OrionBacktestingView({
   isOpen,
   safeHorizontalInsetStyle,
@@ -96,6 +105,9 @@ export default function OrionBacktestingView({
   const [isPaused, setIsPaused] = useState(false);
   const [hits, setHits] = useState<BacktestHit[]>([]);
   const [confirmAction, setConfirmAction] = useState<'close' | 'stop' | null>(null);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [showDateControls, setShowDateControls] = useState(true);
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -105,6 +117,16 @@ export default function OrionBacktestingView({
     }
     return trackedSymbols[0] ?? null;
   }, [selectedExecutionSymbol?.ticker, trackedSymbols]);
+  const hasDateRange = Boolean(fromDate && toDate);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setProcessedCount(0);
+    setHits([]);
+    setIsRunning(false);
+    setIsPaused(false);
+    setShowDateControls(!hasDateRange);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !isRunning || isPaused) return;
@@ -119,7 +141,7 @@ export default function OrionBacktestingView({
       });
     }, 180);
     return () => window.clearInterval(timer);
-  }, [candles.length, isOpen, isPaused, isRunning]);
+  }, [candles.length, hasDateRange, isOpen, isPaused, isRunning]);
 
   useEffect(() => {
     if (processedCount <= 0) return;
@@ -145,6 +167,7 @@ export default function OrionBacktestingView({
   const range = Math.max(0.0001, max - min);
 
   const handlePlayPause = () => {
+    if (!hasDateRange) return;
     if (!isRunning) {
       setProcessedCount(0);
       setHits([]);
@@ -158,6 +181,16 @@ export default function OrionBacktestingView({
   const requestStop = () => {
     if (!isRunning && processedCount === 0) return;
     setConfirmAction('stop');
+  };
+
+  const handleFromDateChange = (value: string) => {
+    setFromDate(value);
+    if (toDate && value && value <= toDate) setShowDateControls(false);
+  };
+
+  const handleToDateChange = (value: string) => {
+    setToDate(value);
+    if (fromDate && value && fromDate <= value) setShowDateControls(false);
   };
 
   const requestClose = () => {
@@ -223,7 +256,8 @@ export default function OrionBacktestingView({
           <button
             type="button"
             onClick={handlePlayPause}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)]"
+            disabled={!hasDateRange}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
             aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
             title={isRunning && !isPaused ? 'Pause' : 'Play'}
           >
@@ -243,29 +277,74 @@ export default function OrionBacktestingView({
 
       <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
         <div className="h-[34dvh] min-h-[220px] border-b border-zinc-800 pt-3">
-          <div className="h-full">
-            <div className="flex h-full items-end gap-1 overflow-hidden">
-              {candles.map((candle, index) => {
-                const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
-                const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
-                const wickTop = ((candle.high - min) / range) * 100;
-                const wickBottom = ((candle.low - min) / range) * 100;
-                const isBull = candle.close >= candle.open;
-                const isProcessed = index < processedCount;
-                return (
-                  <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
-                    <div
-                      className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
-                      style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
-                    />
-                    <div
-                      className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
-                      style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
-                    />
+          <div className="relative h-full">
+            {hasDateRange && !showDateControls && (
+              <button
+                type="button"
+                onClick={() => setShowDateControls(true)}
+                className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/85 text-zinc-300"
+                aria-label="Edit date range"
+                title="Edit date range"
+              >
+                <ClockIcon />
+              </button>
+            )}
+
+            {showDateControls || !hasDateRange ? (
+              <div className="flex h-full items-center justify-center gap-3 px-2">
+                <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <ClockIcon className="h-4 w-4 text-zinc-400" />
+                    <span className="text-sm font-semibold">{fromDate || 'From'}</span>
                   </div>
-                );
-              })}
-            </div>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    max={toDate || undefined}
+                    onChange={(event) => handleFromDateChange(event.target.value)}
+                    className="absolute inset-0 opacity-0"
+                    aria-label="From date"
+                  />
+                </label>
+                <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <ClockIcon className="h-4 w-4 text-zinc-400" />
+                    <span className="text-sm font-semibold">{toDate || 'To'}</span>
+                  </div>
+                  <input
+                    type="date"
+                    value={toDate}
+                    min={fromDate || undefined}
+                    onChange={(event) => handleToDateChange(event.target.value)}
+                    className="absolute inset-0 opacity-0"
+                    aria-label="To date"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="flex h-full items-end gap-1 overflow-hidden">
+                {candles.map((candle, index) => {
+                  const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
+                  const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
+                  const wickTop = ((candle.high - min) / range) * 100;
+                  const wickBottom = ((candle.low - min) / range) * 100;
+                  const isBull = candle.close >= candle.open;
+                  const isProcessed = index < processedCount;
+                  return (
+                    <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
+                      <div
+                        className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                        style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+                      />
+                      <div
+                        className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                        style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
