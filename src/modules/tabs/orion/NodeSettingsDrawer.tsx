@@ -155,6 +155,9 @@ export function NodeSettingsDrawer({
   const [isBenchmarkRunning, setIsBenchmarkRunning] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<StrategyCompileResult | null>(null);
   const [benchmarkClientRunMs, setBenchmarkClientRunMs] = useState<number | null>(null);
+  const [legacyBenchmarkRuns, setLegacyBenchmarkRuns] = useState(3);
+  const [isLegacyBenchmarkRunning, setIsLegacyBenchmarkRunning] = useState(false);
+  const [legacyBenchmarkMs, setLegacyBenchmarkMs] = useState<{ samples: number[]; avg: number; min: number; max: number } | null>(null);
   const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
 
   const selectedTickerSet = useMemo(
@@ -326,6 +329,43 @@ export function NodeSettingsDrawer({
     console.log('[strategy-compile] runner_code\n', benchmarkResult.runner_code);
     // eslint-disable-next-line no-console
     console.log('[strategy-compile] plan\n', benchmarkResult.plan);
+  };
+
+  const runLegacyComparison = async () => {
+    const strategyId = resolveStrategyIdFromPath();
+    if (!strategyId) {
+      setBenchmarkError('Strategy ID not found in route.');
+      return;
+    }
+    if (!benchmarkSymbol.trim()) {
+      setBenchmarkError('Select a symbol for legacy comparison.');
+      return;
+    }
+
+    setBenchmarkError(null);
+    setIsLegacyBenchmarkRunning(true);
+    try {
+      const runs = Math.max(1, Math.min(10, Math.floor(legacyBenchmarkRuns)));
+      const samples: number[] = [];
+      for (let i = 0; i < runs; i += 1) {
+        const started = performance.now();
+        await strategiesService.runStrategyRunner({
+          strategy_id: strategyId,
+          mode: 'preview',
+          symbol: benchmarkSymbol,
+          execution_time: new Date().toISOString(),
+        });
+        samples.push(Number((performance.now() - started).toFixed(3)));
+      }
+      const avg = Number((samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(3));
+      const min = Number(Math.min(...samples).toFixed(3));
+      const max = Number(Math.max(...samples).toFixed(3));
+      setLegacyBenchmarkMs({ samples, avg, min, max });
+    } catch (error) {
+      setBenchmarkError(error instanceof Error ? error.message : 'Failed to run legacy comparison');
+    } finally {
+      setIsLegacyBenchmarkRunning(false);
+    }
   };
 
   useEffect(() => {
@@ -729,6 +769,18 @@ export function NodeSettingsDrawer({
                     className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
                   />
                 </label>
+                <label className="text-xs text-zinc-400">
+                  Legacy Runs
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={legacyBenchmarkRuns}
+                    onChange={(event) => setLegacyBenchmarkRuns(Math.max(1, Math.min(10, Number(event.target.value) || 3)))}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  />
+                </label>
               </div>
 
               <div className="mt-3 flex gap-2">
@@ -740,6 +792,16 @@ export function NodeSettingsDrawer({
                 >
                   {isBenchmarkRunning ? 'Benchmarking...' : 'Run Benchmark'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { void runLegacyComparison(); }}
+                  disabled={isLegacyBenchmarkRunning}
+                  className="flex-1 rounded-lg border border-amber-800 bg-amber-950/50 px-3 py-2 text-xs font-semibold text-amber-300 disabled:opacity-60"
+                >
+                  {isLegacyBenchmarkRunning ? 'Comparing...' : 'Compare Legacy'}
+                </button>
+              </div>
+              <div className="mt-2">
                 <button
                   type="button"
                   onClick={logBenchmarkRunner}
@@ -760,6 +822,15 @@ export function NodeSettingsDrawer({
                 <p><span className="text-zinc-500">Edge run:</span> {benchmarkResult.benchmark.run_ms} ms</p>
                 <p><span className="text-zinc-500">Client run:</span> {benchmarkClientRunMs ?? 'N/A'} ms</p>
                 <p><span className="text-zinc-500">Per iter (client):</span> {benchmarkClientRunMs !== null ? `${(benchmarkClientRunMs / Math.max(1, benchmarkResult.benchmark.iterations)).toFixed(6)} ms` : 'N/A'}</p>
+                {legacyBenchmarkMs && (
+                  <>
+                    <p><span className="text-zinc-500">Legacy avg:</span> {legacyBenchmarkMs.avg} ms</p>
+                    <p><span className="text-zinc-500">Legacy min/max:</span> {legacyBenchmarkMs.min} / {legacyBenchmarkMs.max} ms</p>
+                    {benchmarkClientRunMs !== null && (
+                      <p><span className="text-zinc-500">Speedup (legacy avg / client run):</span> {(legacyBenchmarkMs.avg / Math.max(benchmarkClientRunMs, 0.0001)).toFixed(2)}x</p>
+                    )}
+                  </>
+                )}
                 <p><span className="text-zinc-500">Unsupported node types:</span> {benchmarkResult.plan.unsupported_node_types.length === 0 ? 'None' : benchmarkResult.plan.unsupported_node_types.join(', ')}</p>
               </div>
             )}

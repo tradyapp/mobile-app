@@ -226,6 +226,24 @@ export interface StrategyCompileResult {
   };
 }
 
+export interface StrategyRunnerInput {
+  strategy_id?: string;
+  node_map?: StrategyNodeMap;
+  mode?: "preview" | "cloud" | "live";
+  symbol?: string | null;
+  execution_time?: string | null;
+}
+
+export interface StrategyRunnerResult {
+  status: "completed" | "failed";
+  failed_node_id: string | null;
+  traces: unknown[];
+  final_result: unknown;
+  strategy_id: string | null;
+  mode: "preview" | "cloud" | "live";
+  execution_time: string;
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -989,6 +1007,16 @@ class StrategiesService {
       strategy_id: input.strategy_id,
       node_map: input.node_map,
       benchmark_iterations: input.benchmark_iterations ?? 3000,
+    });
+  }
+
+  async runStrategyRunner(input: StrategyRunnerInput): Promise<StrategyRunnerResult> {
+    return this.invokeFunction<StrategyRunnerResult>("strategy-runner", {
+      strategy_id: input.strategy_id,
+      node_map: input.node_map,
+      mode: input.mode ?? "preview",
+      symbol: input.symbol ?? null,
+      execution_time: input.execution_time ?? null,
     });
   }
 }
