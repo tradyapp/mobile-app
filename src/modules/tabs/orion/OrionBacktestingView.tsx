@@ -92,6 +92,17 @@ function ClockIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
+function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M4 19h16" strokeWidth={2} strokeLinecap="round" />
+      <path d="M7 15V9" strokeWidth={2} strokeLinecap="round" />
+      <path d="M12 15V6" strokeWidth={2} strokeLinecap="round" />
+      <path d="M17 15v-3" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function OrionBacktestingView({
   isOpen,
   safeHorizontalInsetStyle,
@@ -108,6 +119,7 @@ export default function OrionBacktestingView({
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [showDateControls, setShowDateControls] = useState(true);
+  const [isLandscape, setIsLandscape] = useState(false);
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -118,6 +130,17 @@ export default function OrionBacktestingView({
     return trackedSymbols[0] ?? null;
   }, [selectedExecutionSymbol?.ticker, trackedSymbols]);
   const hasDateRange = Boolean(fromDate && toDate);
+  const availableFromDate = useMemo(() => candles[0]?.datetime.slice(0, 10) ?? '', [candles]);
+  const availableToDate = useMemo(() => candles[candles.length - 1]?.datetime.slice(0, 10) ?? '', [candles]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(orientation: landscape)');
+    const update = () => setIsLandscape(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,13 +207,15 @@ export default function OrionBacktestingView({
   };
 
   const handleFromDateChange = (value: string) => {
-    setFromDate(value);
-    if (toDate && value && value <= toDate) setShowDateControls(false);
+    const bounded = value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
+    setFromDate(bounded);
+    if (toDate && bounded && bounded <= toDate) setShowDateControls(false);
   };
 
   const handleToDateChange = (value: string) => {
-    setToDate(value);
-    if (fromDate && value && fromDate <= value) setShowDateControls(false);
+    const bounded = value < availableFromDate ? availableFromDate : (value > availableToDate ? availableToDate : value);
+    setToDate(bounded);
+    if (fromDate && bounded && fromDate <= bounded) setShowDateControls(false);
   };
 
   const requestClose = () => {
@@ -252,130 +277,149 @@ export default function OrionBacktestingView({
           </div>
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handlePlayPause}
-            disabled={!hasDateRange}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
-            aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
-            title={isRunning && !isPaused ? 'Pause' : 'Play'}
-          >
-            {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          <button
-            type="button"
-            onClick={requestStop}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
-            aria-label="Stop backtesting"
-            title="Stop"
-          >
-            <StopIcon />
-          </button>
-        </div>
       </header>
 
       <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
-        <div className="h-[34dvh] min-h-[220px] border-b border-zinc-800 pt-3">
-          <div className="relative h-full">
-            {hasDateRange && !showDateControls && (
+        <div className={`min-h-0 h-full pt-3 pb-[max(16px,env(safe-area-inset-bottom))] ${isLandscape ? 'flex gap-3' : 'block'}`}>
+          <div className={`min-h-0 ${isLandscape ? 'w-1/2 border-r border-zinc-800 pr-3' : 'h-[34dvh] min-h-[220px] border-b border-zinc-800'}`}>
+            <div className="mb-2 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowDateControls(true)}
-                className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/85 text-zinc-300"
-                aria-label="Edit date range"
-                title="Edit date range"
+                onClick={handlePlayPause}
+                disabled={!hasDateRange}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
+                aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
+                title={isRunning && !isPaused ? 'Pause' : 'Play'}
               >
-                <ClockIcon />
+                {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
               </button>
-            )}
+              <button
+                type="button"
+                onClick={requestStop}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
+                aria-label="Stop backtesting"
+                title="Stop"
+              >
+                <StopIcon />
+              </button>
+            </div>
+            <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
+              {hasDateRange && !showDateControls && (
+                <button
+                  type="button"
+                  onClick={() => setShowDateControls(true)}
+                  className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/85 text-zinc-300"
+                  aria-label="Edit date range"
+                  title="Edit date range"
+                >
+                  <ClockIcon />
+                </button>
+              )}
 
-            {showDateControls || !hasDateRange ? (
-              <div className="flex h-full items-center justify-center gap-3 px-2">
-                <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
-                  <div className="flex items-center gap-2">
-                    <ClockIcon className="h-4 w-4 text-zinc-400" />
-                    <span className="text-sm font-semibold">{fromDate || 'From'}</span>
-                  </div>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    max={toDate || undefined}
-                    onChange={(event) => handleFromDateChange(event.target.value)}
-                    className="absolute inset-0 opacity-0"
-                    aria-label="From date"
-                  />
-                </label>
-                <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
-                  <div className="flex items-center gap-2">
-                    <ClockIcon className="h-4 w-4 text-zinc-400" />
-                    <span className="text-sm font-semibold">{toDate || 'To'}</span>
-                  </div>
-                  <input
-                    type="date"
-                    value={toDate}
-                    min={fromDate || undefined}
-                    onChange={(event) => handleToDateChange(event.target.value)}
-                    className="absolute inset-0 opacity-0"
-                    aria-label="To date"
-                  />
-                </label>
-              </div>
-            ) : (
-              <div className="flex h-full items-end gap-1 overflow-hidden">
-                {candles.map((candle, index) => {
-                  const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
-                  const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
-                  const wickTop = ((candle.high - min) / range) * 100;
-                  const wickBottom = ((candle.low - min) / range) * 100;
-                  const isBull = candle.close >= candle.open;
-                  const isProcessed = index < processedCount;
-                  return (
-                    <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
-                      <div
-                        className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
-                        style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+              {showDateControls || !hasDateRange ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 px-2">
+                  <div className="flex w-full items-center justify-center gap-3">
+                    <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
+                      <div className="flex items-center gap-2">
+                        <ClockIcon className="h-4 w-4 text-zinc-400" />
+                        <span className="text-sm font-semibold">{fromDate || 'From'}</span>
+                      </div>
+                      <input
+                        type="date"
+                        value={fromDate}
+                        min={availableFromDate || undefined}
+                        max={(toDate || availableToDate) || undefined}
+                        onChange={(event) => handleFromDateChange(event.target.value)}
+                        className="absolute inset-0 opacity-0"
+                        aria-label="From date"
                       />
-                      <div
-                        className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
-                        style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                    </label>
+                    <label className="relative flex w-[42%] cursor-pointer items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100">
+                      <div className="flex items-center gap-2">
+                        <ClockIcon className="h-4 w-4 text-zinc-400" />
+                        <span className="text-sm font-semibold">{toDate || 'To'}</span>
+                      </div>
+                      <input
+                        type="date"
+                        value={toDate}
+                        min={(fromDate || availableFromDate) || undefined}
+                        max={availableToDate || undefined}
+                        onChange={(event) => handleToDateChange(event.target.value)}
+                        className="absolute inset-0 opacity-0"
+                        aria-label="To date"
                       />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="min-h-0 h-[calc(66dvh-max(16px,env(safe-area-inset-bottom))-56px)] overflow-hidden pt-3 pb-[max(16px,env(safe-area-inset-bottom))]">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-zinc-100">Aciertos</p>
-            <div className="flex items-center gap-3 text-[11px] text-zinc-400">
-              <span>{processedCount}/{candles.length}</span>
-              <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-200">{hits.length}</span>
+                    </label>
+                  </div>
+                  <p className="text-xs text-zinc-400">
+                    Disponible: {availableFromDate || '--'} a {availableToDate || '--'}
+                  </p>
+                  {hasDateRange && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDateControls(false)}
+                      className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100"
+                    >
+                      <ChartIcon className="h-4 w-4" />
+                      Ver gráfica
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-full items-end gap-1 overflow-hidden">
+                  {candles.map((candle, index) => {
+                    const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
+                    const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
+                    const wickTop = ((candle.high - min) / range) * 100;
+                    const wickBottom = ((candle.low - min) / range) * 100;
+                    const isBull = candle.close >= candle.open;
+                    const isProcessed = index < processedCount;
+                    return (
+                      <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
+                        <div
+                          className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                          style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+                        />
+                        <div
+                          className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                          style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="h-full overflow-y-auto pb-4">
-            <List strong inset>
-              {hits.map((hit) => (
-                <ListItem
-                  key={hit.id}
-                  title={hit.nodeType}
-                  subtitle={new Date(hit.anchorTime).toLocaleString()}
-                  after={hit.percentage !== null
-                    ? <span className="text-[12px] font-semibold text-blue-300">{hit.percentage.toFixed(2)}%</span>
-                    : <span className="text-[12px] font-semibold text-amber-300">{formatStars(hit.rating ?? 0)}</span>}
-                />
-              ))}
-              {hits.length === 0 && (
-                <ListItem
-                  title="No hay aciertos todavía"
-                  subtitle="Presiona Play para iniciar backtesting"
-                />
-              )}
-            </List>
+          <div className={`min-h-0 overflow-hidden ${isLandscape ? 'w-1/2 pl-1' : 'h-[calc(66dvh-max(16px,env(safe-area-inset-bottom))-56px)] pt-3'}`}>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-zinc-100">Aciertos</p>
+              <div className="flex items-center gap-3 text-[11px] text-zinc-400">
+                <span>{processedCount}/{candles.length}</span>
+                <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-200">{hits.length}</span>
+              </div>
+            </div>
+
+            <div className="h-full overflow-y-auto pb-4">
+              <List strong inset>
+                {hits.map((hit) => (
+                  <ListItem
+                    key={hit.id}
+                    title={hit.nodeType}
+                    subtitle={new Date(hit.anchorTime).toLocaleString()}
+                    after={hit.percentage !== null
+                      ? <span className="text-[12px] font-semibold text-blue-300">{hit.percentage.toFixed(2)}%</span>
+                      : <span className="text-[12px] font-semibold text-amber-300">{formatStars(hit.rating ?? 0)}</span>}
+                  />
+                ))}
+                {hits.length === 0 && (
+                  <ListItem
+                    title="No hay aciertos todavía"
+                    subtitle="Presiona Play para iniciar backtesting"
+                  />
+                )}
+              </List>
+            </div>
           </div>
         </div>
       </div>
