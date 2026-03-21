@@ -280,12 +280,31 @@ export default function OrionBacktestingView({
           </div>
         </button>
 
+        <button
+          type="button"
+          onClick={handlePlayPause}
+          disabled={!hasDateRange}
+          className="ml-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
+          aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
+          title={isRunning && !isPaused ? 'Pause' : 'Play'}
+        >
+          {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
+        </button>
+        <button
+          type="button"
+          onClick={requestStop}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
+          aria-label="Stop backtesting"
+          title="Stop"
+        >
+          <StopIcon />
+        </button>
       </header>
 
       <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
         <div className={`min-h-0 h-full pt-3 pb-[max(16px,env(safe-area-inset-bottom))] ${isLandscape ? 'flex gap-3' : 'block'}`}>
           <div className={`min-h-0 ${isLandscape ? 'w-1/2 border-r border-zinc-800 pr-3' : 'h-[34dvh] min-h-[220px] border-b border-zinc-800'}`}>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-start">
               <button
                 type="button"
                 onClick={() => setShowDateControls((prev) => !prev)}
@@ -296,27 +315,6 @@ export default function OrionBacktestingView({
               >
                 {showDateControls ? <ChartIcon className="h-5 w-5" /> : <ClockIcon className="h-5 w-5" />}
               </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePlayPause}
-                  disabled={!hasDateRange}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
-                  aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
-                  title={isRunning && !isPaused ? 'Pause' : 'Play'}
-                >
-                  {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
-                </button>
-                <button
-                  type="button"
-                  onClick={requestStop}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
-                  aria-label="Stop backtesting"
-                  title="Stop"
-                >
-                  <StopIcon />
-                </button>
-              </div>
             </div>
             <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
               {showDateControls || !hasDateRange ? (
