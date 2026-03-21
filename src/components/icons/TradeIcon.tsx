@@ -6,28 +6,27 @@ const TradeIcon = () => {
       width="24px"
       height="24px"
       viewBox="0 0 24 24"
-      version="1.1"
       xmlns="http://www.w3.org/2000/svg"
-      fill="currentColor"
+      fill="none"
       stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      {/* Línea diagonal entrecortada separando las dos flechas */}
+      {/* Flecha abajo-izquierda */}
+      <polyline points="9,14 4,19 9,19" fill="none" />
+      <line x1="4" y1="19" x2="11" y2="12" />
+      {/* Línea diagonal entrecortada entre las flechas */}
       <line
-        x1="4"
-        y1="20"
-        x2="20"
-        y2="4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeDasharray="2 2"
-        fill="none"
+        x1="10"
+        y1="13"
+        x2="14"
+        y2="11"
+        strokeDasharray="1.5 1.5"
       />
-      {/* Flecha superior-izquierda apuntando arriba-izquierda */}
-      <polygon points="3,3 9,3 3,9" fill="currentColor" stroke="none" />
-      <line x1="3" y1="3" x2="10" y2="10" strokeWidth="2" stroke="currentColor" fill="none" />
-      {/* Flecha inferior-derecha apuntando abajo-derecha (invertida) */}
-      <polygon points="21,21 15,21 21,15" fill="currentColor" stroke="none" />
-      <line x1="21" y1="21" x2="14" y2="14" strokeWidth="2" stroke="currentColor" fill="none" />
+      {/* Flecha arriba-derecha */}
+      <polyline points="15,10 20,5 15,5" fill="none" />
+      <line x1="20" y1="5" x2="13" y2="12" />
     </svg>
   );
 };
