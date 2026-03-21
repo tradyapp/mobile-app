@@ -147,6 +147,7 @@ export function NodeSettingsDrawer({
   const [isBacktestRunning, setIsBacktestRunning] = useState(false);
   const [backtestMetadata, setBacktestMetadata] = useState<StrategyBacktestMetadataResult | null>(null);
   const [backtestResult, setBacktestResult] = useState<StrategyBacktestRunResult | null>(null);
+  const [backtestJobId, setBacktestJobId] = useState<string | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
 
   const selectedTickerSet = useMemo(
@@ -237,15 +238,31 @@ export function NodeSettingsDrawer({
     setBacktestError(null);
     setIsBacktestRunning(true);
     try {
-      const result = await strategiesService.runStrategyBacktest({
+      let result = await strategiesService.startStrategyBacktestJob({
         strategy_id: strategyId,
         symbol: backtestSymbol,
         from: makeStartISO(backtestFromDate),
         to: makeEndISO(backtestToDate),
         max_bars: backtestMaxBars,
         mode: 'preview',
+        chunk_bars: 300,
+        events_limit: 200,
       });
+      setBacktestJobId(result.job_id ?? null);
       setBacktestResult(result);
+
+      const terminalStates = new Set(['completed', 'failed', 'canceled']);
+      let guard = 0;
+      while (!terminalStates.has(result.status) && result.job_id && guard < 120) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        result = await strategiesService.stepStrategyBacktestJob(result.job_id, 300, 200);
+        setBacktestResult(result);
+        guard += 1;
+      }
+
+      if (result.status === 'failed') {
+        throw new Error(result.last_error || 'Backtest job failed');
+      }
     } catch (error) {
       setBacktestError(error instanceof Error ? error.message : 'Failed to run backtest');
     } finally {
@@ -580,6 +597,8 @@ export function NodeSettingsDrawer({
 
             {backtestResult && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
+                <p><span className="text-zinc-500">Status:</span> {backtestResult.status}{typeof backtestResult.progress === 'number' ? ` (${backtestResult.progress}%)` : ''}</p>
+                {backtestJobId && <p><span className="text-zinc-500">Job:</span> {backtestJobId}</p>}
                 <p><span className="text-zinc-500">Evaluated:</span> {backtestResult.bars_evaluated} / {backtestResult.bars_available}</p>
                 <p><span className="text-zinc-500">Events:</span> {backtestResult.stats.events_total}</p>
                 <p><span className="text-zinc-500">True:</span> {backtestResult.stats.true_events}</p>

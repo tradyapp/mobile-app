@@ -138,6 +138,11 @@ export interface StrategyBacktestRunInput {
   mode?: "preview" | "cloud" | "live";
 }
 
+export interface StrategyBacktestJobInput extends StrategyBacktestRunInput {
+  chunk_bars?: number;
+  events_limit?: number;
+}
+
 export interface StrategyBacktestRunEvent {
   execution_time: string;
   anchor_time: string;
@@ -149,7 +154,8 @@ export interface StrategyBacktestRunEvent {
 }
 
 export interface StrategyBacktestRunResult {
-  status: "completed";
+  status: "queued" | "running" | "completed" | "failed" | "canceled";
+  job_id?: string;
   symbol: string;
   market: StrategySymbolMarket;
   requested_timeframes: string[];
@@ -168,6 +174,8 @@ export interface StrategyBacktestRunResult {
   };
   warnings: string[];
   events: StrategyBacktestRunEvent[];
+  progress?: number;
+  last_error?: string | null;
 }
 
 interface CreateStrategyInput {
@@ -884,6 +892,46 @@ class StrategiesService {
       to: input.to,
       max_bars: input.max_bars,
       mode: input.mode ?? "preview",
+    });
+  }
+
+  async startStrategyBacktestJob(input: StrategyBacktestJobInput): Promise<StrategyBacktestRunResult> {
+    return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
+      action: "start",
+      strategy_id: input.strategy_id,
+      node_map: input.node_map,
+      symbol: input.symbol,
+      market: input.market,
+      from: input.from,
+      to: input.to,
+      max_bars: input.max_bars,
+      mode: input.mode ?? "preview",
+      chunk_bars: input.chunk_bars,
+      events_limit: input.events_limit,
+    });
+  }
+
+  async stepStrategyBacktestJob(jobId: string, chunkBars?: number, eventsLimit?: number): Promise<StrategyBacktestRunResult> {
+    return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
+      action: "step",
+      job_id: jobId,
+      chunk_bars: chunkBars,
+      events_limit: eventsLimit,
+    });
+  }
+
+  async getStrategyBacktestJobStatus(jobId: string, eventsLimit?: number): Promise<StrategyBacktestRunResult> {
+    return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
+      action: "status",
+      job_id: jobId,
+      events_limit: eventsLimit,
+    });
+  }
+
+  async cancelStrategyBacktestJob(jobId: string): Promise<StrategyBacktestRunResult> {
+    return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
+      action: "cancel",
+      job_id: jobId,
     });
   }
 }
