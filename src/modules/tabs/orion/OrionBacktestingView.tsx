@@ -181,6 +181,7 @@ export default function OrionBacktestingView({
   trackedSymbols,
   onClose,
 }: OrionBacktestingViewProps) {
+  const visibleCandlesCap = 120;
   const [candles, setCandles] = useState<MiniCandle[]>(() => buildMockCandles());
   const [processedCount, setProcessedCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -204,6 +205,10 @@ export default function OrionBacktestingView({
     }
     return trackedSymbols[0] ?? null;
   }, [selectedExecutionSymbol?.ticker, trackedSymbols]);
+  const sessionScopeId = useMemo(() => {
+    const ticker = activeSymbol?.ticker?.toUpperCase() ?? selectedExecutionSymbol?.ticker?.toUpperCase() ?? 'UNKNOWN';
+    return `${strategyId}::${ticker}`;
+  }, [activeSymbol?.ticker, selectedExecutionSymbol?.ticker, strategyId]);
   const hasDateRange = Boolean(fromDate && toDate);
   const availableFromDate = availableRange?.from ?? '';
   const availableToDate = availableRange?.to ?? '';
@@ -220,7 +225,7 @@ export default function OrionBacktestingView({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let active = true;
-    void loadBacktestingSession(strategyId)
+    void loadBacktestingSession(sessionScopeId)
       .then((session) => {
         if (!active || !session) return;
         setFromDate(session.fromDate || '');
@@ -234,7 +239,7 @@ export default function OrionBacktestingView({
     return () => {
       active = false;
     };
-  }, [strategyId]);
+  }, [sessionScopeId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -243,6 +248,7 @@ export default function OrionBacktestingView({
     setIsRunning(false);
     setIsPaused(false);
     setShowDateControls(!hasDateRange);
+    setCandles([]);
   }, [hasDateRange, isOpen]);
 
   useEffect(() => {
@@ -293,6 +299,7 @@ export default function OrionBacktestingView({
     const symbolType = marketToSymbolType(activeSymbol.market);
     setIsCandlesLoading(true);
     setCandlesError(null);
+    setCandles([]);
     void StockDataService.getCandlesInRange(
       activeSymbol.ticker,
       BACKTEST_TIMEFRAME,
@@ -331,12 +338,12 @@ export default function OrionBacktestingView({
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hasHydratedSession) return;
-    void saveBacktestingSession(strategyId, {
+    void saveBacktestingSession(sessionScopeId, {
       fromDate,
       toDate,
       showDateControls,
     }).catch(() => undefined);
-  }, [fromDate, hasHydratedSession, showDateControls, strategyId, toDate]);
+  }, [fromDate, hasHydratedSession, sessionScopeId, showDateControls, toDate]);
 
   useEffect(() => {
     if (!isOpen || !isRunning || isPaused) return;
@@ -375,6 +382,20 @@ export default function OrionBacktestingView({
   const min = candles.length > 0 ? Math.min(...candles.map((item) => item.low)) : 0;
   const max = candles.length > 0 ? Math.max(...candles.map((item) => item.high)) : 1;
   const range = Math.max(0.0001, max - min);
+  const processedCandle = processedCount > 0
+    ? candles[Math.min(processedCount - 1, Math.max(0, candles.length - 1))]
+    : null;
+  const chartWindowStart = useMemo(() => {
+    if (candles.length <= visibleCandlesCap) return 0;
+    if (processedCount <= 0) return 0;
+    const anchor = Math.min(processedCount, candles.length);
+    const nextStart = Math.max(0, anchor - visibleCandlesCap);
+    return Math.min(nextStart, candles.length - visibleCandlesCap);
+  }, [candles.length, processedCount, visibleCandlesCap]);
+  const visibleCandles = useMemo(
+    () => candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap),
+    [candles, chartWindowStart, visibleCandlesCap],
+  );
 
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
@@ -492,7 +513,7 @@ export default function OrionBacktestingView({
       <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
         <div className={`min-h-0 h-full pt-3 pb-[max(16px,env(safe-area-inset-bottom))] ${isLandscape ? 'flex gap-3' : 'block'}`}>
           <div className={`min-h-0 ${isLandscape ? 'w-1/2 border-r border-zinc-800 pr-3' : 'h-[34dvh] min-h-[220px] border-b border-zinc-800'}`}>
-            <div className="mb-2 flex items-center justify-start">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setShowDateControls((prev) => !prev)}
@@ -503,6 +524,9 @@ export default function OrionBacktestingView({
               >
                 {showDateControls ? <ChartIcon className="h-5 w-5" /> : <ClockIcon className="h-5 w-5" />}
               </button>
+              <div className="min-w-0 text-right text-[11px] text-zinc-400">
+                <p className="truncate">{processedCandle ? new Date(processedCandle.datetime).toLocaleString() : 'No processing yet'}</p>
+              </div>
             </div>
             <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
               {showDateControls || !hasDateRange ? (
@@ -556,7 +580,8 @@ export default function OrionBacktestingView({
                   </div>
                 ) : (
                   <div className="flex h-full items-end gap-1 overflow-hidden">
-                    {candles.map((candle, index) => {
+                    {visibleCandles.map((candle, idx) => {
+                      const index = chartWindowStart + idx;
                       const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
                       const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
                       const wickTop = ((candle.high - min) / range) * 100;
