@@ -385,17 +385,13 @@ export default function OrionBacktestingView({
   const processedCandle = processedCount > 0
     ? candles[Math.min(processedCount - 1, Math.max(0, candles.length - 1))]
     : null;
-  const chartWindowStart = useMemo(() => {
-    if (candles.length <= visibleCandlesCap) return 0;
-    if (processedCount <= 0) return 0;
-    const anchor = Math.min(processedCount, candles.length);
-    const nextStart = Math.max(0, anchor - visibleCandlesCap);
-    return Math.min(nextStart, candles.length - visibleCandlesCap);
-  }, [candles.length, processedCount, visibleCandlesCap]);
-  const visibleCandles = useMemo(
-    () => candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap),
-    [candles, chartWindowStart, visibleCandlesCap],
-  );
+  const chartWindowStart = candles.length <= visibleCandlesCap || processedCount <= 0
+    ? 0
+    : Math.min(
+      Math.max(0, Math.min(processedCount, candles.length) - visibleCandlesCap),
+      candles.length - visibleCandlesCap,
+    );
+  const visibleCandles = candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap);
 
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
