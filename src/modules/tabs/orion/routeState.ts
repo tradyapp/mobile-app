@@ -46,6 +46,16 @@ export function parseOrionRoute(pathname: string): OrionRouteState {
     };
   }
 
+  const backtestingMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes\/backtesting$/);
+  if (backtestingMatch) {
+    return {
+      view: 'marketplace',
+      marketplaceTab: 'my-strategies',
+      myStrategiesScreen: 'nodes',
+      selectedStrategyId: decodeURIComponent(backtestingMatch[1]),
+    };
+  }
+
   const nodesMatch = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes$/);
   if (nodesMatch) {
     return {

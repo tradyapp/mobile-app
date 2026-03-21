@@ -224,7 +224,7 @@ export function NodeSettingsDrawer({
   const resolveStrategyIdFromPath = (): string | null => {
     if (typeof window === 'undefined') return null;
     const normalized = window.location.pathname.replace(/\/+$/, '');
-    const match = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes$/);
+    const match = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes(?:\/backtesting)?$/);
     if (!match) return null;
     try {
       return decodeURIComponent(match[1]);

@@ -23,10 +23,67 @@ type BacktestHit = {
 
 interface OrionBacktestingViewProps {
   isOpen: boolean;
+  strategyId: string;
   safeHorizontalInsetStyle: CSSProperties;
   selectedExecutionSymbol: { ticker: string; name: string; icon_url: string | null } | null;
   trackedSymbols: StrategyTrackedSymbol[];
   onClose: () => void;
+}
+
+type BacktestingSessionState = {
+  fromDate: string;
+  toDate: string;
+  showDateControls: boolean;
+};
+
+const BACKTESTING_DB_NAME = 'orion-backtesting';
+const BACKTESTING_STORE = 'sessions';
+
+function openBacktestingDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(BACKTESTING_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BACKTESTING_STORE)) {
+        db.createObjectStore(BACKTESTING_STORE, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB'));
+  });
+}
+
+async function loadBacktestingSession(strategyId: string): Promise<BacktestingSessionState | null> {
+  const db = await openBacktestingDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BACKTESTING_STORE, 'readonly');
+    const store = tx.objectStore(BACKTESTING_STORE);
+    const request = store.get(strategyId);
+    request.onsuccess = () => {
+      const value = request.result as { state?: BacktestingSessionState } | undefined;
+      resolve(value?.state ?? null);
+    };
+    request.onerror = () => reject(request.error ?? new Error('Failed to read session'));
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function saveBacktestingSession(strategyId: string, state: BacktestingSessionState): Promise<void> {
+  const db = await openBacktestingDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BACKTESTING_STORE, 'readwrite');
+    const store = tx.objectStore(BACKTESTING_STORE);
+    store.put({
+      id: strategyId,
+      updatedAt: new Date().toISOString(),
+      state,
+    });
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to save session'));
+  });
 }
 
 function buildMockCandles(size = 64): MiniCandle[] {
@@ -108,6 +165,7 @@ function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
 
 export default function OrionBacktestingView({
   isOpen,
+  strategyId,
   safeHorizontalInsetStyle,
   selectedExecutionSymbol,
   trackedSymbols,
@@ -123,6 +181,7 @@ export default function OrionBacktestingView({
   const [toDate, setToDate] = useState('');
   const [showDateControls, setShowDateControls] = useState(true);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [hasHydratedSession, setHasHydratedSession] = useState(false);
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -146,13 +205,41 @@ export default function OrionBacktestingView({
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let active = true;
+    void loadBacktestingSession(strategyId)
+      .then((session) => {
+        if (!active || !session) return;
+        setFromDate(session.fromDate || '');
+        setToDate(session.toDate || '');
+        setShowDateControls(Boolean(session.showDateControls));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setHasHydratedSession(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [strategyId]);
+
+  useEffect(() => {
     if (!isOpen) return;
     setProcessedCount(0);
     setHits([]);
     setIsRunning(false);
     setIsPaused(false);
     setShowDateControls(!hasDateRange);
-  }, [isOpen]);
+  }, [hasDateRange, isOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hasHydratedSession) return;
+    void saveBacktestingSession(strategyId, {
+      fromDate,
+      toDate,
+      showDateControls,
+    }).catch(() => undefined);
+  }, [fromDate, hasHydratedSession, showDateControls, strategyId, toDate]);
 
   useEffect(() => {
     if (!isOpen || !isRunning || isPaused) return;

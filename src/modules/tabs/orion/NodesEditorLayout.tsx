@@ -143,6 +143,7 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
 
       <OrionBacktestingView
         isOpen={model.isBacktestingViewOpen}
+        strategyId={model.strategyId}
         safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
         selectedExecutionSymbol={model.selectedExecutionSymbol}
         trackedSymbols={model.trackedSymbols}

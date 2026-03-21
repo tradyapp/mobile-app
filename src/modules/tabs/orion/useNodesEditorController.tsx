@@ -894,6 +894,27 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const executionRunIdRef = useRef(0);
   const lastToastedRunIdRef = useRef(0);
 
+  const isBacktestingRoute = useCallback((): boolean => {
+    if (typeof window === 'undefined') return false;
+    const normalized = window.location.pathname.replace(/\/+$/, '');
+    const match = normalized.match(/^\/orion\/marketplace\/my-strategies\/([^/]+)\/nodes\/backtesting$/);
+    if (!match) return false;
+    try {
+      return decodeURIComponent(match[1]) === strategyId;
+    } catch {
+      return match[1] === strategyId;
+    }
+  }, [strategyId]);
+
+  const syncBacktestingRoute = useCallback((open: boolean) => {
+    if (typeof window === 'undefined') return;
+    const base = `/orion/marketplace/my-strategies/${encodeURIComponent(strategyId)}/nodes`;
+    const target = open ? `${base}/backtesting` : base;
+    const normalized = window.location.pathname.replace(/\/+$/, '');
+    if (normalized === target) return;
+    window.history.pushState(window.history.state, '', target);
+  }, [strategyId]);
+
   const isPlainObject = useCallback((value: unknown): value is Record<string, unknown> => (
     Boolean(value) && typeof value === 'object' && !Array.isArray(value)
   ), []);
@@ -1868,6 +1889,15 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
     void loadNodeVersions();
   }, [isSettingsDrawerOpen, loadNodeVersions]);
 
+  useEffect(() => {
+    setIsBacktestingViewOpen(isBacktestingRoute());
+    const handlePopState = () => {
+      setIsBacktestingViewOpen(isBacktestingRoute());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isBacktestingRoute]);
+
   const handlePublishVersion = useCallback(async (versionName?: string) => {
     if (isPublishingVersion || isPreviewMode) return;
     setIsPublishingVersion(true);
@@ -2047,6 +2077,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   }, [selectedNodeForEditor, updateNodePanelFields]);
 
   return {
+        strategyId,
         strategyName,
         strategyPhotoUrl,
         strategyInitials,
@@ -2175,7 +2206,10 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         isSettingsDrawerOpen,
         onSettingsDrawerOpenChange: handleSettingsDrawerOpenChange,
         isBacktestingViewOpen,
-        onCloseBacktestingView: () => setIsBacktestingViewOpen(false),
+        onCloseBacktestingView: () => {
+          setIsBacktestingViewOpen(false);
+          syncBacktestingRoute(false);
+        },
         settingsPanel,
         onSettingsPanelChange: setSettingsPanel,
         isPublishingVersion,
@@ -2205,6 +2239,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           setIsSettingsDrawerOpen(false);
           setSettingsPanel('menu');
           setIsBacktestingViewOpen(true);
+          syncBacktestingRoute(true);
         },
         onRunCompiledSingleExecutionBenchmark: runCompiledSingleExecutionBenchmark,
         isOwner,
