@@ -70,6 +70,36 @@ function SymbolRow({
   );
 }
 
+type MiniCandle = {
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+function buildMockCandles(size = 40): MiniCandle[] {
+  const now = Date.now();
+  let last = 190;
+  const out: MiniCandle[] = [];
+  for (let i = 0; i < size; i += 1) {
+    const drift = Math.sin(i / 4) * 0.9 + (Math.cos(i / 6) * 0.6);
+    const open = last;
+    const close = Math.max(20, open + drift + (i % 2 === 0 ? 0.3 : -0.2));
+    const high = Math.max(open, close) + 0.8 + ((i % 3) * 0.15);
+    const low = Math.min(open, close) - 0.7 - ((i % 4) * 0.12);
+    const datetime = new Date(now - ((size - i) * 60 * 60 * 1000)).toISOString();
+    out.push({ datetime, open, high, low, close });
+    last = close;
+  }
+  return out;
+}
+
+function formatStars(value: number): string {
+  const rounded = Math.max(0, Math.min(5, Math.round(value)));
+  return `${'★'.repeat(rounded)}${'☆'.repeat(5 - rounded)}`;
+}
+
 export interface StrategySymbolCatalogItem {
   ticker: string;
   name: string;
@@ -153,6 +183,8 @@ export function NodeSettingsDrawer({
   const [backtestResult, setBacktestResult] = useState<StrategyBacktestRunResult | null>(null);
   const [backtestJobId, setBacktestJobId] = useState<string | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
+  const [isBacktestPaused, setIsBacktestPaused] = useState(false);
+  const [isBacktestExitDialogOpen, setIsBacktestExitDialogOpen] = useState(false);
   const [benchmarkSymbol, setBenchmarkSymbol] = useState('');
   const [isBenchmarkRunning, setIsBenchmarkRunning] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<StrategyCompileResult | null>(null);
@@ -170,6 +202,24 @@ export function NodeSettingsDrawer({
     if (activeMarketFilter === 'ALL') return availableSymbols;
     return availableSymbols.filter((item) => item.market === activeMarketFilter);
   }, [activeMarketFilter, availableSymbols]);
+
+  const previewCandles = useMemo(() => buildMockCandles(42), []);
+  const processedCandleCount = useMemo(() => {
+    if (typeof backtestResult?.progress === 'number') {
+      return Math.max(0, Math.min(previewCandles.length, Math.round((backtestResult.progress / 100) * previewCandles.length)));
+    }
+    if (isBacktestRunning) return Math.max(1, Math.floor(previewCandles.length * 0.35));
+    return 0;
+  }, [backtestResult?.progress, isBacktestRunning, previewCandles.length]);
+
+  const timelineEvents = useMemo(() => {
+    if (backtestResult?.events?.length) return backtestResult.events;
+    return [
+      { anchor_time: new Date().toISOString(), signal_kind: 'rating' as const, rating: 4, output_node_id: 'mock-a', output_node_type: 'output.rating', output: { percentage: 73.4 } },
+      { anchor_time: new Date(Date.now() - 3600000).toISOString(), signal_kind: 'rating' as const, rating: 3, output_node_id: 'mock-b', output_node_type: 'output.rating', output: { rating: 3 } },
+      { anchor_time: new Date(Date.now() - 7200000).toISOString(), signal_kind: 'true' as const, rating: null, output_node_id: 'mock-c', output_node_type: 'output.true', output: { result: true } },
+    ];
+  }, [backtestResult?.events]);
 
   const resolveStrategyIdFromPath = (): string | null => {
     if (typeof window === 'undefined') return null;
@@ -279,6 +329,16 @@ export function NodeSettingsDrawer({
     } finally {
       setIsBacktestRunning(false);
     }
+  };
+
+  const requestExitBacktesting = () => {
+    setIsBacktestExitDialogOpen(true);
+  };
+
+  const confirmExitBacktesting = () => {
+    setIsBacktestExitDialogOpen(false);
+    setIsBacktestPaused(false);
+    onSettingsPanelChange('menu');
   };
 
   const runBenchmark = async () => {
@@ -629,109 +689,131 @@ export function NodeSettingsDrawer({
         {settingsPanel === 'backtesting' && (
           <div className="space-y-3">
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-              <p className="text-xs font-semibold text-zinc-100">Symbol</p>
-              <select
-                value={backtestSymbol}
-                onChange={(event) => setBacktestSymbol(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-              >
-                {trackedSymbols.length === 0 ? (
-                  <option value="">No symbols configured</option>
-                ) : (
-                  trackedSymbols.map((item) => (
-                    <option key={item.ticker} value={item.ticker}>{item.ticker} · {item.name}</option>
-                  ))
-                )}
-              </select>
-
-              <div className="mt-3 grid grid-cols-1 gap-2">
-                <label className="text-xs text-zinc-400">
-                  From
-                  <input
-                    type="date"
-                    value={backtestFromDate}
-                    onChange={(event) => setBacktestFromDate(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                  />
-                </label>
-                <label className="text-xs text-zinc-400">
-                  To
-                  <input
-                    type="date"
-                    value={backtestToDate}
-                    onChange={(event) => setBacktestToDate(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                  />
-                </label>
-                <label className="text-xs text-zinc-400">
-                  Max Bars
-                  <input
-                    type="number"
-                    min={100}
-                    max={20000}
-                    step={100}
-                    value={backtestMaxBars}
-                    onChange={(event) => setBacktestMaxBars(Math.max(100, Number(event.target.value) || 5000))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                  />
-                </label>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-zinc-100">Backtesting Live UI</p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsBacktestPaused((prev) => !prev)}
+                    className="rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] font-semibold text-zinc-200"
+                  >
+                    {isBacktestPaused ? 'Resume' : 'Pause'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestExitBacktesting}
+                    className="rounded-lg border border-amber-800 bg-amber-950/40 px-2.5 py-1 text-[11px] font-semibold text-amber-300"
+                  >
+                    Stop
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestExitBacktesting}
+                    className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-[11px] font-semibold text-zinc-300"
+                    aria-label="Close backtesting"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => { void loadBacktestMetadata(); }}
-                  disabled={isBacktestLoadingMetadata || trackedSymbols.length === 0}
-                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-60"
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={backtestSymbol}
+                  onChange={(event) => setBacktestSymbol(event.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
                 >
-                  {isBacktestLoadingMetadata ? 'Loading...' : 'Refresh Range'}
-                </button>
+                  {trackedSymbols.length === 0 ? (
+                    <option value="">No symbols configured</option>
+                  ) : (
+                    trackedSymbols.map((item) => (
+                      <option key={item.ticker} value={item.ticker}>{item.ticker}</option>
+                    ))
+                  )}
+                </select>
                 <button
                   type="button"
                   onClick={() => { void runBacktest(); }}
-                  disabled={isBacktestRunning || trackedSymbols.length === 0}
-                  className="flex-1 rounded-lg border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-60"
+                  disabled={isBacktestRunning || trackedSymbols.length === 0 || isBacktestPaused}
+                  className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-60"
                 >
-                  {isBacktestRunning ? 'Running...' : 'Run Backtest'}
+                  {isBacktestRunning ? 'Running...' : 'Run'}
                 </button>
+              </div>
+
+              <div className="mt-3 h-40 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                <div className="flex h-full items-end gap-1 overflow-hidden">
+                  {previewCandles.map((candle, index) => {
+                    const min = Math.min(...previewCandles.map((item) => item.low));
+                    const max = Math.max(...previewCandles.map((item) => item.high));
+                    const range = Math.max(0.0001, max - min);
+                    const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
+                    const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
+                    const wickTop = ((candle.high - min) / range) * 100;
+                    const wickBottom = ((candle.low - min) / range) * 100;
+                    const isBull = candle.close >= candle.open;
+                    const isProcessed = index < processedCandleCount;
+                    return (
+                      <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-30'}`}>
+                        <div
+                          className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                          style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+                        />
+                        <div
+                          className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                          style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
+                <p>Processed candles: {processedCandleCount}/{previewCandles.length}</p>
+                <p>{isBacktestPaused ? 'Paused' : isBacktestRunning ? 'Running' : 'Idle'}</p>
               </div>
             </div>
 
-            {backtestMetadata && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
-                <p><span className="text-zinc-500">Base TF:</span> {backtestMetadata.base_timeframe}</p>
-                {backtestMetadata.timeframe_stats.map((item) => (
-                  <p key={item.timeframe}>
-                    <span className="text-zinc-500">{item.timeframe}:</span> {item.count} candles
-                  </p>
-                ))}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold text-zinc-100">Found Moments</p>
+                <p className="rounded-full bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
+                  {timelineEvents.length}
+                </p>
               </div>
-            )}
-
-            {backtestResult && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
-                <p><span className="text-zinc-500">Status:</span> {backtestResult.status}{typeof backtestResult.progress === 'number' ? ` (${backtestResult.progress}%)` : ''}</p>
-                {backtestJobId && <p><span className="text-zinc-500">Job:</span> {backtestJobId}</p>}
-                <p><span className="text-zinc-500">Evaluated:</span> {backtestResult.bars_evaluated} / {backtestResult.bars_available}</p>
-                <p><span className="text-zinc-500">Events:</span> {backtestResult.stats.events_total}</p>
-                <p><span className="text-zinc-500">True:</span> {backtestResult.stats.true_events}</p>
-                <p><span className="text-zinc-500">Rating:</span> {backtestResult.stats.rating_events}</p>
-                <p><span className="text-zinc-500">Avg rating:</span> {backtestResult.stats.avg_rating ?? 'N/A'}</p>
-                <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-2">
-                  {backtestResult.events.slice(0, 40).map((event, idx) => (
-                    <p key={`${event.anchor_time}-${event.output_node_id}-${idx}`} className="truncate">
-                      {event.anchor_time} · {event.signal_kind}{event.rating !== null ? ` (${event.rating})` : ''}
-                    </p>
-                  ))}
-                  {backtestResult.events.length === 0 && (
-                    <p className="text-zinc-500">No events in selected range.</p>
-                  )}
-                </div>
+              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                {timelineEvents.map((event, idx) => {
+                  const outputObj = event.output && typeof event.output === 'object' ? event.output as Record<string, unknown> : null;
+                  const percentage = outputObj && typeof outputObj.percentage === 'number' ? outputObj.percentage : null;
+                  const rating = typeof event.rating === 'number' ? event.rating : (outputObj && typeof outputObj.rating === 'number' ? outputObj.rating : null);
+                  return (
+                    <div key={`${event.anchor_time}-${event.output_node_id}-${idx}`} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
+                      <p className="truncate text-[11px] text-zinc-400">{new Date(event.anchor_time).toLocaleString()}</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-medium text-zinc-200">{event.output_node_type}</p>
+                        {percentage !== null ? (
+                          <span className="rounded-md bg-blue-950/60 px-2 py-0.5 text-[11px] font-semibold text-blue-300">
+                            {percentage.toFixed(2)}%
+                          </span>
+                        ) : rating !== null ? (
+                          <span className="rounded-md bg-amber-950/60 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                            {formatStars(rating)}
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-emerald-950/60 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                            POSITIVE
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
             <div className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-3 text-[11px] text-amber-200/90">
-              Backtesting can differ from live behavior, especially with multi-timeframe nodes and unfinished candles.
+              UI preview only. Next step: wire this layout to live streaming execution.
             </div>
           </div>
         )}
@@ -822,6 +904,33 @@ export function NodeSettingsDrawer({
         {(nodeVersionsError || symbolsError || backtestError || benchmarkError) && (
           <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
             {nodeVersionsError || symbolsError || backtestError || benchmarkError}
+          </div>
+        )}
+
+        {isBacktestExitDialogOpen && (
+          <div className="fixed inset-0 z-[10100] flex items-center justify-center bg-black/70 p-4">
+            <div className="w-[min(92vw,420px)] rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm font-semibold text-zinc-100">Exit Backtesting?</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                Do you want to exit before backtesting finishes? This will cancel the process.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBacktestExitDialogOpen(false)}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300"
+                >
+                  Stay
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmExitBacktesting}
+                  className="rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-xs font-semibold text-red-300"
+                >
+                  Exit and Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
