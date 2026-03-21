@@ -181,7 +181,7 @@ export default function OrionBacktestingView({
   trackedSymbols,
   onClose,
 }: OrionBacktestingViewProps) {
-  const visibleCandlesCap = 120;
+  const visibleCandlesCap = 100;
   const [candles, setCandles] = useState<MiniCandle[]>(() => buildMockCandles());
   const [processedCount, setProcessedCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -385,12 +385,10 @@ export default function OrionBacktestingView({
   const processedCandle = processedCount > 0
     ? candles[Math.min(processedCount - 1, Math.max(0, candles.length - 1))]
     : null;
-  const chartWindowStart = candles.length <= visibleCandlesCap || processedCount <= 0
+  const chartPageIndex = processedCount <= 0
     ? 0
-    : Math.min(
-      Math.max(0, Math.min(processedCount, candles.length) - visibleCandlesCap),
-      candles.length - visibleCandlesCap,
-    );
+    : Math.floor((Math.min(processedCount, candles.length) - 1) / visibleCandlesCap);
+  const chartWindowStart = Math.min(chartPageIndex * visibleCandlesCap, Math.max(0, candles.length - visibleCandlesCap));
   const visibleCandles = candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap);
 
   const handlePlayPause = () => {
