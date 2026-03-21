@@ -12,6 +12,8 @@ import SearchIcon from "./icons/SearchIcon";
 import LearnIcon from "./icons/LearnIcon";
 import ChartIcon from "./icons/ChartIcon";
 import OrionIcon from "./icons/OrionIcon";
+import TradeIcon from "./icons/TradeIcon";
+import TradeTab from "@/modules/tabs/TradeTab";
 
 const AppLayout = () => {
   const { currentTab, setCurrentTab } = useNavigationStore();
@@ -21,6 +23,7 @@ const AppLayout = () => {
   const tabs = useMemo(() => ([
     { id: "orion" as const, label: "Orion", path: "/orion", icon: <OrionIcon/>, component: OrionTab },
     { id: "chart" as const, label: "Chart", path: "/chart", icon: <ChartIcon/>, component: ChartTab },
+    { id: "trade" as const, label: "Trade", path: "/trade", icon: <TradeIcon />, component: TradeTab },
     { id: "learn" as const, label: "Learn", path: "/learn", icon: <LearnIcon />, component: LearnTab },
     { id: "search" as const, label: "Search", path: "/search", icon: <SearchIcon />, component: SearchTab },
   ]), []);

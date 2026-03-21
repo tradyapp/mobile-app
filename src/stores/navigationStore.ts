@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type TabName = 'orion' | 'chart' | 'wallet' | 'learn' | 'search';
+type TabName = 'orion' | 'chart' | 'trade' | 'wallet' | 'learn' | 'search';
 
 interface NavigationState {
   currentTab: TabName;
