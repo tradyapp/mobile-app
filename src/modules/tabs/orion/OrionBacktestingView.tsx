@@ -1,0 +1,317 @@
+'use client';
+
+import { Dialog, DialogButton, List, ListItem } from 'konsta/react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { SymbolAvatar } from '@/modules/tabs/orion/OrionValueView';
+import { type StrategyTrackedSymbol } from '@/services/StrategiesService';
+
+type MiniCandle = {
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+type BacktestHit = {
+  id: string;
+  anchorTime: string;
+  nodeType: string;
+  rating: number | null;
+  percentage: number | null;
+};
+
+interface OrionBacktestingViewProps {
+  isOpen: boolean;
+  safeHorizontalInsetStyle: CSSProperties;
+  selectedExecutionSymbol: { ticker: string; name: string; icon_url: string | null } | null;
+  trackedSymbols: StrategyTrackedSymbol[];
+  onClose: () => void;
+}
+
+function buildMockCandles(size = 64): MiniCandle[] {
+  const now = Date.now();
+  let last = 190;
+  const out: MiniCandle[] = [];
+  for (let i = 0; i < size; i += 1) {
+    const drift = Math.sin(i / 5) * 1.1 + Math.cos(i / 8) * 0.5;
+    const open = last;
+    const close = Math.max(20, open + drift + (i % 2 === 0 ? 0.25 : -0.2));
+    const high = Math.max(open, close) + 0.9 + ((i % 4) * 0.16);
+    const low = Math.min(open, close) - 0.8 - ((i % 3) * 0.14);
+    const datetime = new Date(now - ((size - i) * 60 * 60 * 1000)).toISOString();
+    out.push({ datetime, open, high, low, close });
+    last = close;
+  }
+  return out;
+}
+
+function formatStars(value: number): string {
+  const rounded = Math.max(0, Math.min(5, Math.round(value)));
+  return `${'★'.repeat(rounded)}${'☆'.repeat(5 - rounded)}`;
+}
+
+function CloseIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+export default function OrionBacktestingView({
+  isOpen,
+  safeHorizontalInsetStyle,
+  selectedExecutionSymbol,
+  trackedSymbols,
+  onClose,
+}: OrionBacktestingViewProps) {
+  const candles = useMemo(() => buildMockCandles(), []);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [hits, setHits] = useState<BacktestHit[]>([]);
+  const [confirmAction, setConfirmAction] = useState<'close' | 'stop' | null>(null);
+
+  const activeSymbol = useMemo(() => {
+    const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
+    if (selectedTicker) {
+      const match = trackedSymbols.find((item) => item.ticker.toUpperCase() === selectedTicker);
+      if (match) return match;
+    }
+    return trackedSymbols[0] ?? null;
+  }, [selectedExecutionSymbol?.ticker, trackedSymbols]);
+
+  useEffect(() => {
+    if (!isOpen || !isRunning || isPaused) return;
+    const timer = window.setInterval(() => {
+      setProcessedCount((prev) => {
+        const next = Math.min(candles.length, prev + 1);
+        if (next >= candles.length) {
+          setIsRunning(false);
+          setIsPaused(false);
+        }
+        return next;
+      });
+    }, 180);
+    return () => window.clearInterval(timer);
+  }, [candles.length, isOpen, isPaused, isRunning]);
+
+  useEffect(() => {
+    if (processedCount <= 0) return;
+    if (processedCount % 7 !== 0) return;
+    const candle = candles[Math.max(0, processedCount - 1)];
+    if (!candle) return;
+    const hitIndex = Math.floor(processedCount / 7);
+    const rating = hitIndex % 2 === 0 ? (2 + (hitIndex % 4)) : null;
+    const percentage = rating === null ? Number((58 + ((hitIndex * 3.4) % 38)).toFixed(2)) : null;
+    setHits((prev) => [{
+      id: `${candle.datetime}-${hitIndex}`,
+      anchorTime: candle.datetime,
+      nodeType: rating === null ? 'output.percentage' : 'output.rating',
+      rating,
+      percentage,
+    }, ...prev]);
+  }, [candles, processedCount]);
+
+  if (!isOpen) return null;
+
+  const min = Math.min(...candles.map((item) => item.low));
+  const max = Math.max(...candles.map((item) => item.high));
+  const range = Math.max(0.0001, max - min);
+
+  const handlePlayPause = () => {
+    if (!isRunning) {
+      setProcessedCount(0);
+      setHits([]);
+      setIsRunning(true);
+      setIsPaused(false);
+      return;
+    }
+    setIsPaused((prev) => !prev);
+  };
+
+  const requestStop = () => {
+    if (!isRunning && processedCount === 0) return;
+    setConfirmAction('stop');
+  };
+
+  const requestClose = () => {
+    if (isRunning) {
+      setConfirmAction('close');
+      return;
+    }
+    onClose();
+  };
+
+  const confirmExit = () => {
+    if (confirmAction === 'stop') {
+      setIsRunning(false);
+      setIsPaused(false);
+      setProcessedCount(0);
+      setHits([]);
+    }
+    if (confirmAction === 'close') {
+      setIsRunning(false);
+      setIsPaused(false);
+      setProcessedCount(0);
+      setHits([]);
+      onClose();
+    }
+    setConfirmAction(null);
+  };
+
+  return (
+    <div className="absolute inset-0 z-[320] flex flex-col bg-zinc-950">
+      <header
+        className="flex items-center gap-3 border-b border-zinc-800 pb-3 pt-[max(16px,env(safe-area-inset-top))]"
+        style={safeHorizontalInsetStyle}
+      >
+        <button
+          type="button"
+          onClick={requestClose}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200"
+          aria-label="Close backtesting view"
+        >
+          <CloseIcon />
+        </button>
+
+        <button
+          type="button"
+          className="flex min-w-[178px] max-w-[56vw] items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/95 px-2.5 py-2 text-left shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+          aria-label="Backtesting symbol"
+        >
+          <SymbolAvatar
+            iconUrl={activeSymbol?.icon_url ?? selectedExecutionSymbol?.icon_url ?? null}
+            ticker={activeSymbol?.ticker ?? selectedExecutionSymbol?.ticker ?? '---'}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold text-zinc-100">
+              {activeSymbol?.ticker ?? selectedExecutionSymbol?.ticker ?? 'Select symbol'}
+            </p>
+            <p className="truncate text-[10px] text-zinc-400">
+              {activeSymbol?.name ?? selectedExecutionSymbol?.name ?? 'Backtesting symbol'}
+            </p>
+          </div>
+        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePlayPause}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)]"
+            aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
+            title={isRunning && !isPaused ? 'Pause' : 'Play'}
+          >
+            {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            type="button"
+            onClick={requestStop}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
+            aria-label="Stop backtesting"
+            title="Stop"
+          >
+            <StopIcon />
+          </button>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
+        <div className="h-[34dvh] min-h-[220px] border-b border-zinc-800 pt-3">
+          <div className="h-full">
+            <div className="flex h-full items-end gap-1 overflow-hidden">
+              {candles.map((candle, index) => {
+                const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
+                const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
+                const wickTop = ((candle.high - min) / range) * 100;
+                const wickBottom = ((candle.low - min) / range) * 100;
+                const isBull = candle.close >= candle.open;
+                const isProcessed = index < processedCount;
+                return (
+                  <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
+                    <div
+                      className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                      style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
+                    />
+                    <div
+                      className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                      style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-h-0 h-[calc(66dvh-max(16px,env(safe-area-inset-bottom))-56px)] overflow-hidden pt-3 pb-[max(16px,env(safe-area-inset-bottom))]">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-zinc-100">Aciertos</p>
+            <div className="flex items-center gap-3 text-[11px] text-zinc-400">
+              <span>{processedCount}/{candles.length}</span>
+              <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-200">{hits.length}</span>
+            </div>
+          </div>
+
+          <div className="h-full overflow-y-auto pb-4">
+            <List strong inset>
+              {hits.map((hit) => (
+                <ListItem
+                  key={hit.id}
+                  title={hit.nodeType}
+                  subtitle={new Date(hit.anchorTime).toLocaleString()}
+                  after={hit.percentage !== null
+                    ? <span className="text-[12px] font-semibold text-blue-300">{hit.percentage.toFixed(2)}%</span>
+                    : <span className="text-[12px] font-semibold text-amber-300">{formatStars(hit.rating ?? 0)}</span>}
+                />
+              ))}
+              {hits.length === 0 && (
+                <ListItem
+                  title="No hay aciertos todavía"
+                  subtitle="Presiona Play para iniciar backtesting"
+                />
+              )}
+            </List>
+          </div>
+        </div>
+      </div>
+
+      <Dialog
+        opened={confirmAction !== null}
+        onBackdropClick={() => setConfirmAction(null)}
+        title={confirmAction === 'stop' ? 'Detener backtesting' : 'Salir de backtesting'}
+        text={confirmAction === 'stop'
+          ? 'Esto detendrá el proceso actual y limpiará el progreso mostrado.'
+          : '¿Quieres salir antes de que termine el backtesting? Esto cancelará el proceso.'}
+      >
+        <DialogButton onClick={() => setConfirmAction(null)}>Cancelar</DialogButton>
+        <DialogButton danger onClick={confirmExit}>Confirmar</DialogButton>
+      </Dialog>
+    </div>
+  );
+}

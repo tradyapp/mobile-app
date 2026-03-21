@@ -842,6 +842,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [nodeTypesError, setNodeTypesError] = useState<string | null>(null);
   const [isNodeTypesDrawerOpen, setIsNodeTypesDrawerOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [isBacktestingViewOpen, setIsBacktestingViewOpen] = useState(false);
   const [nodeEditorNodeId, setNodeEditorNodeId] = useState<string | null>(null);
   const [nodeDetailsPanel, setNodeDetailsPanel] = useState<NodeDetailsPanel>('inputs');
   const [isNodeMapLoading, setIsNodeMapLoading] = useState(true);
@@ -2173,6 +2174,8 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         onAddNodeFromType: handleAddNodeFromType,
         isSettingsDrawerOpen,
         onSettingsDrawerOpenChange: handleSettingsDrawerOpenChange,
+        isBacktestingViewOpen,
+        onCloseBacktestingView: () => setIsBacktestingViewOpen(false),
         settingsPanel,
         onSettingsPanelChange: setSettingsPanel,
         isPublishingVersion,
@@ -2199,7 +2202,9 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
         isLive,
         onToggleLive: () => setIsLive((prev) => !prev),
         onOpenBacktesting: () => {
-          setSettingsPanel('backtesting');
+          setIsSettingsDrawerOpen(false);
+          setSettingsPanel('menu');
+          setIsBacktestingViewOpen(true);
         },
         onRunCompiledSingleExecutionBenchmark: runCompiledSingleExecutionBenchmark,
         isOwner,

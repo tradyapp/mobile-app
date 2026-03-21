@@ -2,6 +2,7 @@
 
 import OrionExecutionSymbolDrawer from '@/modules/tabs/orion/OrionExecutionSymbolDrawer';
 import OrionNodesCanvas from '@/modules/tabs/orion/OrionNodesCanvas';
+import OrionBacktestingView from '@/modules/tabs/orion/OrionBacktestingView';
 import OrionDeleteDialogs from '@/modules/tabs/orion/OrionDeleteDialogs';
 import OrionNodesHeader from '@/modules/tabs/orion/OrionNodesHeader';
 import OrionNodeInspectorPanel from '@/modules/tabs/orion/OrionNodeInspectorPanel';
@@ -139,6 +140,14 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
           </div>
         ) : null}
       </div>
+
+      <OrionBacktestingView
+        isOpen={model.isBacktestingViewOpen}
+        safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
+        selectedExecutionSymbol={model.selectedExecutionSymbol}
+        trackedSymbols={model.trackedSymbols}
+        onClose={model.onCloseBacktestingView}
+      />
 
       <OrionExecutionSymbolDrawer
         isOpen={model.isExecutionSymbolDrawerOpen}

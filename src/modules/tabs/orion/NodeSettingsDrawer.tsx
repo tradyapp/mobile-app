@@ -498,7 +498,6 @@ export function NodeSettingsDrawer({
               <ListItem
                 link
                 title="Back Testing"
-                after={<span className="text-[11px] text-zinc-500">MVP</span>}
                 onClick={onOpenBacktesting}
               />
               <ListItem
@@ -812,9 +811,6 @@ export function NodeSettingsDrawer({
               </div>
             </div>
 
-            <div className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-3 text-[11px] text-amber-200/90">
-              UI preview only. Next step: wire this layout to live streaming execution.
-            </div>
           </div>
         )}
 
