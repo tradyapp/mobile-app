@@ -848,7 +848,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [isNodeVersionsLoading, setIsNodeVersionsLoading] = useState(false);
   const [nodeVersionsError, setNodeVersionsError] = useState<string | null>(null);
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
-  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger'>('menu');
+  const [settingsPanel, setSettingsPanel] = useState<'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'benchmark' | 'danger'>('menu');
   const [isVersionNameDialogOpen, setIsVersionNameDialogOpen] = useState(false);
   const [isDeleteSelectionDialogOpen, setIsDeleteSelectionDialogOpen] = useState(false);
   const [isDeleteStrategyDialogOpen, setIsDeleteStrategyDialogOpen] = useState(false);
@@ -869,6 +869,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   const [localExecutionStatus, setLocalExecutionStatus] = useState<LocalExecutionStatus>('idle');
   const [localExecutionTraces, setLocalExecutionTraces] = useState<LocalExecutionNodeTrace[]>([]);
   const [localExecutionError, setLocalExecutionError] = useState<string | null>(null);
+  const [localExecutionDurationMs, setLocalExecutionDurationMs] = useState<number | null>(null);
   const [isExecutionSymbolDrawerOpen, setIsExecutionSymbolDrawerOpen] = useState(false);
   const [executionSymbolSearch, setExecutionSymbolSearch] = useState('');
   const [executionSymbolFilter, setExecutionSymbolFilter] = useState<NodeSymbolFilter>('ALL');
@@ -1641,6 +1642,7 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
   }, [selectedNodeForEditor]);
 
   const runLocalExecution = useCallback(async () => {
+    const startedAt = performance.now();
     await runLocalExecutionAction({
       strategyId,
       nodes,
@@ -1658,6 +1660,11 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
       onStatusChange: (status) => {
         if (status === 'running') {
           executionRunIdRef.current += 1;
+          setLocalExecutionDurationMs(null);
+        }
+        if (status === 'completed' || status === 'failed') {
+          const elapsed = performance.now() - startedAt;
+          setLocalExecutionDurationMs(Number(elapsed.toFixed(1)));
         }
         setLocalExecutionStatus(status);
       },
@@ -2029,8 +2036,8 @@ function useNodesEditorController({ strategyId, strategyName, strategyPhotoUrl =
           : localExecutionStatus === 'running'
             ? 'Execution · Running'
             : localExecutionStatus === 'completed'
-              ? 'Execution · Completed'
-              : `Execution · Failed${localExecutionError ? ` · ${localExecutionError}` : ''}`,
+              ? `Execution · Success${localExecutionDurationMs !== null ? ` · ${localExecutionDurationMs} ms` : ''}`
+              : `Execution · Failed${localExecutionDurationMs !== null ? ` · ${localExecutionDurationMs} ms` : ''}${localExecutionError ? ` · ${localExecutionError}` : ''}`,
         executionStatusTone: localExecutionStatus === 'idle'
           ? null
           : localExecutionStatus === 'running'

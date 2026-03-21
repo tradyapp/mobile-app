@@ -178,6 +178,54 @@ export interface StrategyBacktestRunResult {
   last_error?: string | null;
 }
 
+export interface StrategyCompileInput {
+  strategy_id?: string;
+  node_map?: StrategyNodeMap;
+  benchmark_iterations?: number;
+}
+
+export interface StrategyCompileCompiledAttr {
+  key: string;
+  kind: "const" | "ref";
+  value?: unknown;
+  ref_node_id?: string;
+}
+
+export interface StrategyCompileCompiledNode {
+  id: string;
+  node_type_key: string;
+  node_type_version: number | null;
+  attributes: StrategyCompileCompiledAttr[];
+  edges: Array<{
+    target: string;
+    source_handle: string | null;
+  }>;
+}
+
+export interface StrategyCompilePlan {
+  compiler_version: string;
+  generated_at: string;
+  strategy_id: string | null;
+  node_count: number;
+  edge_count: number;
+  topological_order: string[];
+  entry_nodes: string[];
+  compiled_nodes: StrategyCompileCompiledNode[];
+  unsupported_node_types: string[];
+  requirements: string[];
+}
+
+export interface StrategyCompileResult {
+  status: "ok";
+  plan: StrategyCompilePlan;
+  runner_code: string;
+  benchmark: {
+    iterations: number;
+    compile_ms: number;
+    run_ms: number;
+  };
+}
+
 interface CreateStrategyInput {
   name: string;
   description?: string | null;
@@ -932,6 +980,15 @@ class StrategiesService {
     return this.invokeFunction<StrategyBacktestRunResult>("strategy-backtest", {
       action: "cancel",
       job_id: jobId,
+    });
+  }
+
+  async compileStrategy(input: StrategyCompileInput): Promise<StrategyCompileResult> {
+    return this.invokeFunction<StrategyCompileResult>("strategy-compile", {
+      action: "compile",
+      strategy_id: input.strategy_id,
+      node_map: input.node_map,
+      benchmark_iterations: input.benchmark_iterations ?? 3000,
     });
   }
 }

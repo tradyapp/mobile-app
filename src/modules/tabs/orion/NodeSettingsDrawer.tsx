@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppDrawer from '@/components/uiux/AppDrawer';
 import {
   strategiesService,
+  type StrategyCompileResult,
   type StrategyBacktestMetadataResult,
   type StrategyBacktestRunResult,
   type StrategyNodeVersionRecord,
@@ -78,8 +79,8 @@ export interface StrategySymbolCatalogItem {
 interface NodeSettingsDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger';
-  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'danger') => void;
+  settingsPanel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'benchmark' | 'danger';
+  onSettingsPanelChange: (panel: 'menu' | 'versions' | 'symbols' | 'symbols-library' | 'backtesting' | 'benchmark' | 'danger') => void;
   isPreviewMode: boolean;
   isPublishingVersion: boolean;
   previewVersion: StrategyNodeVersionRecord | null;
@@ -149,6 +150,12 @@ export function NodeSettingsDrawer({
   const [backtestResult, setBacktestResult] = useState<StrategyBacktestRunResult | null>(null);
   const [backtestJobId, setBacktestJobId] = useState<string | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
+  const [benchmarkSymbol, setBenchmarkSymbol] = useState('');
+  const [benchmarkIterations, setBenchmarkIterations] = useState(5000);
+  const [isBenchmarkRunning, setIsBenchmarkRunning] = useState(false);
+  const [benchmarkResult, setBenchmarkResult] = useState<StrategyCompileResult | null>(null);
+  const [benchmarkClientRunMs, setBenchmarkClientRunMs] = useState<number | null>(null);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
 
   const selectedTickerSet = useMemo(
     () => new Set(trackedSymbols.map((item) => item.ticker.toUpperCase())),
@@ -270,12 +277,70 @@ export function NodeSettingsDrawer({
     }
   };
 
+  const runBenchmark = async () => {
+    const strategyId = resolveStrategyIdFromPath();
+    if (!strategyId) {
+      setBenchmarkError('Strategy ID not found in route.');
+      return;
+    }
+
+    setBenchmarkError(null);
+    setIsBenchmarkRunning(true);
+    setBenchmarkClientRunMs(null);
+    try {
+      const result = await strategiesService.compileStrategy({
+        strategy_id: strategyId,
+        benchmark_iterations: Math.max(1, Math.min(50000, Math.floor(benchmarkIterations))),
+      });
+      setBenchmarkResult(result);
+
+      const perfStart = performance.now();
+      const moduleObj = new Function(`return ${result.runner_code}`)() as {
+        createRunner: (runtime: { exec: (_node: unknown, attrs: Record<string, unknown>) => unknown }) => (_ctx: unknown) => unknown;
+      };
+      const runner = moduleObj.createRunner({
+        exec: (_node: unknown, attrs: Record<string, unknown>) => attrs.value ?? attrs.left_value ?? attrs.condition ?? null,
+      });
+      const totalIters = Math.max(1, Math.min(50000, Math.floor(benchmarkIterations)));
+      for (let i = 0; i < totalIters; i += 1) {
+        runner({
+          execution_symbol: benchmarkSymbol ? { ticker: benchmarkSymbol } : null,
+          index: i,
+        });
+      }
+      const perfMs = Number((performance.now() - perfStart).toFixed(3));
+      setBenchmarkClientRunMs(perfMs);
+    } catch (error) {
+      setBenchmarkError(error instanceof Error ? error.message : 'Failed to run benchmark');
+    } finally {
+      setIsBenchmarkRunning(false);
+    }
+  };
+
+  const logBenchmarkRunner = () => {
+    if (!benchmarkResult?.runner_code) {
+      setBenchmarkError('Run benchmark first to generate runner code.');
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log('[strategy-compile] runner_code\n', benchmarkResult.runner_code);
+    // eslint-disable-next-line no-console
+    console.log('[strategy-compile] plan\n', benchmarkResult.plan);
+  };
+
   useEffect(() => {
     if (settingsPanel !== 'backtesting') return;
     if (!backtestSymbol && trackedSymbols.length > 0) {
       setBacktestSymbol(trackedSymbols[0].ticker);
     }
   }, [backtestSymbol, settingsPanel, trackedSymbols]);
+
+  useEffect(() => {
+    if (settingsPanel !== 'benchmark') return;
+    if (!benchmarkSymbol && trackedSymbols.length > 0) {
+      setBenchmarkSymbol(trackedSymbols[0].ticker);
+    }
+  }, [benchmarkSymbol, settingsPanel, trackedSymbols]);
 
   useEffect(() => {
     if (settingsPanel !== 'backtesting') return;
@@ -291,6 +356,8 @@ export function NodeSettingsDrawer({
         ? 'Versiones anteriores'
         : settingsPanel === 'backtesting'
           ? 'Back Testing'
+        : settingsPanel === 'benchmark'
+          ? 'Benchmark'
         : settingsPanel === 'danger'
           ? 'Danger Zone'
         : settingsPanel === 'symbols'
@@ -333,6 +400,12 @@ export function NodeSettingsDrawer({
                 title="Back Testing"
                 after={<span className="text-[11px] text-zinc-500">MVP</span>}
                 onClick={onOpenBacktesting}
+              />
+              <ListItem
+                link
+                title="Benchmark"
+                after={<span className="text-[11px] text-zinc-500">Compile</span>}
+                onClick={() => onSettingsPanelChange('benchmark')}
               />
               <ListItem
                 link
@@ -623,15 +696,85 @@ export function NodeSettingsDrawer({
           </div>
         )}
 
+        {settingsPanel === 'benchmark' && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+              <p className="text-xs font-semibold text-zinc-100">Benchmark Inputs</p>
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <label className="text-xs text-zinc-400">
+                  Symbol
+                  <select
+                    value={benchmarkSymbol}
+                    onChange={(event) => setBenchmarkSymbol(event.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  >
+                    {trackedSymbols.length === 0 ? (
+                      <option value="">No symbols configured</option>
+                    ) : (
+                      trackedSymbols.map((item) => (
+                        <option key={item.ticker} value={item.ticker}>{item.ticker} · {item.name}</option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <label className="text-xs text-zinc-400">
+                  Iterations
+                  <input
+                    type="number"
+                    min={100}
+                    max={50000}
+                    step={100}
+                    value={benchmarkIterations}
+                    onChange={(event) => setBenchmarkIterations(Math.max(100, Number(event.target.value) || 5000))}
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { void runBenchmark(); }}
+                  disabled={isBenchmarkRunning}
+                  className="flex-1 rounded-lg border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-60"
+                >
+                  {isBenchmarkRunning ? 'Benchmarking...' : 'Run Benchmark'}
+                </button>
+                <button
+                  type="button"
+                  onClick={logBenchmarkRunner}
+                  disabled={!benchmarkResult?.runner_code}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-60"
+                >
+                  Log Runner Code
+                </button>
+              </div>
+            </div>
+
+            {benchmarkResult && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
+                <p><span className="text-zinc-500">Nodes:</span> {benchmarkResult.plan.node_count}</p>
+                <p><span className="text-zinc-500">Edges:</span> {benchmarkResult.plan.edge_count}</p>
+                <p><span className="text-zinc-500">Iterations:</span> {benchmarkResult.benchmark.iterations}</p>
+                <p><span className="text-zinc-500">Edge compile:</span> {benchmarkResult.benchmark.compile_ms} ms</p>
+                <p><span className="text-zinc-500">Edge run:</span> {benchmarkResult.benchmark.run_ms} ms</p>
+                <p><span className="text-zinc-500">Client run:</span> {benchmarkClientRunMs ?? 'N/A'} ms</p>
+                <p><span className="text-zinc-500">Per iter (client):</span> {benchmarkClientRunMs !== null ? `${(benchmarkClientRunMs / Math.max(1, benchmarkResult.benchmark.iterations)).toFixed(6)} ms` : 'N/A'}</p>
+                <p><span className="text-zinc-500">Unsupported node types:</span> {benchmarkResult.plan.unsupported_node_types.length === 0 ? 'None' : benchmarkResult.plan.unsupported_node_types.join(', ')}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {(!isOwner && settingsPanel === 'menu') && (
           <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
             Solo el dueño de la estrategia puede editar Symbols.
           </div>
         )}
 
-        {(nodeVersionsError || symbolsError || backtestError) && (
+        {(nodeVersionsError || symbolsError || backtestError || benchmarkError) && (
           <div className="mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-            {nodeVersionsError || symbolsError || backtestError}
+            {nodeVersionsError || symbolsError || backtestError || benchmarkError}
           </div>
         )}
       </div>
