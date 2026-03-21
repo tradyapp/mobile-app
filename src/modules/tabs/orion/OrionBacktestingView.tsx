@@ -95,10 +95,13 @@ function ClockIcon({ className = 'h-4 w-4' }: { className?: string }) {
 function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M4 19h16" strokeWidth={2} strokeLinecap="round" />
-      <path d="M7 15V9" strokeWidth={2} strokeLinecap="round" />
-      <path d="M12 15V6" strokeWidth={2} strokeLinecap="round" />
-      <path d="M17 15v-3" strokeWidth={2} strokeLinecap="round" />
+      <path d="M3 19h18" strokeWidth={2} strokeLinecap="round" />
+      <path d="M7 10v6" strokeWidth={2} strokeLinecap="round" />
+      <rect x="6" y="8" width="2" height="3" rx="0.5" strokeWidth={2} />
+      <path d="M12 7v9" strokeWidth={2} strokeLinecap="round" />
+      <rect x="11" y="10" width="2" height="4" rx="0.5" strokeWidth={2} />
+      <path d="M17 9v7" strokeWidth={2} strokeLinecap="round" />
+      <rect x="16" y="7" width="2" height="3" rx="0.5" strokeWidth={2} />
     </svg>
   );
 }
@@ -282,40 +285,40 @@ export default function OrionBacktestingView({
       <div className="min-h-0 flex-1" style={safeHorizontalInsetStyle}>
         <div className={`min-h-0 h-full pt-3 pb-[max(16px,env(safe-area-inset-bottom))] ${isLandscape ? 'flex gap-3' : 'block'}`}>
           <div className={`min-h-0 ${isLandscape ? 'w-1/2 border-r border-zinc-800 pr-3' : 'h-[34dvh] min-h-[220px] border-b border-zinc-800'}`}>
-            <div className="mb-2 flex items-center justify-end gap-2">
+            <div className="mb-2 flex items-center justify-between">
               <button
                 type="button"
-                onClick={handlePlayPause}
+                onClick={() => setShowDateControls((prev) => !prev)}
                 disabled={!hasDateRange}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
-                aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
-                title={isRunning && !isPaused ? 'Pause' : 'Play'}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300 disabled:opacity-45"
+                aria-label={showDateControls ? 'Show chart' : 'Edit date range'}
+                title={showDateControls ? 'Show chart' : 'Edit date range'}
               >
-                {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
+                {showDateControls ? <ChartIcon className="h-5 w-5" /> : <ClockIcon className="h-5 w-5" />}
               </button>
-              <button
-                type="button"
-                onClick={requestStop}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
-                aria-label="Stop backtesting"
-                title="Stop"
-              >
-                <StopIcon />
-              </button>
-            </div>
-            <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
-              {hasDateRange && !showDateControls && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowDateControls(true)}
-                  className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950/85 text-zinc-300"
-                  aria-label="Edit date range"
-                  title="Edit date range"
+                  onClick={handlePlayPause}
+                  disabled={!hasDateRange}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
+                  aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
+                  title={isRunning && !isPaused ? 'Pause' : 'Play'}
                 >
-                  <ClockIcon />
+                  {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
                 </button>
-              )}
-
+                <button
+                  type="button"
+                  onClick={requestStop}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-red-800 bg-red-950/60 text-red-300"
+                  aria-label="Stop backtesting"
+                  title="Stop"
+                >
+                  <StopIcon />
+                </button>
+              </div>
+            </div>
+            <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
               {showDateControls || !hasDateRange ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-2">
                   <div className="flex w-full items-center justify-center gap-3">
@@ -353,16 +356,6 @@ export default function OrionBacktestingView({
                   <p className="text-xs text-zinc-400">
                     Disponible: {availableFromDate || '--'} a {availableToDate || '--'}
                   </p>
-                  {hasDateRange && (
-                    <button
-                      type="button"
-                      onClick={() => setShowDateControls(false)}
-                      className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100"
-                    >
-                      <ChartIcon className="h-4 w-4" />
-                      Ver gráfica
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div className="flex h-full items-end gap-1 overflow-hidden">
