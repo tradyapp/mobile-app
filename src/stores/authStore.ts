@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
 interface AppUser {
@@ -11,8 +11,10 @@ interface AppUser {
 interface AuthStore {
   user: AppUser | null;
   isSessionLoaded: boolean;
+  authEvent: AuthChangeEvent | null;
   setUser: (user: AppUser | null) => void;
   setSessionLoaded: (loaded: boolean) => void;
+  clearAuthEvent: () => void;
   initializeAuth: () => void;
 }
 
@@ -27,10 +29,13 @@ let authInitialized = false;
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isSessionLoaded: false,
+  authEvent: null,
 
   setUser: (user) => set({ user }),
 
   setSessionLoaded: (loaded) => set({ isSessionLoaded: loaded }),
+
+  clearAuthEvent: () => set({ authEvent: null }),
 
   initializeAuth: () => {
     if (authInitialized) return;
@@ -40,8 +45,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ user: session?.user ? toAppUser(session.user) : null, isSessionLoaded: true });
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ user: session?.user ? toAppUser(session.user) : null, isSessionLoaded: true });
+    supabase.auth.onAuthStateChange((event, session) => {
+      set({ user: session?.user ? toAppUser(session.user) : null, isSessionLoaded: true, authEvent: event });
     });
   },
 }));
