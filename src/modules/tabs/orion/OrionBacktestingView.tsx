@@ -2,6 +2,7 @@
 
 import { Dialog, DialogButton, List, ListItem } from 'konsta/react';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { type Node as RFNode } from '@xyflow/react';
 import { SymbolAvatar } from '@/modules/tabs/orion/OrionValueView';
 import { type StrategyTrackedSymbol } from '@/services/StrategiesService';
 import { StockDataService, type CandleData, type Timeframe } from '@/services/StockDataService';
@@ -23,11 +24,12 @@ type BacktestHit = {
   percentage: number | null;
 };
 
-const BACKTEST_TIMEFRAME: Timeframe = 'h';
+const BACKTEST_FALLBACK_TIMEFRAME: Timeframe = 'h';
 
 interface OrionBacktestingViewProps {
   isOpen: boolean;
   strategyId: string;
+  nodes: RFNode[];
   safeHorizontalInsetStyle: CSSProperties;
   selectedExecutionSymbol: { ticker: string; name: string; icon_url: string | null } | null;
   trackedSymbols: StrategyTrackedSymbol[];
@@ -118,6 +120,42 @@ function formatStars(value: number): string {
   return `${'★'.repeat(rounded)}${'☆'.repeat(5 - rounded)}`;
 }
 
+function normalizeTimeframe(raw: string): Timeframe | null {
+  const value = raw.trim().toLowerCase();
+  if (!value) return null;
+  const alias: Record<string, Timeframe> = {
+    '1m': '1m',
+    '5m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+    '60m': 'h',
+    '1h': 'h',
+    h: 'h',
+    d: 'd',
+    '1d': 'd',
+    w: 'w',
+    '1w': 'w',
+    mo: 'mo',
+    '1mo': 'mo',
+    m: 'mo',
+  };
+  return alias[value] ?? null;
+}
+
+function extractCandlesNodeTimeframe(node: RFNode): Timeframe | null {
+  const data = (node.data ?? {}) as { attributes?: Array<{ key?: string; name?: string; value?: string; resolved?: unknown }> };
+  const attrs = Array.isArray(data.attributes) ? data.attributes : [];
+  for (const field of attrs) {
+    const key = String(field.key ?? field.name ?? '').trim().toLowerCase();
+    if (key !== 'timeframe') continue;
+    const fromResolved = typeof field.resolved === 'string' ? normalizeTimeframe(field.resolved) : null;
+    if (fromResolved) return fromResolved;
+    const fromValue = normalizeTimeframe(String(field.value ?? ''));
+    if (fromValue) return fromValue;
+  }
+  return null;
+}
+
 function CloseIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -176,6 +214,7 @@ function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
 export default function OrionBacktestingView({
   isOpen,
   strategyId,
+  nodes,
   safeHorizontalInsetStyle,
   selectedExecutionSymbol,
   trackedSymbols,
@@ -212,6 +251,18 @@ export default function OrionBacktestingView({
   const hasDateRange = Boolean(fromDate && toDate);
   const availableFromDate = availableRange?.from ?? '';
   const availableToDate = availableRange?.to ?? '';
+  const candlesSourceNodes = useMemo(() => {
+    return nodes.filter((node) => {
+      const nodeTypeKey = String(((node.data ?? {}) as { nodeTypeKey?: string }).nodeTypeKey ?? '').trim().toLowerCase();
+      return nodeTypeKey === 'logic.candles';
+    });
+  }, [nodes]);
+  const isMultiTimeframeUnsupported = candlesSourceNodes.length > 1;
+  const activeBacktestTimeframe = useMemo(() => {
+    if (candlesSourceNodes.length !== 1) return BACKTEST_FALLBACK_TIMEFRAME;
+    return extractCandlesNodeTimeframe(candlesSourceNodes[0]) ?? BACKTEST_FALLBACK_TIMEFRAME;
+  }, [candlesSourceNodes]);
+  const multiTimeframeMessage = 'Aún no está disponible el backtesting de estrategias multi temporalidad.';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -252,11 +303,11 @@ export default function OrionBacktestingView({
   }, [hasDateRange, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !activeSymbol) return;
+    if (!isOpen || !activeSymbol || isMultiTimeframeUnsupported) return;
     let active = true;
     const symbolType = marketToSymbolType(activeSymbol.market);
     setCandlesError(null);
-    void StockDataService.getAvailableDateRange(activeSymbol.ticker, BACKTEST_TIMEFRAME, symbolType)
+    void StockDataService.getAvailableDateRange(activeSymbol.ticker, activeBacktestTimeframe, symbolType)
       .then((range) => {
         if (!active) return;
         const oldest = range.oldest?.slice(0, 10) ?? '';
@@ -287,10 +338,10 @@ export default function OrionBacktestingView({
     return () => {
       active = false;
     };
-  }, [activeSymbol, isOpen]);
+  }, [activeBacktestTimeframe, activeSymbol, isMultiTimeframeUnsupported, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !activeSymbol || !fromDate || !toDate) return;
+    if (!isOpen || !activeSymbol || !fromDate || !toDate || isMultiTimeframeUnsupported) return;
     if (fromDate > toDate) {
       setCandlesError('From date must be earlier than To date.');
       return;
@@ -302,7 +353,7 @@ export default function OrionBacktestingView({
     setCandles([]);
     void StockDataService.getCandlesInRange(
       activeSymbol.ticker,
-      BACKTEST_TIMEFRAME,
+      activeBacktestTimeframe,
       `${fromDate}T00:00:00.000Z`,
       `${toDate}T23:59:59.999Z`,
       symbolType,
@@ -334,7 +385,18 @@ export default function OrionBacktestingView({
     return () => {
       active = false;
     };
-  }, [activeSymbol, fromDate, isOpen, toDate]);
+  }, [activeBacktestTimeframe, activeSymbol, fromDate, isMultiTimeframeUnsupported, isOpen, toDate]);
+
+  useEffect(() => {
+    if (!isOpen || !isMultiTimeframeUnsupported) return;
+    setIsCandlesLoading(false);
+    setCandles([]);
+    setProcessedCount(0);
+    setIsRunning(false);
+    setIsPaused(false);
+    setHits([]);
+    setCandlesError(multiTimeframeMessage);
+  }, [isMultiTimeframeUnsupported, isOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hasHydratedSession) return;
@@ -393,7 +455,7 @@ export default function OrionBacktestingView({
   const hitTimes = new Set(hits.map((hit) => hit.anchorTime));
 
   const handlePlayPause = () => {
-    if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
+    if (!hasDateRange || candles.length === 0 || isCandlesLoading || isMultiTimeframeUnsupported) return;
     if (!isRunning) {
       setProcessedCount(0);
       setHits([]);
@@ -487,7 +549,7 @@ export default function OrionBacktestingView({
         <button
           type="button"
           onClick={handlePlayPause}
-          disabled={!hasDateRange || isCandlesLoading || candles.length === 0}
+          disabled={!hasDateRange || isCandlesLoading || candles.length === 0 || isMultiTimeframeUnsupported}
           className="ml-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
           aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
           title={isRunning && !isPaused ? 'Pause' : 'Play'}
@@ -561,6 +623,9 @@ export default function OrionBacktestingView({
                   <p className="text-xs text-zinc-400">
                     Disponible: {availableFromDate || '--'} a {availableToDate || '--'}
                   </p>
+                  {isMultiTimeframeUnsupported && (
+                    <p className="text-xs text-amber-300">{multiTimeframeMessage}</p>
+                  )}
                   {isCandlesLoading && (
                     <p className="text-xs text-blue-300">Loading candles...</p>
                   )}
@@ -571,7 +636,11 @@ export default function OrionBacktestingView({
               ) : (
                 candles.length === 0 ? (
                   <div className="flex h-full items-center justify-center px-3 text-center text-sm text-zinc-400">
-                    {isCandlesLoading ? 'Loading candles...' : 'No candles found in this range.'}
+                    {isMultiTimeframeUnsupported
+                      ? multiTimeframeMessage
+                      : isCandlesLoading
+                        ? 'Loading candles...'
+                        : 'No candles found in this range.'}
                   </div>
                 ) : (
                   <div className="flex h-full items-end gap-[2px] overflow-hidden">
