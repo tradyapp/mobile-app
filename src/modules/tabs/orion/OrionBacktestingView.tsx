@@ -390,6 +390,7 @@ export default function OrionBacktestingView({
   const min = visibleCandles.length > 0 ? Math.min(...visibleCandles.map((item) => item.low)) : 0;
   const max = visibleCandles.length > 0 ? Math.max(...visibleCandles.map((item) => item.high)) : 1;
   const range = Math.max(0.0001, max - min);
+  const hitTimes = useMemo(() => new Set(hits.map((hit) => hit.anchorTime)), [hits]);
 
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
@@ -582,6 +583,7 @@ export default function OrionBacktestingView({
                       const wickBottom = ((candle.low - min) / range) * 100;
                       const isBull = candle.close >= candle.open;
                       const isProcessed = index < processedCount;
+                      const isHitCandle = hitTimes.has(candle.datetime);
                       return (
                         <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
                           <div
@@ -589,7 +591,7 @@ export default function OrionBacktestingView({
                             style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
                           />
                           <div
-                            className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'}`}
+                            className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'} ${isHitCandle ? 'border border-white' : ''}`}
                             style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
                           />
                         </div>
