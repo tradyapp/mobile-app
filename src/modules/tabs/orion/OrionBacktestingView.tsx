@@ -181,7 +181,7 @@ export default function OrionBacktestingView({
   trackedSymbols,
   onClose,
 }: OrionBacktestingViewProps) {
-  const visibleCandlesCap = 100;
+  const visibleCandlesCap = 50;
   const [candles, setCandles] = useState<MiniCandle[]>(() => buildMockCandles());
   const [processedCount, setProcessedCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
