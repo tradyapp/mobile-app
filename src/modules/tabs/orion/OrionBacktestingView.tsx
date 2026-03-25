@@ -574,7 +574,7 @@ export default function OrionBacktestingView({
                     {isCandlesLoading ? 'Loading candles...' : 'No candles found in this range.'}
                   </div>
                 ) : (
-                  <div className="flex h-full items-end gap-1 overflow-hidden">
+                  <div className="flex h-full items-end gap-[2px] overflow-hidden">
                     {visibleCandles.map((candle, idx) => {
                       const index = chartWindowStart + idx;
                       const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
@@ -587,11 +587,11 @@ export default function OrionBacktestingView({
                       return (
                         <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
                           <div
-                            className={`absolute left-1/2 w-px -translate-x-1/2 ${isBull ? 'bg-emerald-400' : 'bg-red-400'}`}
+                            className={`absolute left-1/2 w-px -translate-x-1/2 ${isHitCandle ? 'bg-white' : (isBull ? 'bg-emerald-400' : 'bg-red-400')}`}
                             style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
                           />
                           <div
-                            className={`absolute left-[22%] right-[22%] rounded-[2px] ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'} ${isHitCandle ? 'border border-white' : ''}`}
+                            className={`absolute left-[16%] right-[16%] rounded-none ${isBull ? 'bg-emerald-500/90' : 'bg-red-500/90'} ${isHitCandle ? 'border border-white' : ''}`}
                             style={{ bottom: `${bodyBottom}%`, height: `${Math.max(2, bodyTop - bodyBottom)}%` }}
                           />
                         </div>
