@@ -379,9 +379,6 @@ export default function OrionBacktestingView({
 
   if (!isOpen) return null;
 
-  const min = candles.length > 0 ? Math.min(...candles.map((item) => item.low)) : 0;
-  const max = candles.length > 0 ? Math.max(...candles.map((item) => item.high)) : 1;
-  const range = Math.max(0.0001, max - min);
   const processedCandle = processedCount > 0
     ? candles[Math.min(processedCount - 1, Math.max(0, candles.length - 1))]
     : null;
@@ -390,6 +387,9 @@ export default function OrionBacktestingView({
     : Math.floor((Math.min(processedCount, candles.length) - 1) / visibleCandlesCap);
   const chartWindowStart = Math.min(chartPageIndex * visibleCandlesCap, Math.max(0, candles.length - visibleCandlesCap));
   const visibleCandles = candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap);
+  const min = visibleCandles.length > 0 ? Math.min(...visibleCandles.map((item) => item.low)) : 0;
+  const max = visibleCandles.length > 0 ? Math.max(...visibleCandles.map((item) => item.high)) : 1;
+  const range = Math.max(0.0001, max - min);
 
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
