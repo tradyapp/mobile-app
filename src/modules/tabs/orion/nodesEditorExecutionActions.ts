@@ -25,6 +25,14 @@ type ReferenceSourceItem = {
 };
 type LocalEvalSpec = { op?: unknown };
 type CompiledEdge = { target: string; source_handle: string | null };
+type BacktestCandleInput = {
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number | null;
+};
 
 function normalizeHandleId(raw: string): string {
   return raw
@@ -66,6 +74,23 @@ function shouldFollowCompiledEdge(edge: CompiledEdge, routeHandles: Set<string> 
   if (!hasNamedHandles) return true;
   if (!edge.source_handle) return false;
   return routeHandles.has(normalizeHandleId(edge.source_handle));
+}
+
+function toBacktestCandle(value: BacktestCandleInput): Candle {
+  const volumeRaw = value.volume;
+  const volume = volumeRaw === null || volumeRaw === undefined
+    ? null
+    : Number.isFinite(Number(volumeRaw))
+      ? Number(volumeRaw)
+      : null;
+  return {
+    datetime: String(value.datetime),
+    open: Number(value.open),
+    high: Number(value.high),
+    low: Number(value.low),
+    close: Number(value.close),
+    volume,
+  };
 }
 
 function normalizeFieldKey(field: EditorNodeField): string {
@@ -1537,4 +1562,214 @@ export async function runCompiledPlanSingleExecution(params: {
     status: 'completed',
     error: null,
   };
+}
+
+export type BacktestIterationHit = {
+  nodeId: string;
+  nodeType: string;
+  kind: 'true' | 'percentage' | 'rating';
+  rating: number | null;
+  percentage: number | null;
+};
+
+export async function runBacktestSingleIteration(params: {
+  strategyId: string;
+  nodes: RFNode[];
+  edges: RFEdge[];
+  nodeTypesCatalog?: StrategyNodeTypeRecord[];
+  selectedExecutionTicker: string;
+  selectedExecutionSymbol: SelectedExecutionSymbol;
+  executionTimeISO: string;
+  candlesWindow: BacktestCandleInput[];
+}): Promise<{ hit: BacktestIterationHit | null; error: string | null }> {
+  const {
+    strategyId,
+    nodes,
+    edges,
+    nodeTypesCatalog,
+    selectedExecutionTicker,
+    selectedExecutionSymbol,
+    executionTimeISO,
+    candlesWindow,
+  } = params;
+
+  if (!selectedExecutionTicker.trim()) {
+    return { hit: null, error: 'Select a strategy symbol before running backtest.' };
+  }
+
+  if (nodes.length === 0) {
+    return { hit: null, error: 'Add at least one node before running backtest.' };
+  }
+
+  const nodeById = new Map<string, RFNode>();
+  const outgoingByNodeId = new Map<string, RFEdge[]>();
+  const indegree = new Map<string, number>();
+
+  for (const node of nodes) {
+    nodeById.set(node.id, node);
+    outgoingByNodeId.set(node.id, []);
+    indegree.set(node.id, 0);
+  }
+  for (const edge of edges) {
+    if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
+    outgoingByNodeId.set(edge.source, [...(outgoingByNodeId.get(edge.source) ?? []), edge]);
+    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+  }
+
+  const queue: string[] = [];
+  for (const node of nodes) {
+    if ((indegree.get(node.id) ?? 0) === 0) queue.push(node.id);
+  }
+  const rootNodeIds = [...queue];
+  queue.sort((a, b) => {
+    const nodeA = nodeById.get(a);
+    const nodeB = nodeById.get(b);
+    const categoryA = normalizeNodeCategory((nodeA?.data as EditorNodeData | undefined)?.category);
+    const categoryB = normalizeNodeCategory((nodeB?.data as EditorNodeData | undefined)?.category);
+    if (categoryA === categoryB) return a.localeCompare(b);
+    if (categoryA === 'trigger') return -1;
+    if (categoryB === 'trigger') return 1;
+    return categoryA.localeCompare(categoryB);
+  });
+
+  const orderedNodeIds: string[] = [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    orderedNodeIds.push(current);
+    for (const edge of outgoingByNodeId.get(current) ?? []) {
+      const remaining = (indegree.get(edge.target) ?? 0) - 1;
+      indegree.set(edge.target, remaining);
+      if (remaining === 0) queue.push(edge.target);
+    }
+  }
+  for (const node of nodes) {
+    if (!orderedNodeIds.includes(node.id)) orderedNodeIds.push(node.id);
+  }
+
+  const nodeTypeLookup = buildNodeTypeLookup(nodeTypesCatalog);
+  const stateHistory: StateHistoryItem[] = [];
+  const stateByNodeId = new Map<string, unknown>();
+  const activeNodeIds = new Set<string>(rootNodeIds);
+  const backtestCandles = candlesWindow.map((item) => toBacktestCandle(item));
+
+  for (const nodeId of orderedNodeIds) {
+    if (!activeNodeIds.has(nodeId)) continue;
+    const node = nodeById.get(nodeId);
+    if (!node) continue;
+
+    const nodeData = (node.data ?? {}) as EditorNodeData;
+    const nodeTypeKey = nodeData.nodeTypeKey ?? 'custom-node';
+    const frozenHistory = [...stateHistory].reverse();
+    let output: unknown;
+
+    try {
+      if (nodeTypeKey === 'logic.candles') {
+        output = backtestCandles;
+      } else {
+        const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
+        const localResult = executeLocalNodeIfSupported({
+          nodeData,
+          resolvedAttributes,
+          history: frozenHistory,
+          nodeTypeLookup,
+          executionTimeISO,
+          strategyId,
+        });
+
+        if (localResult.handled) {
+          output = localResult.output;
+        } else {
+          const execution = await strategiesService.executeStrategyNode({
+            strategy_id: strategyId,
+            node_type_key: nodeTypeKey,
+            node_type_version: typeof nodeData.nodeTypeVersion === 'number' ? nodeData.nodeTypeVersion : null,
+            attributes: resolvedAttributes,
+            input_context: {
+              execution_symbol: selectedExecutionSymbol
+                ? {
+                  ticker: selectedExecutionSymbol.ticker,
+                  name: selectedExecutionSymbol.name,
+                  market: selectedExecutionSymbol.market,
+                }
+                : { ticker: selectedExecutionTicker },
+              state_history: frozenHistory,
+            },
+            mode: 'preview',
+            execution_time: executionTimeISO,
+          });
+          output = execution.output;
+        }
+      }
+    } catch (error) {
+      return {
+        hit: null,
+        error: error instanceof Error ? error.message : 'Execution error',
+      };
+    }
+
+    stateByNodeId.set(nodeId, output);
+    stateHistory.push({ nodeId, data: output });
+    const routeHandles = getRouteHandlesFromOutput(output);
+    const siblingEdges = outgoingByNodeId.get(nodeId) ?? [];
+    for (const edge of siblingEdges) {
+      if (!shouldFollowEdge(edge, routeHandles, siblingEdges)) continue;
+      activeNodeIds.add(edge.target);
+    }
+  }
+
+  for (let i = orderedNodeIds.length - 1; i >= 0; i -= 1) {
+    const nodeId = orderedNodeIds[i];
+    const node = nodeById.get(nodeId);
+    if (!node) continue;
+    const nodeData = (node.data ?? {}) as EditorNodeData;
+    const nodeTypeKey = nodeData.nodeTypeKey ?? 'custom-node';
+    if (nodeTypeKey !== 'output.true' && nodeTypeKey !== 'output.percentage' && nodeTypeKey !== 'output.rating') continue;
+    if (!stateByNodeId.has(nodeId)) continue;
+
+    const output = stateByNodeId.get(nodeId);
+    if (nodeTypeKey === 'output.true') {
+      const isTrue = output === true || (isPlainObject(output) && output.result === true);
+      if (!isTrue) continue;
+      return {
+        hit: {
+          nodeId,
+          nodeType: nodeTypeKey,
+          kind: 'true',
+          rating: null,
+          percentage: null,
+        },
+        error: null,
+      };
+    }
+
+    if (nodeTypeKey === 'output.percentage') {
+      const percentage = isPlainObject(output) ? normalizeNumber(output.percentage) : null;
+      if (percentage === null) continue;
+      return {
+        hit: {
+          nodeId,
+          nodeType: nodeTypeKey,
+          kind: 'percentage',
+          rating: null,
+          percentage,
+        },
+        error: null,
+      };
+    }
+
+    const rating = isPlainObject(output) ? normalizeNumber(output.rating) : null;
+    if (rating === null) continue;
+    return {
+      hit: {
+        nodeId,
+        nodeType: nodeTypeKey,
+        kind: 'rating',
+        rating,
+        percentage: null,
+      },
+      error: null,
+    };
+  }
+
+  return { hit: null, error: null };
 }

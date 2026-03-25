@@ -145,6 +145,8 @@ export default function NodesEditorLayout({ model }: NodesEditorLayoutProps) {
         isOpen={model.isBacktestingViewOpen}
         strategyId={model.strategyId}
         nodes={model.nodes}
+        edges={model.edges}
+        nodeTypesCatalog={model.availableNodeTypes}
         safeHorizontalInsetStyle={model.safeHorizontalInsetStyle}
         selectedExecutionSymbol={model.selectedExecutionSymbol}
         trackedSymbols={model.trackedSymbols}

@@ -1,10 +1,12 @@
 'use client';
 
 import { Dialog, DialogButton, List, ListItem } from 'konsta/react';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { type Node as RFNode } from '@xyflow/react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { type Edge as RFEdge, type Node as RFNode } from '@xyflow/react';
 import { SymbolAvatar } from '@/modules/tabs/orion/OrionValueView';
+import { runBacktestSingleIteration, type BacktestIterationHit } from '@/modules/tabs/orion/nodesEditorExecutionActions';
 import { type StrategyTrackedSymbol } from '@/services/StrategiesService';
+import { type StrategyNodeTypeRecord } from '@/services/StrategyNodeTypesService';
 import { StockDataService, type CandleData, type Timeframe } from '@/services/StockDataService';
 import { type SymbolType } from '@/stores/chartStore';
 
@@ -30,8 +32,10 @@ interface OrionBacktestingViewProps {
   isOpen: boolean;
   strategyId: string;
   nodes: RFNode[];
+  edges: RFEdge[];
+  nodeTypesCatalog: StrategyNodeTypeRecord[];
   safeHorizontalInsetStyle: CSSProperties;
-  selectedExecutionSymbol: { ticker: string; name: string; icon_url: string | null } | null;
+  selectedExecutionSymbol: { ticker: string; name: string; icon_url: string | null; market?: string } | null;
   trackedSymbols: StrategyTrackedSymbol[];
   onClose: () => void;
 }
@@ -215,6 +219,8 @@ export default function OrionBacktestingView({
   isOpen,
   strategyId,
   nodes,
+  edges,
+  nodeTypesCatalog,
   safeHorizontalInsetStyle,
   selectedExecutionSymbol,
   trackedSymbols,
@@ -235,6 +241,8 @@ export default function OrionBacktestingView({
   const [availableRange, setAvailableRange] = useState<{ from: string; to: string } | null>(null);
   const [isCandlesLoading, setIsCandlesLoading] = useState(false);
   const [candlesError, setCandlesError] = useState<string | null>(null);
+  const evaluationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const evaluatedCandlesRef = useRef<Set<string>>(new Set());
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -300,6 +308,8 @@ export default function OrionBacktestingView({
     setIsPaused(false);
     setShowDateControls(!hasDateRange);
     setCandles([]);
+    evaluatedCandlesRef.current = new Set();
+    evaluationQueueRef.current = Promise.resolve();
   }, [hasDateRange, isOpen]);
 
   useEffect(() => {
@@ -423,21 +433,55 @@ export default function OrionBacktestingView({
   }, [candles.length, hasDateRange, isOpen, isPaused, isRunning]);
 
   useEffect(() => {
+    if (!isOpen || isMultiTimeframeUnsupported) return;
     if (processedCount <= 0) return;
-    if (processedCount % 7 !== 0) return;
     const candle = candles[Math.max(0, processedCount - 1)];
     if (!candle) return;
-    const hitIndex = Math.floor(processedCount / 7);
-    const rating = hitIndex % 2 === 0 ? (2 + (hitIndex % 4)) : null;
-    const percentage = rating === null ? Number((58 + ((hitIndex * 3.4) % 38)).toFixed(2)) : null;
-    setHits((prev) => [{
-      id: `${candle.datetime}-${hitIndex}`,
-      anchorTime: candle.datetime,
-      nodeType: rating === null ? 'output.percentage' : 'output.rating',
-      rating,
-      percentage,
-    }, ...prev]);
-  }, [candles, processedCount]);
+    if (evaluatedCandlesRef.current.has(candle.datetime)) return;
+    evaluatedCandlesRef.current.add(candle.datetime);
+
+    const executionTicker = activeSymbol?.ticker ?? selectedExecutionSymbol?.ticker ?? '';
+    const executionSymbol = activeSymbol
+      ? { ticker: activeSymbol.ticker, name: activeSymbol.name, market: activeSymbol.market }
+      : selectedExecutionSymbol
+        ? { ticker: selectedExecutionSymbol.ticker, name: selectedExecutionSymbol.name, market: selectedExecutionSymbol.market ?? 'STOCK' }
+        : null;
+    const candlesWindow = candles.slice(0, processedCount);
+
+    evaluationQueueRef.current = evaluationQueueRef.current.then(async () => {
+      const outcome = await runBacktestSingleIteration({
+        strategyId,
+        nodes,
+        edges,
+        nodeTypesCatalog,
+        selectedExecutionTicker: executionTicker,
+        selectedExecutionSymbol: executionSymbol,
+        executionTimeISO: candle.datetime,
+        candlesWindow,
+      });
+
+      if (outcome.error || !outcome.hit) return;
+      const hit: BacktestIterationHit = outcome.hit;
+      setHits((prev) => [{
+        id: `${candle.datetime}-${hit.nodeId}-${hit.kind}`,
+        anchorTime: candle.datetime,
+        nodeType: hit.nodeType,
+        rating: hit.rating,
+        percentage: hit.percentage,
+      }, ...prev]);
+    }).catch(() => undefined);
+  }, [
+    activeSymbol,
+    candles,
+    edges,
+    isMultiTimeframeUnsupported,
+    isOpen,
+    nodeTypesCatalog,
+    nodes,
+    processedCount,
+    selectedExecutionSymbol,
+    strategyId,
+  ]);
 
   if (!isOpen) return null;
 
