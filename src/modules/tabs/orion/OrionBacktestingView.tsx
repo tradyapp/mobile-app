@@ -390,7 +390,7 @@ export default function OrionBacktestingView({
   const min = visibleCandles.length > 0 ? Math.min(...visibleCandles.map((item) => item.low)) : 0;
   const max = visibleCandles.length > 0 ? Math.max(...visibleCandles.map((item) => item.high)) : 1;
   const range = Math.max(0.0001, max - min);
-  const hitTimes = useMemo(() => new Set(hits.map((hit) => hit.anchorTime)), [hits]);
+  const hitTimes = new Set(hits.map((hit) => hit.anchorTime));
 
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading) return;
