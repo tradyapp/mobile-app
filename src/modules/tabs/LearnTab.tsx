@@ -25,13 +25,18 @@ import { useUserPrefsStore } from "@/stores/userPrefsStore";
 // ---------------------------------------------------------------------------
 
 interface LearnRouteState {
-  view: "catalog" | "course" | "lesson";
+  view: "catalog" | "course" | "lesson" | "chat";
   courseId: string | null;
   lessonId: string | null;
 }
 
 function parseLearnRoute(pathname: string): LearnRouteState {
   const normalized = pathname.replace(/\/+$/, "");
+
+  // /learn/chat
+  if (normalized === "/learn/chat") {
+    return { view: "chat", courseId: null, lessonId: null };
+  }
 
   // /learn/:courseId/:lessonId
   const lessonMatch = normalized.match(/^\/learn\/([^/]+)\/([^/]+)$/);
@@ -384,16 +389,20 @@ export default function LearnTab() {
   const navbarTitle =
     view === "catalog"
       ? "Learn"
-      : view === "course"
-        ? selectedCourse?.title ?? "Course"
-        : selectedLesson?.title ?? "Lesson";
+      : view === "chat"
+        ? "Chat"
+        : view === "course"
+          ? selectedCourse?.title ?? "Course"
+          : selectedLesson?.title ?? "Lesson";
 
   // ---------------------------------------------------------------------------
   // Navigation handlers
   // ---------------------------------------------------------------------------
 
   const handleBack = () => {
-    if (view === "lesson" && courseId) {
+    if (view === "chat") {
+      navigate("/learn");
+    } else if (view === "lesson" && courseId) {
       navigate(`/learn/${courseId}`);
     } else if (view === "course") {
       navigate("/learn");
@@ -792,6 +801,16 @@ export default function LearnTab() {
   };
 
   // ---------------------------------------------------------------------------
+  // Render: Chat
+  // ---------------------------------------------------------------------------
+
+  const renderChat = () => (
+    <Block className="pt-8 pb-24 flex items-center justify-center">
+      <p className="text-zinc-400 text-sm">Chat</p>
+    </Block>
+  );
+
+  // ---------------------------------------------------------------------------
   // Layout
   // ---------------------------------------------------------------------------
 
@@ -803,7 +822,7 @@ export default function LearnTab() {
         left={
           <button
             className="w-10 h-10 flex items-center justify-center text-zinc-200"
-            onClick={view === "catalog" ? undefined : handleBack}
+            onClick={view === "catalog" ? () => navigate("/learn/chat") : handleBack}
           >
             {view === "catalog" ? <MessageIcon /> : <span className="text-xl">‹</span>}
           </button>
@@ -833,6 +852,7 @@ export default function LearnTab() {
         }
       />
       {view === "catalog" && renderCatalog()}
+      {view === "chat" && renderChat()}
       {view === "course" && renderCourse()}
       {view === "lesson" && renderLesson()}
     </>
