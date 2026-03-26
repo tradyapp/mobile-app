@@ -19,7 +19,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
-import { chatService, type ChatRoom, type ChatMessage } from "@/services/ChatService";
+import { chatService, type ChatRoom, type ChatMessage, type AttachmentResult } from "@/services/ChatService";
 
 // ---------------------------------------------------------------------------
 // Route parsing
@@ -173,6 +173,24 @@ function NavLessonTitle({ title, align = "left" }: { title: string; align?: "lef
       >
         {title}
       </span>
+    </div>
+  );
+}
+
+function ProgressiveImage({ src, thumbnail, alt }: { src: string; thumbnail: string | null; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="relative rounded-lg overflow-hidden mb-1.5">
+      {thumbnail && !loaded && (
+        <img src={thumbnail} alt="" className="w-full rounded-lg blur-sm scale-105" />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`rounded-lg max-w-full ${thumbnail && !loaded ? "absolute inset-0 w-full h-full object-cover opacity-0" : ""}`}
+        onLoad={() => setLoaded(true)}
+      />
     </div>
   );
 }
@@ -973,7 +991,7 @@ export default function LearnTab() {
 
     setSending(true);
     try {
-      let attachment: { url: string; type: "image" | "video" | "document"; name: string } | undefined;
+      let attachment: AttachmentResult | undefined;
       if (file) {
         setUploading(true);
         attachment = await chatService.uploadAttachment(roomId, file);
@@ -1054,7 +1072,7 @@ export default function LearnTab() {
                       <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{msg.user_email}</p>
                     )}
                     {msg.attachment_url && msg.attachment_type === "image" && (
-                      <img src={msg.attachment_url} alt={msg.attachment_name ?? "image"} className="rounded-lg max-w-full mb-1.5" />
+                      <ProgressiveImage src={msg.attachment_url} thumbnail={msg.thumbnail_url} alt={msg.attachment_name ?? "image"} />
                     )}
                     {msg.attachment_url && msg.attachment_type === "video" && (
                       <video src={msg.attachment_url} controls className="rounded-lg max-w-full mb-1.5" />

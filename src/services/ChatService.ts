@@ -20,10 +20,18 @@ export interface ChatMessage {
   attachment_url: string | null;
   attachment_type: "image" | "video" | "document" | null;
   attachment_name: string | null;
+  thumbnail_url: string | null;
   created_at: string;
 }
 
-const MESSAGE_FIELDS = "id, room_id, user_id, user_email, text, attachment_url, attachment_type, attachment_name, created_at";
+export interface AttachmentResult {
+  url: string;
+  type: "image" | "video" | "document";
+  name: string;
+  thumbnailUrl: string | null;
+}
+
+const MESSAGE_FIELDS = "id, room_id, user_id, user_email, text, attachment_url, attachment_type, attachment_name, thumbnail_url, created_at";
 
 class ChatService {
   async getRooms(): Promise<ChatRoom[]> {
@@ -55,7 +63,7 @@ class ChatService {
     userId: string,
     userEmail: string,
     text: string,
-    attachment?: { url: string; type: "image" | "video" | "document"; name: string }
+    attachment?: AttachmentResult
   ): Promise<ChatMessage> {
     const { data, error } = await supabase
       .from("chat_messages")
@@ -67,6 +75,7 @@ class ChatService {
         attachment_url: attachment?.url ?? null,
         attachment_type: attachment?.type ?? null,
         attachment_name: attachment?.name ?? null,
+        thumbnail_url: attachment?.thumbnailUrl ?? null,
       })
       .select(MESSAGE_FIELDS)
       .single();
@@ -75,10 +84,12 @@ class ChatService {
     return data as ChatMessage;
   }
 
-  private compressImageToWebP(file: File, maxWidth = 1600, quality = 0.8): Promise<File> {
+  private resizeToWebP(file: File, maxWidth: number, quality: number): Promise<File> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
         let { width, height } = img;
         if (width > maxWidth) {
           height = Math.round(height * (maxWidth / width));
@@ -100,36 +111,52 @@ class ChatService {
           quality
         );
       };
-      img.onerror = () => reject(new Error("Failed to load image"));
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Failed to load image")); };
+      img.src = objectUrl;
     });
   }
 
-  async uploadAttachment(roomId: string, file: File): Promise<{ url: string; type: "image" | "video" | "document"; name: string }> {
-    let uploadFile = file;
+  private async uploadFile(roomId: string, file: File, suffix = ""): Promise<string> {
+    const ext = file.name.split(".").pop() ?? "";
+    const path = `${roomId}/${crypto.randomUUID()}${suffix}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from("chat-attachments")
+      .upload(path, file);
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from("chat-attachments")
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  }
+
+  async uploadAttachment(roomId: string, file: File): Promise<AttachmentResult> {
     let type: "image" | "video" | "document" = "document";
 
     if (file.type.startsWith("image/")) {
       type = "image";
-      uploadFile = await this.compressImageToWebP(file);
-    } else if (file.type.startsWith("video/")) {
-      type = "video";
+
+      // Create both versions in parallel
+      const [fullFile, thumbFile] = await Promise.all([
+        this.resizeToWebP(file, 1600, 0.8),
+        this.resizeToWebP(file, 48, 0.6),
+      ]);
+
+      const [fullUrl, thumbUrl] = await Promise.all([
+        this.uploadFile(roomId, fullFile),
+        this.uploadFile(roomId, thumbFile, "_thumb"),
+      ]);
+
+      return { url: fullUrl, type, name: file.name, thumbnailUrl: thumbUrl };
     }
 
-    const ext = uploadFile.name.split(".").pop() ?? "";
-    const path = `${roomId}/${crypto.randomUUID()}.${ext}`;
+    if (file.type.startsWith("video/")) type = "video";
 
-    const { error } = await supabase.storage
-      .from("chat-attachments")
-      .upload(path, uploadFile);
-
-    if (error) throw error;
-
-    const { data: urlData } = supabase.storage
-      .from("chat-attachments")
-      .getPublicUrl(path);
-
-    return { url: urlData.publicUrl, type, name: file.name };
+    const url = await this.uploadFile(roomId, file);
+    return { url, type, name: file.name, thumbnailUrl: null };
   }
 
   subscribeToRoom(roomId: string, onMessage: (msg: ChatMessage) => void): RealtimeChannel {
