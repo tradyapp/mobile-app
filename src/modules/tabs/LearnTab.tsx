@@ -912,7 +912,10 @@ export default function LearnTab() {
   const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Fetch messages + subscribe to realtime when entering a chat room
   useEffect(() => {
@@ -936,11 +939,9 @@ export default function LearnTab() {
 
     void run();
 
-    // Subscribe to new messages
     const channel = chatService.subscribeToRoom(roomId, (newMsg) => {
       if (!active) return;
       setChatMessages((prev) => {
-        // Avoid duplicates
         if (prev.some((m) => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
@@ -952,23 +953,38 @@ export default function LearnTab() {
     };
   }, [view, roomId]);
 
+  // Clear pending file when leaving chat room
+  useEffect(() => {
+    if (view !== "chatRoom") {
+      setPendingFile(null);
+    }
+  }, [view]);
+
   const handleSendMessage = async () => {
     const text = chatMessage.trim();
-    if (!text || !user || !roomId || sending) return;
+    const file = pendingFile;
+    if ((!text && !file) || !user || !roomId || sending) return;
 
     setChatMessage("");
+    setPendingFile(null);
     if (chatInputRef.current) {
       chatInputRef.current.style.height = "auto";
     }
 
     setSending(true);
     try {
-      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text);
+      let attachment: { url: string; type: "image" | "video" | "document"; name: string } | undefined;
+      if (file) {
+        setUploading(true);
+        attachment = await chatService.uploadAttachment(roomId, file);
+        setUploading(false);
+      }
+      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text, attachment);
     } catch {
-      // Restore message on failure
       setChatMessage(text);
     } finally {
       setSending(false);
+      setUploading(false);
     }
   };
 
@@ -984,6 +1000,12 @@ export default function LearnTab() {
     const el = e.target;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setPendingFile(file);
+    e.target.value = "";
   };
 
   // Scroll to bottom when new messages arrive
@@ -1031,7 +1053,21 @@ export default function LearnTab() {
                     {!isOwn && (
                       <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{msg.user_email}</p>
                     )}
-                    <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                    {msg.attachment_url && msg.attachment_type === "image" && (
+                      <img src={msg.attachment_url} alt={msg.attachment_name ?? "image"} className="rounded-lg max-w-full mb-1.5" />
+                    )}
+                    {msg.attachment_url && msg.attachment_type === "video" && (
+                      <video src={msg.attachment_url} controls className="rounded-lg max-w-full mb-1.5" />
+                    )}
+                    {msg.attachment_url && msg.attachment_type === "document" && (
+                      <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 rounded-lg px-3 py-2 mb-1.5 ${isOwn ? "bg-emerald-700/50" : "bg-zinc-700/50"}`}>
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <span className="text-xs truncate">{msg.attachment_name ?? "Documento"}</span>
+                      </a>
+                    )}
+                    {msg.text && <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>}
                     <p className={`text-[10px] mt-1 text-right ${isOwn ? "text-emerald-200/60" : "text-zinc-500"}`}>
                       {time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
@@ -1046,19 +1082,55 @@ export default function LearnTab() {
 
       {/* Input bar */}
       <div className="shrink-0 border-t border-zinc-800 bg-zinc-950" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        {/* Pending file preview */}
+        {pendingFile && (
+          <div className="px-3 pt-2 flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 flex-1 min-w-0">
+              {pendingFile.type.startsWith("image/") ? (
+                <img src={URL.createObjectURL(pendingFile)} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+              ) : (
+                <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+              )}
+              <span className="text-xs text-zinc-300 truncate">{pendingFile.name}</span>
+            </div>
+            <button onClick={() => setPendingFile(null)} className="text-zinc-500 active:text-zinc-300 p-1">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2 px-3 py-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending}
+            className="w-10 h-10 flex items-center justify-center text-zinc-400 active:text-zinc-200 shrink-0 disabled:opacity-30"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+            </svg>
+          </button>
           <textarea
             ref={chatInputRef}
             value={chatMessage}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Escribe un mensaje..."
+            placeholder={uploading ? "Subiendo archivo..." : "Escribe un mensaje..."}
             rows={1}
             className="flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-zinc-500 max-h-[120px]"
           />
           <button
             onClick={() => void handleSendMessage()}
-            disabled={!chatMessage.trim() || sending}
+            disabled={(!chatMessage.trim() && !pendingFile) || sending}
             className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 disabled:opacity-30 active:bg-emerald-700 transition-colors"
           >
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
