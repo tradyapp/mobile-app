@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block } from "konsta/react";
+import { Block, List, ListItem } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
 import {
@@ -874,50 +874,60 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderChatRoomsSkeleton = () => (
-    <div className="space-y-3">
+    <List strong inset className="!mb-0">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />
-            <div className="h-3 w-3/4 bg-zinc-800/60 rounded animate-pulse" />
-          </div>
-        </div>
+        <ListItem
+          key={i}
+          media={
+            <div className="w-11 h-11 rounded-full bg-zinc-800 animate-pulse" />
+          }
+          title={
+            <div className="h-4 w-32 bg-zinc-800 rounded animate-pulse" />
+          }
+          subtitle={
+            <div className="h-3 w-48 bg-zinc-800/60 rounded animate-pulse mt-1" />
+          }
+        />
       ))}
-    </div>
+    </List>
   );
 
   const renderChat = () => (
-    <Block className="pt-2 pb-24">
+    <Block className="pt-2 pb-24 !px-0">
       {chatRoomsLoading && renderChatRoomsSkeleton()}
-      {chatRoomsError && <p className="text-red-400 text-sm mb-3">{chatRoomsError}</p>}
-      {!chatRoomsLoading && !chatRoomsError && chatRooms.length === 0 && (
-        <p className="text-zinc-400 text-sm">No chat rooms available.</p>
+      {chatRoomsError && (
+        <p className="text-red-400 text-sm px-4 mb-3">{chatRoomsError}</p>
       )}
-      <div className="space-y-3">
-        {chatRooms.map((room) => (
-          <button
-            key={room.id}
-            onClick={() => navigate(`/learn/chat/${room.id}`)}
-            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 flex items-center gap-3 active:bg-zinc-800/70 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-full bg-zinc-800 shrink-0 flex items-center justify-center overflow-hidden">
-              {room.icon_url ? (
-                <img src={room.icon_url} alt={room.name} className="w-full h-full object-cover" />
-              ) : (
-                <MessageIcon />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-white font-medium text-sm">{room.name}</h3>
-              {room.description && (
-                <p className="text-zinc-400 text-xs mt-0.5 line-clamp-1">{room.description}</p>
-              )}
-            </div>
-            <span className="text-zinc-600 text-lg shrink-0">›</span>
-          </button>
-        ))}
-      </div>
+      {!chatRoomsLoading && !chatRoomsError && chatRooms.length === 0 && (
+        <p className="text-zinc-400 text-sm px-4">No hay salas de chat disponibles.</p>
+      )}
+      {!chatRoomsLoading && chatRooms.length > 0 && (
+        <List strong inset className="!mb-0">
+          {chatRooms.map((room) => (
+            <ListItem
+              key={room.id}
+              link
+              chevronMaterial
+              onClick={() => navigate(`/learn/chat/${room.id}`)}
+              title={room.name}
+              subtitle={room.description || undefined}
+              media={
+                <div className="w-11 h-11 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
+                  {room.icon_url ? (
+                    <img
+                      src={room.icon_url}
+                      alt={room.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <MessageIcon />
+                  )}
+                </div>
+              }
+            />
+          ))}
+        </List>
+      )}
     </Block>
   );
 
