@@ -75,23 +75,59 @@ class ChatService {
     return data as ChatMessage;
   }
 
+  private compressImageToWebP(file: File, maxWidth = 1600, quality = 0.8): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(file); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(file); return; }
+            const baseName = file.name.replace(/\.[^.]+$/, "");
+            resolve(new File([blob], `${baseName}.webp`, { type: "image/webp" }));
+          },
+          "image/webp",
+          quality
+        );
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   async uploadAttachment(roomId: string, file: File): Promise<{ url: string; type: "image" | "video" | "document"; name: string }> {
-    const ext = file.name.split(".").pop() ?? "";
+    let uploadFile = file;
+    let type: "image" | "video" | "document" = "document";
+
+    if (file.type.startsWith("image/")) {
+      type = "image";
+      uploadFile = await this.compressImageToWebP(file);
+    } else if (file.type.startsWith("video/")) {
+      type = "video";
+    }
+
+    const ext = uploadFile.name.split(".").pop() ?? "";
     const path = `${roomId}/${crypto.randomUUID()}.${ext}`;
 
     const { error } = await supabase.storage
       .from("chat-attachments")
-      .upload(path, file);
+      .upload(path, uploadFile);
 
     if (error) throw error;
 
     const { data: urlData } = supabase.storage
       .from("chat-attachments")
       .getPublicUrl(path);
-
-    let type: "image" | "video" | "document" = "document";
-    if (file.type.startsWith("image/")) type = "image";
-    else if (file.type.startsWith("video/")) type = "video";
 
     return { url: urlData.publicUrl, type, name: file.name };
   }
