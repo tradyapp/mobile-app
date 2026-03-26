@@ -26,17 +26,24 @@ import { chatService, type ChatRoom } from "@/services/ChatService";
 // ---------------------------------------------------------------------------
 
 interface LearnRouteState {
-  view: "catalog" | "course" | "lesson" | "chat";
+  view: "catalog" | "course" | "lesson" | "chat" | "chatRoom";
   courseId: string | null;
   lessonId: string | null;
+  roomId: string | null;
 }
 
 function parseLearnRoute(pathname: string): LearnRouteState {
   const normalized = pathname.replace(/\/+$/, "");
 
+  // /learn/chat/:roomId
+  const chatRoomMatch = normalized.match(/^\/learn\/chat\/([^/]+)$/);
+  if (chatRoomMatch) {
+    return { view: "chatRoom", courseId: null, lessonId: null, roomId: decodeURIComponent(chatRoomMatch[1]) };
+  }
+
   // /learn/chat
   if (normalized === "/learn/chat") {
-    return { view: "chat", courseId: null, lessonId: null };
+    return { view: "chat", courseId: null, lessonId: null, roomId: null };
   }
 
   // /learn/:courseId/:lessonId
@@ -46,6 +53,7 @@ function parseLearnRoute(pathname: string): LearnRouteState {
       view: "lesson",
       courseId: decodeURIComponent(lessonMatch[1]),
       lessonId: decodeURIComponent(lessonMatch[2]),
+      roomId: null,
     };
   }
 
@@ -56,11 +64,12 @@ function parseLearnRoute(pathname: string): LearnRouteState {
       view: "course",
       courseId: decodeURIComponent(courseMatch[1]),
       lessonId: null,
+      roomId: null,
     };
   }
 
   // /learn
-  return { view: "catalog", courseId: null, lessonId: null };
+  return { view: "catalog", courseId: null, lessonId: null, roomId: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +214,7 @@ export default function LearnTab() {
   // Derived state from route
   // ---------------------------------------------------------------------------
 
-  const { view, courseId, lessonId } = routeState;
+  const { view, courseId, lessonId, roomId } = routeState;
 
   // Flat ordered list of all lessons across modules
   const allLessons = useMemo(() => modules.flatMap((mod) => mod.lessons), [modules]);
@@ -378,7 +387,7 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (view !== "chat") return;
+    if (view !== "chat" && view !== "chatRoom") return;
     let active = true;
 
     const run = async () => {
@@ -419,21 +428,30 @@ export default function LearnTab() {
 
   const moduleCount = modules.length;
 
+  const currentRoom = useMemo(
+    () => (roomId ? chatRooms.find((r) => r.id === roomId) ?? null : null),
+    [chatRooms, roomId]
+  );
+
   const navbarTitle =
     view === "catalog"
       ? "Learn"
       : view === "chat"
         ? "Chat"
-        : view === "course"
-          ? selectedCourse?.title ?? "Course"
-          : selectedLesson?.title ?? "Lesson";
+        : view === "chatRoom"
+          ? currentRoom?.name ?? "Chat"
+          : view === "course"
+            ? selectedCourse?.title ?? "Course"
+            : selectedLesson?.title ?? "Lesson";
 
   // ---------------------------------------------------------------------------
   // Navigation handlers
   // ---------------------------------------------------------------------------
 
   const handleBack = () => {
-    if (view === "chat") {
+    if (view === "chatRoom") {
+      navigate("/learn/chat");
+    } else if (view === "chat") {
       navigate("/learn");
     } else if (view === "lesson" && courseId) {
       navigate(`/learn/${courseId}`);
@@ -886,8 +904,38 @@ export default function LearnTab() {
   );
 
   // ---------------------------------------------------------------------------
+  // Render: Chat Room (fullscreen)
+  // ---------------------------------------------------------------------------
+
+  const renderChatRoom = () => (
+    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 h-14 border-b border-zinc-800 shrink-0" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <button
+          className="w-8 h-8 flex items-center justify-center text-zinc-200"
+          onClick={handleBack}
+        >
+          <span className="text-xl">‹</span>
+        </button>
+        <h1 className="text-white font-medium text-sm truncate flex-1">
+          {currentRoom?.name ?? "Chat"}
+        </h1>
+      </div>
+
+      {/* Chat area */}
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-zinc-500 text-sm">Chat</p>
+      </div>
+    </div>
+  );
+
+  // ---------------------------------------------------------------------------
   // Layout
   // ---------------------------------------------------------------------------
+
+  if (view === "chatRoom") {
+    return renderChatRoom();
+  }
 
   const lessonCompleted = selectedLesson ? progressMap.get(selectedLesson.id)?.completed === true : false;
 

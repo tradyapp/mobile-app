@@ -37,7 +37,9 @@ const AppLayout = () => {
     [tabs, location.pathname]
   );
   const isFullscreenRoute = useMemo(
-    () => /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname),
+    () =>
+      /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname) ||
+      /^\/learn\/chat\/[^/]+$/.test(location.pathname),
     [location.pathname]
   );
   const ActiveTabComponent = activeTab.component;
