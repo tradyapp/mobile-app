@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block, List, ListItem } from "konsta/react";
+import { Block } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
 import {
@@ -874,22 +874,20 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderChatRoomsSkeleton = () => (
-    <List strong inset className="!mb-0">
+    <div className="space-y-3 px-4">
       {[0, 1, 2].map((i) => (
-        <ListItem
+        <div
           key={i}
-          media={
-            <div className="w-11 h-11 rounded-full bg-zinc-800 animate-pulse" />
-          }
-          title={
-            <div className="h-4 w-32 bg-zinc-800 rounded animate-pulse" />
-          }
-          subtitle={
-            <div className="h-3 w-48 bg-zinc-800/60 rounded animate-pulse mt-1" />
-          }
-        />
+          className="rounded-2xl bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 p-4 flex items-center gap-4"
+        >
+          <div className="w-12 h-12 rounded-full bg-zinc-800 animate-pulse shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-28 bg-zinc-800 rounded-full animate-pulse" />
+            <div className="h-3 w-44 bg-zinc-800/50 rounded-full animate-pulse" />
+          </div>
+        </div>
       ))}
-    </List>
+    </div>
   );
 
   const renderChat = () => (
@@ -902,31 +900,36 @@ export default function LearnTab() {
         <p className="text-zinc-400 text-sm px-4">No hay salas de chat disponibles.</p>
       )}
       {!chatRoomsLoading && chatRooms.length > 0 && (
-        <List strong inset className="!mb-0">
+        <div className="space-y-3 px-4">
           {chatRooms.map((room) => (
-            <ListItem
+            <button
               key={room.id}
-              link
-              chevronMaterial
               onClick={() => navigate(`/learn/chat/${room.id}`)}
-              title={room.name}
-              subtitle={room.description || undefined}
-              media={
-                <div className="w-11 h-11 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
-                  {room.icon_url ? (
-                    <img
-                      src={room.icon_url}
-                      alt={room.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <MessageIcon />
-                  )}
-                </div>
-              }
-            />
+              className="w-full text-left rounded-2xl bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 p-4 flex items-center gap-4 active:scale-[0.98] active:bg-zinc-800/80 transition-all duration-150"
+            >
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 shrink-0 flex items-center justify-center overflow-hidden shadow-lg shadow-black/20">
+                {room.icon_url ? (
+                  <img
+                    src={room.icon_url}
+                    alt={room.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <MessageIcon />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-white font-semibold text-[15px] leading-tight">{room.name}</h3>
+                {room.description && (
+                  <p className="text-zinc-400 text-[13px] mt-1 line-clamp-2 leading-snug">{room.description}</p>
+                )}
+              </div>
+              <svg className="w-5 h-5 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           ))}
-        </List>
+        </div>
       )}
     </Block>
   );
