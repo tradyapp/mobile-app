@@ -19,7 +19,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
-import { chatService, type ChatRoom } from "@/services/ChatService";
+import { chatService, type ChatRoom, type ChatMessage } from "@/services/ChatService";
 
 // ---------------------------------------------------------------------------
 // Route parsing
@@ -908,41 +908,79 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const [chatMessage, setChatMessage] = useState("");
-  const [chatMessages, setChatMessages] = useState<{ id: string; text: string; sender: string; timestamp: Date }[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const [sending, setSending] = useState(false);
 
-  const handleSendMessage = () => {
+  // Fetch messages + subscribe to realtime when entering a chat room
+  useEffect(() => {
+    if (view !== "chatRoom" || !roomId) return;
+    let active = true;
+
+    setChatMessagesLoading(true);
+    setChatMessages([]);
+
+    const run = async () => {
+      try {
+        const msgs = await chatService.getMessages(roomId);
+        if (!active) return;
+        setChatMessages(msgs);
+      } catch {
+        // silent fail
+      } finally {
+        if (active) setChatMessagesLoading(false);
+      }
+    };
+
+    void run();
+
+    // Subscribe to new messages
+    const channel = chatService.subscribeToRoom(roomId, (newMsg) => {
+      if (!active) return;
+      setChatMessages((prev) => {
+        // Avoid duplicates
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+    });
+
+    return () => {
+      active = false;
+      chatService.unsubscribe(channel);
+    };
+  }, [view, roomId]);
+
+  const handleSendMessage = async () => {
     const text = chatMessage.trim();
-    if (!text || !user) return;
+    if (!text || !user || !roomId || sending) return;
 
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        text,
-        sender: user.email ?? "User",
-        timestamp: new Date(),
-      },
-    ]);
     setChatMessage("");
-
-    // Reset textarea height
     if (chatInputRef.current) {
       chatInputRef.current.style.height = "auto";
+    }
+
+    setSending(true);
+    try {
+      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text);
+    } catch {
+      // Restore message on failure
+      setChatMessage(text);
+    } finally {
+      setSending(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      void handleSendMessage();
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setChatMessage(e.target.value);
-    // Auto-resize textarea
     const el = e.target;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
@@ -974,23 +1012,28 @@ export default function LearnTab() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
-        {chatMessages.length === 0 ? (
+        {chatMessagesLoading ? (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-zinc-600 text-sm">Cargando mensajes...</p>
+          </div>
+        ) : chatMessages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-zinc-600 text-sm">No hay mensajes aun. Inicia la conversacion.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {chatMessages.map((msg) => {
-              const isOwn = msg.sender === (user?.email ?? "");
+              const isOwn = msg.user_id === user?.uid;
+              const time = new Date(msg.created_at);
               return (
                 <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 ${isOwn ? "bg-emerald-600 text-white rounded-br-md" : "bg-zinc-800 text-zinc-100 rounded-bl-md"}`}>
                     {!isOwn && (
-                      <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{msg.sender}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{msg.user_email}</p>
                     )}
                     <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
                     <p className={`text-[10px] mt-1 text-right ${isOwn ? "text-emerald-200/60" : "text-zinc-500"}`}>
-                      {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
                 </div>
@@ -1014,8 +1057,8 @@ export default function LearnTab() {
             className="flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-zinc-500 max-h-[120px]"
           />
           <button
-            onClick={handleSendMessage}
-            disabled={!chatMessage.trim()}
+            onClick={() => void handleSendMessage()}
+            disabled={!chatMessage.trim() || sending}
             className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 disabled:opacity-30 active:bg-emerald-700 transition-colors"
           >
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
