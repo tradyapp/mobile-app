@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
+import { chatService, type ChatRoom } from "@/services/ChatService";
 
 // ---------------------------------------------------------------------------
 // Route parsing
@@ -185,6 +186,11 @@ export default function LearnTab() {
   const user = useAuthStore((state) => state.user);
   const storeLocale = useUserPrefsStore((state) => state.locale);
   const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
+
+  // Chat rooms state
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [chatRoomsLoading, setChatRoomsLoading] = useState(false);
+  const [chatRoomsError, setChatRoomsError] = useState<string | null>(null);
 
   // Progress state
   const [progressMap, setProgressMap] = useState<Map<string, LessonProgress>>(new Map());
@@ -365,6 +371,33 @@ export default function LearnTab() {
       setProgressMap(new Map());
       loadedCourseIdRef.current = null;
     }
+  }, [view]);
+
+  // ---------------------------------------------------------------------------
+  // Fetch chat rooms
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (view !== "chat") return;
+    let active = true;
+
+    const run = async () => {
+      setChatRoomsLoading(true);
+      setChatRoomsError(null);
+      try {
+        const rooms = await chatService.getRooms();
+        if (!active) return;
+        setChatRooms(rooms);
+      } catch (err) {
+        if (!active) return;
+        setChatRoomsError(err instanceof Error ? err.message : "Could not load chat rooms");
+      } finally {
+        if (active) setChatRoomsLoading(false);
+      }
+    };
+
+    void run();
+    return () => { active = false; };
   }, [view]);
 
   // ---------------------------------------------------------------------------
@@ -804,9 +837,51 @@ export default function LearnTab() {
   // Render: Chat
   // ---------------------------------------------------------------------------
 
+  const renderChatRoomsSkeleton = () => (
+    <div className="space-y-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />
+            <div className="h-3 w-3/4 bg-zinc-800/60 rounded animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   const renderChat = () => (
-    <Block className="pt-8 pb-24 flex items-center justify-center">
-      <p className="text-zinc-400 text-sm">Chat</p>
+    <Block className="pt-2 pb-24">
+      {chatRoomsLoading && renderChatRoomsSkeleton()}
+      {chatRoomsError && <p className="text-red-400 text-sm mb-3">{chatRoomsError}</p>}
+      {!chatRoomsLoading && !chatRoomsError && chatRooms.length === 0 && (
+        <p className="text-zinc-400 text-sm">No chat rooms available.</p>
+      )}
+      <div className="space-y-3">
+        {chatRooms.map((room) => (
+          <button
+            key={room.id}
+            onClick={() => navigate(`/learn/chat/${room.id}`)}
+            className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 flex items-center gap-3 active:bg-zinc-800/70 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-full bg-zinc-800 shrink-0 flex items-center justify-center overflow-hidden">
+              {room.icon_url ? (
+                <img src={room.icon_url} alt={room.name} className="w-full h-full object-cover" />
+              ) : (
+                <MessageIcon />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-white font-medium text-sm">{room.name}</h3>
+              {room.description && (
+                <p className="text-zinc-400 text-xs mt-0.5 line-clamp-1">{room.description}</p>
+              )}
+            </div>
+            <span className="text-zinc-600 text-lg shrink-0">›</span>
+          </button>
+        ))}
+      </div>
     </Block>
   );
 
