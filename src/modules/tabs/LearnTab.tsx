@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { Block } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
+import GroupAvatarIcon from "@/components/icons/GroupAvatarIcon";
 import {
   lmsService,
   type LmsCourse,
@@ -915,7 +916,7 @@ export default function LearnTab() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <MessageIcon />
+                  <GroupAvatarIcon />
                 )}
               </div>
               <div className="min-w-0 flex-1">
