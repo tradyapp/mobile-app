@@ -1156,24 +1156,46 @@ export default function LearnTab() {
   // Component: Chat Video Preview (thumbnail → inline player)
   // ---------------------------------------------------------------------------
 
+  const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
   function ChatVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thumbnailUrl: string | null }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [speed, setSpeed] = useState(1);
+    const [showSpeeds, setShowSpeeds] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
 
     const handleOpen = () => {
       setOpen(true);
       setLoading(true);
+      setSpeed(1);
+      setShowSpeeds(false);
     };
 
     const handleClose = () => {
       setOpen(false);
       setLoading(false);
+      setShowSpeeds(false);
     };
 
     const handleCanPlay = () => {
       setLoading(false);
       videoRef.current?.play();
+    };
+
+    const handleSpeedChange = (s: number) => {
+      setSpeed(s);
+      setShowSpeeds(false);
+      if (videoRef.current) videoRef.current.playbackRate = s;
+    };
+
+    const handleDownload = () => {
+      const a = document.createElement("a");
+      a.href = videoUrl;
+      a.download = "video";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.click();
     };
 
     return (
@@ -1204,8 +1226,11 @@ export default function LearnTab() {
         {/* Fullscreen video player */}
         {open && (
           <div className="fixed inset-0 z-[70] bg-black flex flex-col">
-            {/* Header */}
-            <div className="flex items-center px-4 shrink-0" style={{ paddingTop: "env(safe-area-inset-top, 0px)", minHeight: "3.5rem" }}>
+            {/* Header with actions */}
+            <div
+              className="flex items-center justify-between px-4 shrink-0"
+              style={{ paddingTop: "env(safe-area-inset-top, 0px)", minHeight: "3.5rem" }}
+            >
               <button
                 onClick={handleClose}
                 className="w-9 h-9 flex items-center justify-center text-white rounded-full active:bg-white/10"
@@ -1214,10 +1239,48 @@ export default function LearnTab() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+
+              <div className="flex items-center gap-2">
+                {/* Speed button */}
+                <button
+                  onClick={() => setShowSpeeds(!showSpeeds)}
+                  className="h-9 px-3 flex items-center gap-1.5 text-white rounded-full active:bg-white/10"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <span className="text-sm font-medium">{speed}x</span>
+                </button>
+
+                {/* Download button */}
+                <button
+                  onClick={handleDownload}
+                  className="w-9 h-9 flex items-center justify-center text-white rounded-full active:bg-white/10"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
+            {/* Speed selector dropdown */}
+            {showSpeeds && (
+              <div className="absolute top-16 right-4 z-20 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden shadow-2xl" style={{ marginTop: "env(safe-area-inset-top, 0px)" }}>
+                {PLAYBACK_SPEEDS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleSpeedChange(s)}
+                    className={`w-full px-5 py-2.5 text-sm text-left transition-colors ${speed === s ? "text-[#00ff99] bg-white/5" : "text-zinc-300 active:bg-white/5"}`}
+                  >
+                    {s}x {s === 1 && "(Normal)"}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Video */}
-            <div className="flex-1 flex items-center justify-center relative">
+            <div className="flex-1 flex items-center justify-center relative" onClick={() => showSpeeds && setShowSpeeds(false)}>
               {loading && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
                   <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
