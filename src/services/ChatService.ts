@@ -47,16 +47,32 @@ class ChatService {
     return (data as ChatRoom[]) ?? [];
   }
 
-  async getMessages(roomId: string, limit = 100): Promise<ChatMessage[]> {
+  /** Fetch the latest `limit` messages (returned in ascending order). */
+  async getMessages(roomId: string, limit = 15): Promise<ChatMessage[]> {
+    // Fetch newest first, then reverse so the array is chronological
     const { data, error } = await supabase
       .from("chat_messages")
       .select(MESSAGE_FIELDS)
       .eq("room_id", roomId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(limit);
 
     if (error) throw error;
-    return (data as ChatMessage[]) ?? [];
+    return ((data as ChatMessage[]) ?? []).reverse();
+  }
+
+  /** Fetch `limit` messages older than `beforeId` (returned in ascending order). */
+  async getOlderMessages(roomId: string, beforeDate: string, limit = 5): Promise<ChatMessage[]> {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select(MESSAGE_FIELDS)
+      .eq("room_id", roomId)
+      .lt("created_at", beforeDate)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return ((data as ChatMessage[]) ?? []).reverse();
   }
 
   async sendMessage(

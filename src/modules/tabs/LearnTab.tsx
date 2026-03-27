@@ -944,25 +944,32 @@ export default function LearnTab() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const initialScrollDone = useRef(false);
 
-  // Fetch messages + subscribe to realtime when entering a chat room
+  // Fetch last 15 messages + subscribe to realtime when entering a chat room
   useEffect(() => {
     if (view !== "chatRoom" || !roomId) return;
     let active = true;
+    initialScrollDone.current = false;
+    setHasMoreMessages(true);
 
     setChatMessagesLoading(true);
     setChatMessages([]);
 
     const run = async () => {
       try {
-        const msgs = await chatService.getMessages(roomId);
+        const msgs = await chatService.getMessages(roomId, 15);
         if (!active) return;
         setChatMessages(msgs);
+        if (msgs.length < 15) setHasMoreMessages(false);
       } catch {
         // silent fail
       } finally {
@@ -985,6 +992,43 @@ export default function LearnTab() {
       chatService.unsubscribe(channel);
     };
   }, [view, roomId]);
+
+  // Load older messages when scrolling to top
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasMoreMessages || !roomId || chatMessages.length === 0) return;
+    const oldest = chatMessages[0];
+    if (!oldest) return;
+
+    setLoadingOlder(true);
+    const scrollEl = chatScrollRef.current;
+    const prevHeight = scrollEl?.scrollHeight ?? 0;
+
+    try {
+      const older = await chatService.getOlderMessages(roomId, oldest.created_at, 5);
+      if (older.length < 5) setHasMoreMessages(false);
+      if (older.length > 0) {
+        setChatMessages((prev) => [...older, ...prev]);
+        // Restore scroll position so it doesn't jump
+        requestAnimationFrame(() => {
+          if (scrollEl) {
+            scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight;
+          }
+        });
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, hasMoreMessages, roomId, chatMessages]);
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    if (el.scrollTop < 80 && hasMoreMessages && !loadingOlder) {
+      void loadOlderMessages();
+    }
+  }, [loadOlderMessages, hasMoreMessages, loadingOlder]);
 
   // Clear pending file when leaving chat room
   useEffect(() => {
@@ -1060,10 +1104,26 @@ export default function LearnTab() {
     setPendingFile(null);
   };
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom: instant on first load, smooth for new messages
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    if (chatMessages.length === 0) return;
+    if (!initialScrollDone.current) {
+      // First load — jump to bottom instantly
+      initialScrollDone.current = true;
+      requestAnimationFrame(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "instant" });
+      });
+    } else if (!loadingOlder) {
+      // New message arrived — smooth scroll only if near bottom
+      const el = chatScrollRef.current;
+      if (el) {
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+        if (nearBottom) {
+          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      }
+    }
+  }, [chatMessages, loadingOlder]);
 
   // ---------------------------------------------------------------------------
   // Component: Chat Video Preview (thumbnail → inline player)
@@ -1150,7 +1210,7 @@ export default function LearnTab() {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-4 py-3">
         {chatMessagesLoading ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-zinc-600 text-sm">Cargando mensajes...</p>
@@ -1161,6 +1221,11 @@ export default function LearnTab() {
           </div>
         ) : (
           <div className="space-y-3">
+            {loadingOlder && (
+              <div className="flex justify-center py-2">
+                <div className="w-5 h-5 border-2 border-zinc-700 border-t-zinc-400 rounded-full animate-spin" />
+              </div>
+            )}
             {chatMessages.map((msg) => {
               const isOwn = msg.user_id === user?.uid;
               const time = new Date(msg.created_at);
