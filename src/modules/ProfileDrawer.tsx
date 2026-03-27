@@ -4,7 +4,7 @@ import { List, ListItem, ListButton, Dialog, DialogButton } from "konsta/react";
 import AppDrawer, { type DrawerScreen } from "../components/uiux/AppDrawer";
 import { useDrawerNav } from "../components/uiux/drawer-nav";
 import { authService } from "@/services/AuthService";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
@@ -27,6 +27,7 @@ interface ProfileCtxValue {
   handleLanguageChange: (nextLocale: "en" | "es") => void;
   setIsLogoutDialogOpen: (open: boolean) => void;
   profile: ProfileData;
+  updateAvatar: (file: File) => Promise<void>;
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
@@ -96,7 +97,23 @@ function AccountScreen() {
 // ── Screen: Profile ──
 
 function ProfileScreen() {
-  const { profile } = useContext(ProfileCtx);
+  const { profile, updateAvatar } = useContext(ProfileCtx);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploading(true);
+    try {
+      await updateAvatar(file);
+    } catch {
+      // silent fail
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const fields: { label: string; value: string }[] = [
     { label: "Display Name", value: profile.displayName || "—" },
@@ -108,17 +125,41 @@ function ProfileScreen() {
 
   return (
     <div>
-      {/* Avatar + name header */}
+      {/* Avatar + upload */}
       <div className="flex flex-col items-center py-6">
-        <img
-          src={profile.avatarUrl || "/img/default-user.webp"}
-          alt="Profile"
-          className="w-24 h-24 rounded-full object-cover mb-3"
-        />
+        <div className="relative mb-3">
+          {uploading ? (
+            <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-zinc-600 border-t-[#00ff99] rounded-full animate-spin" />
+            </div>
+          ) : (
+            <img
+              src={profile.avatarUrl || "/img/default-user.webp"}
+              alt="Profile"
+              className="w-24 h-24 rounded-full object-cover"
+            />
+          )}
+        </div>
         <h2 className="text-white text-lg font-semibold">
           {profile.displayName || "Usuario"}
         </h2>
-        <p className="text-zinc-500 text-sm">{profile.email}</p>
+        <p className="text-zinc-500 text-sm mb-3">{profile.email}</p>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="px-4 py-2 rounded-full text-sm font-medium text-black disabled:opacity-40 active:opacity-80 transition-opacity"
+          style={{ background: "#00ff99" }}
+        >
+          {uploading ? "Subiendo..." : profile.avatarUrl ? "Cambiar foto" : "Subir foto"}
+        </button>
       </div>
 
       {/* Profile fields */}
@@ -253,12 +294,19 @@ export default function ProfileDrawer({
     }
   };
 
+  const updateAvatar = async (file: File) => {
+    if (!user?.uid) return;
+    const newUrl = await userService.uploadAvatar(user.uid, file);
+    setProfile((p) => ({ ...p, avatarUrl: newUrl }));
+  };
+
   const ctxValue: ProfileCtxValue = {
     locale,
     isUpdatingLocale,
     handleLanguageChange,
     setIsLogoutDialogOpen,
     profile,
+    updateAvatar,
   };
 
   return (

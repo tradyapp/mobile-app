@@ -139,6 +139,50 @@ class UserService {
     }
   }
 
+  async uploadAvatar(uid: string, file: File): Promise<string> {
+    // Resize to 400x400 WebP
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement("canvas");
+        canvas.width = 400;
+        canvas.height = 400;
+        const ctx = canvas.getContext("2d")!;
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, 400, 400);
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("Failed to process image"))),
+          "image/webp",
+          0.85,
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Failed to load image")); };
+      img.src = url;
+    });
+
+    const path = `${uid}/avatar.webp`;
+    const { error: uploadError } = await supabase.storage
+      .from("user-avatars")
+      .upload(path, blob, { contentType: "image/webp", upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from("user-avatars").getPublicUrl(path);
+    const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+
+    // Update profile with new avatar URL
+    await supabase
+      .from("user_profiles")
+      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .eq("id", uid);
+
+    return avatarUrl;
+  }
+
   async createInitialProfile(uid: string, email: string, displayName?: string): Promise<void> {
     await this.updateUserProfile(uid, {
       email,
