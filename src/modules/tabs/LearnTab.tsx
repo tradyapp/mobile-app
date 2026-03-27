@@ -953,6 +953,23 @@ export default function LearnTab() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const initialScrollDone = useRef(false);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+
+  // Resolve display names for a set of user IDs (skips already resolved)
+  const resolveUserNames = useCallback(async (msgs: ChatMessage[]) => {
+    const unknownIds = [...new Set(msgs.map((m) => m.user_id))].filter((id) => !userNames[id]);
+    if (unknownIds.length === 0) return;
+    try {
+      const profiles = await userService.listPublicProfiles(unknownIds);
+      setUserNames((prev) => {
+        const next = { ...prev };
+        for (const p of profiles) next[p.id] = p.displayName;
+        return next;
+      });
+    } catch {
+      // silent fail
+    }
+  }, [userNames]);
 
   // Fetch last 15 messages + subscribe to realtime when entering a chat room
   useEffect(() => {
@@ -970,6 +987,7 @@ export default function LearnTab() {
         if (!active) return;
         setChatMessages(msgs);
         if (msgs.length < 15) setHasMoreMessages(false);
+        void resolveUserNames(msgs);
       } catch {
         // silent fail
       } finally {
@@ -985,6 +1003,7 @@ export default function LearnTab() {
         if (prev.some((m) => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
+      void resolveUserNames([newMsg]);
     });
 
     return () => {
@@ -1008,6 +1027,7 @@ export default function LearnTab() {
       if (older.length < 5) setHasMoreMessages(false);
       if (older.length > 0) {
         setChatMessages((prev) => [...older, ...prev]);
+        void resolveUserNames(older);
         // Restore scroll position so it doesn't jump
         requestAnimationFrame(() => {
           if (scrollEl) {
@@ -1233,7 +1253,7 @@ export default function LearnTab() {
                 <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 ${isOwn ? "bg-emerald-600 text-white rounded-br-md" : "bg-zinc-800 text-zinc-100 rounded-bl-md"}`}>
                     {!isOwn && (
-                      <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{msg.user_email}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mb-0.5">{userNames[msg.user_id] || "User"}</p>
                     )}
                     {msg.attachment_url && msg.attachment_type === "image" && (
                       <ProgressiveImage src={msg.attachment_url} thumbnail={msg.thumbnail_url} alt={msg.attachment_name ?? "image"} />
