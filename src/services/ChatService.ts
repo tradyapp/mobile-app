@@ -153,10 +153,69 @@ class ChatService {
       return { url: fullUrl, type, name: file.name, thumbnailUrl: thumbUrl };
     }
 
-    if (file.type.startsWith("video/")) type = "video";
+    if (file.type.startsWith("video/")) {
+      type = "video";
+
+      const [videoUrl, thumbUrl] = await Promise.all([
+        this.uploadFile(roomId, file),
+        this.generateVideoThumbnail(file).then((thumbFile) =>
+          this.uploadFile(roomId, thumbFile, "_thumb")
+        ),
+      ]);
+
+      return { url: videoUrl, type, name: file.name, thumbnailUrl: thumbUrl };
+    }
 
     const url = await this.uploadFile(roomId, file);
     return { url, type, name: file.name, thumbnailUrl: null };
+  }
+
+  private generateVideoThumbnail(file: File): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      video.playsInline = true;
+      const objectUrl = URL.createObjectURL(file);
+
+      video.onloadeddata = () => {
+        // Seek to 1s or 25% of duration, whichever is smaller
+        video.currentTime = Math.min(1, video.duration * 0.25);
+      };
+
+      video.onseeked = () => {
+        const canvas = document.createElement("canvas");
+        const maxW = 480;
+        let { videoWidth: w, videoHeight: h } = video;
+        if (w > maxW) {
+          h = Math.round(h * (maxW / w));
+          w = maxW;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { URL.revokeObjectURL(objectUrl); reject(new Error("Canvas not supported")); return; }
+        ctx.drawImage(video, 0, 0, w, h);
+        URL.revokeObjectURL(objectUrl);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error("Failed to generate video thumbnail")); return; }
+            const baseName = file.name.replace(/\.[^.]+$/, "");
+            resolve(new File([blob], `${baseName}_thumb.webp`, { type: "image/webp" }));
+          },
+          "image/webp",
+          0.75,
+        );
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Failed to load video for thumbnail"));
+      };
+
+      video.src = objectUrl;
+    });
   }
 
   subscribeToRoom(roomId: string, onMessage: (msg: ChatMessage) => void): RealtimeChannel {
