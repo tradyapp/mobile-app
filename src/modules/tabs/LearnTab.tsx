@@ -21,6 +21,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
 import { chatService, type ChatRoom, type ChatMessage, type AttachmentResult } from "@/services/ChatService";
+import MediaPreviewScreen from "@/components/chat/MediaPreviewScreen";
 
 // ---------------------------------------------------------------------------
 // Route parsing
@@ -994,29 +995,20 @@ export default function LearnTab() {
 
   const handleSendMessage = async () => {
     const text = chatMessage.trim();
-    const file = pendingFile;
-    if ((!text && !file) || !user || !roomId || sending) return;
+    if (!text || !user || !roomId || sending) return;
 
     setChatMessage("");
-    setPendingFile(null);
     if (chatInputRef.current) {
       chatInputRef.current.style.height = "auto";
     }
 
     setSending(true);
     try {
-      let attachment: AttachmentResult | undefined;
-      if (file) {
-        setUploading(true);
-        attachment = await chatService.uploadAttachment(roomId, file);
-        setUploading(false);
-      }
-      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text, attachment);
+      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text);
     } catch {
       setChatMessage(text);
     } finally {
       setSending(false);
-      setUploading(false);
     }
   };
 
@@ -1034,10 +1026,38 @@ export default function LearnTab() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   };
 
+  const [showMediaPreview, setShowMediaPreview] = useState(false);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setPendingFile(file);
+    if (file) {
+      setPendingFile(file);
+      setShowMediaPreview(true);
+    }
     e.target.value = "";
+  };
+
+  const handleMediaSend = async (file: File, caption: string) => {
+    if (!user || !roomId || sending) return;
+    setShowMediaPreview(false);
+    setPendingFile(null);
+    setSending(true);
+    try {
+      setUploading(true);
+      const attachment = await chatService.uploadAttachment(roomId, file);
+      setUploading(false);
+      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", caption, attachment);
+    } catch {
+      // silent fail
+    } finally {
+      setSending(false);
+      setUploading(false);
+    }
+  };
+
+  const handleMediaCancel = () => {
+    setShowMediaPreview(false);
+    setPendingFile(null);
   };
 
   // Scroll to bottom when new messages arrive
@@ -1180,28 +1200,17 @@ export default function LearnTab() {
         )}
       </div>
 
+      {/* Media Preview Screen */}
+      {showMediaPreview && pendingFile && (
+        <MediaPreviewScreen
+          file={pendingFile}
+          onSend={handleMediaSend}
+          onCancel={handleMediaCancel}
+        />
+      )}
+
       {/* Input bar */}
       <div className="shrink-0 border-t border-zinc-800 bg-zinc-950" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {/* Pending file preview */}
-        {pendingFile && (
-          <div className="px-3 pt-2 flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 flex-1 min-w-0">
-              {pendingFile.type.startsWith("image/") ? (
-                <img src={URL.createObjectURL(pendingFile)} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
-              ) : (
-                <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-              )}
-              <span className="text-xs text-zinc-300 truncate">{pendingFile.name}</span>
-            </div>
-            <button onClick={() => setPendingFile(null)} className="text-zinc-500 active:text-zinc-300 p-1">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        )}
         <div className="flex items-end gap-2 px-3 py-2">
           <input
             ref={fileInputRef}
@@ -1230,7 +1239,7 @@ export default function LearnTab() {
           />
           <button
             onClick={() => void handleSendMessage()}
-            disabled={(!chatMessage.trim() && !pendingFile) || sending}
+            disabled={!chatMessage.trim() || sending}
             className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 disabled:opacity-30 active:bg-emerald-700 transition-colors"
           >
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
