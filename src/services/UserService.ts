@@ -139,45 +139,59 @@ class UserService {
     }
   }
 
-  async uploadAvatar(uid: string, file: File): Promise<string> {
-    // Resize to 400x400 WebP
-    const blob = await new Promise<Blob>((resolve, reject) => {
+  private resizeSquare(file: File, size: number, quality: number): Promise<Blob> {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
         const canvas = document.createElement("canvas");
-        canvas.width = 400;
-        canvas.height = 400;
+        canvas.width = size;
+        canvas.height = size;
         const ctx = canvas.getContext("2d")!;
         const side = Math.min(img.width, img.height);
         const sx = (img.width - side) / 2;
         const sy = (img.height - side) / 2;
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, 400, 400);
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
         canvas.toBlob(
           (b) => (b ? resolve(b) : reject(new Error("Failed to process image"))),
           "image/webp",
-          0.85,
+          quality,
         );
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Failed to load image")); };
       img.src = url;
     });
+  }
 
-    const path = `${uid}/avatar.webp`;
-    const { error: uploadError } = await supabase.storage
-      .from("user-avatars")
-      .upload(path, blob, { contentType: "image/webp", upsert: true });
+  async uploadAvatar(uid: string, file: File): Promise<string> {
+    // Generate 400x400 full + 200x200 thumb in parallel
+    const [fullBlob, thumbBlob] = await Promise.all([
+      this.resizeSquare(file, 400, 0.85),
+      this.resizeSquare(file, 200, 0.8),
+    ]);
 
-    if (uploadError) throw uploadError;
+    const fullPath = `${uid}/avatar.webp`;
+    const thumbPath = `${uid}/avatar_thumb.webp`;
 
-    const { data } = supabase.storage.from("user-avatars").getPublicUrl(path);
-    const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+    const [fullUp, thumbUp] = await Promise.all([
+      supabase.storage.from("user-avatars").upload(fullPath, fullBlob, { contentType: "image/webp", upsert: true }),
+      supabase.storage.from("user-avatars").upload(thumbPath, thumbBlob, { contentType: "image/webp", upsert: true }),
+    ]);
 
-    // Update profile with new avatar URL
+    if (fullUp.error) throw fullUp.error;
+    if (thumbUp.error) throw thumbUp.error;
+
+    const cacheBuster = `?v=${Date.now()}`;
+    const { data: fullData } = supabase.storage.from("user-avatars").getPublicUrl(fullPath);
+    const { data: thumbData } = supabase.storage.from("user-avatars").getPublicUrl(thumbPath);
+    const avatarUrl = `${fullData.publicUrl}${cacheBuster}`;
+    const avatarThumbUrl = `${thumbData.publicUrl}${cacheBuster}`;
+
+    // Update profile with both URLs
     await supabase
       .from("user_profiles")
-      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .update({ avatar_url: avatarUrl, avatar_thumb_url: avatarThumbUrl, updated_at: new Date().toISOString() })
       .eq("id", uid);
 
     return avatarUrl;
