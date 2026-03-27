@@ -108,169 +108,6 @@ function ImageCropOverlay({
 }
 
 // ============================================================================
-// Drawing Canvas Overlay
-// ============================================================================
-
-type DrawTool = "line" | "circle" | "rect";
-const DRAW_COLORS = [BRAND, "#ff4444", "#ffffff", "#fbbf24", "#3b82f6"];
-
-function DrawOverlay({
-  containerRect,
-  onApply,
-  onClose,
-}: {
-  containerRect: DOMRect;
-  onApply: (canvas: HTMLCanvasElement) => void;
-  onClose: () => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [tool, setTool] = useState<DrawTool>("rect");
-  const [color, setColor] = useState(BRAND);
-  const [shapes, setShapes] = useState<Array<{ tool: DrawTool; color: string; x1: number; y1: number; x2: number; y2: number }>>([]);
-  const drawing = useRef<{ x1: number; y1: number } | null>(null);
-  const [currentEnd, setCurrentEnd] = useState<{ x: number; y: number } | null>(null);
-
-  const getPos = (e: React.PointerEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const redraw = useCallback(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d")!;
-    ctx.clearRect(0, 0, c.width, c.height);
-
-    const drawShape = (s: { tool: DrawTool; color: string; x1: number; y1: number; x2: number; y2: number }) => {
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = 3;
-      ctx.lineCap = "round";
-      if (s.tool === "line") {
-        ctx.beginPath();
-        ctx.moveTo(s.x1, s.y1);
-        ctx.lineTo(s.x2, s.y2);
-        ctx.stroke();
-      } else if (s.tool === "rect") {
-        ctx.strokeRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
-      } else if (s.tool === "circle") {
-        const rx = Math.abs(s.x2 - s.x1) / 2;
-        const ry = Math.abs(s.y2 - s.y1) / 2;
-        const cx = Math.min(s.x1, s.x2) + rx;
-        const cy = Math.min(s.y1, s.y2) + ry;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    };
-
-    shapes.forEach(drawShape);
-    if (drawing.current && currentEnd) {
-      drawShape({ tool, color, x1: drawing.current.x1, y1: drawing.current.y1, x2: currentEnd.x, y2: currentEnd.y });
-    }
-  }, [shapes, tool, color, currentEnd]);
-
-  useEffect(() => { redraw(); }, [redraw]);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const p = getPos(e);
-    drawing.current = { x1: p.x, y1: p.y };
-    setCurrentEnd(p);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drawing.current) return;
-    setCurrentEnd(getPos(e));
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!drawing.current) return;
-    const p = getPos(e);
-    setShapes((prev) => [...prev, { tool, color, x1: drawing.current!.x1, y1: drawing.current!.y1, x2: p.x, y2: p.y }]);
-    drawing.current = null;
-    setCurrentEnd(null);
-  };
-
-  const undo = () => setShapes((prev) => prev.slice(0, -1));
-
-  const tools: { id: DrawTool; icon: string }[] = [
-    { id: "line", icon: "M4 20L20 4" },
-    { id: "rect", icon: "M4 6h16v12H4z" },
-    { id: "circle", icon: "M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0" },
-  ];
-
-  return (
-    <div className="absolute inset-0 z-10 flex flex-col">
-      <canvas
-        ref={canvasRef}
-        width={containerRect.width}
-        height={containerRect.height}
-        className="absolute inset-0"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-      />
-
-      {/* Toolbar at bottom */}
-      <div className="mt-auto relative z-20 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-4 px-4 space-y-3">
-        {/* Tool selector */}
-        <div className="flex items-center justify-center gap-2">
-          {tools.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTool(t.id)}
-              className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-              style={{ background: tool === t.id ? "rgba(0,255,153,0.15)" : "rgba(255,255,255,0.08)", border: tool === t.id ? `1.5px solid ${BRAND}` : "1.5px solid transparent" }}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke={tool === t.id ? BRAND : "#aaa"} strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
-              </svg>
-            </button>
-          ))}
-          {/* Undo */}
-          <button onClick={undo} disabled={shapes.length === 0} className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.08] disabled:opacity-30">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#aaa" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Color picker */}
-        <div className="flex items-center justify-center gap-2">
-          {DRAW_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setColor(c)}
-              className="w-7 h-7 rounded-full transition-transform"
-              style={{
-                background: c,
-                transform: color === c ? "scale(1.25)" : "scale(1)",
-                boxShadow: color === c ? `0 0 0 2px black, 0 0 0 3.5px ${c}` : "0 0 0 1.5px rgba(255,255,255,0.15)",
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-center gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-full bg-zinc-800/90 text-zinc-300 text-sm font-medium active:bg-zinc-700">
-            Cancelar
-          </button>
-          <button
-            onClick={() => canvasRef.current && onApply(canvasRef.current)}
-            className="px-5 py-2.5 rounded-full text-black text-sm font-semibold active:opacity-80"
-            style={{ background: BRAND }}
-          >
-            Aplicar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
 // Video Trim Overlay
 // ============================================================================
 
@@ -342,7 +179,7 @@ function VideoTrimOverlay({
 // Main: Media Preview Screen
 // ============================================================================
 
-type ActiveTool = "none" | "crop" | "draw" | "trim";
+type ActiveTool = "none" | "crop" | "trim";
 
 export default function MediaPreviewScreen({ file, onSend, onCancel }: MediaPreviewScreenProps) {
   const [caption, setCaption] = useState("");
@@ -392,36 +229,6 @@ export default function MediaPreviewScreen({ file, onSend, onCancel }: MediaPrev
     }, "image/webp", 0.85);
   }, [croppedUrl]);
 
-  // --- Drawing Apply ---
-  const handleDrawApply = useCallback((drawCanvas: HTMLCanvasElement) => {
-    if (!imgRef.current || !imgContainerRef.current) return;
-    const img = imgRef.current;
-    const rect = imgContainerRef.current.getBoundingClientRect();
-
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext("2d")!;
-    // Draw the image
-    ctx.drawImage(img, 0, 0);
-    // Scale and draw annotations on top
-    const sx = img.naturalWidth / rect.width;
-    const sy = img.naturalHeight / rect.height;
-    ctx.save();
-    ctx.scale(sx, sy);
-    ctx.drawImage(drawCanvas, 0, 0);
-    ctx.restore();
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const f = new File([blob], "annotated.webp", { type: "image/webp" });
-      setActiveFile(f);
-      if (croppedUrl) URL.revokeObjectURL(croppedUrl);
-      setCroppedUrl(URL.createObjectURL(f));
-      setActiveTool("none");
-    }, "image/webp", 0.85);
-  }, [croppedUrl]);
-
   // --- Video Trim ---
   const handleTrimApply = useCallback(async (start: number, end: number) => {
     if (!videoRef.current) return;
@@ -455,15 +262,6 @@ export default function MediaPreviewScreen({ file, onSend, onCancel }: MediaPrev
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="m7.848 8.25 1.536.887M7.848 8.25a3 3 0 1 1-5.196-3 3 3 0 0 1 5.196 3Zm1.536.887a2.165 2.165 0 0 1 1.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l2.077 1.199M7.848 15.75l1.536-.887m-1.536.887a3 3 0 1 1-5.196 3 3 3 0 0 1 5.196-3Zm1.536-.887a2.165 2.165 0 0 0 1.083-1.838c.005-.352.054-.695.14-1.025m-1.223 2.863 2.077-1.199m0-3.328a4.323 4.323 0 0 1 2.068-1.379l5.325-1.628a4.5 4.5 0 0 1 2.48-.044l.803.215-7.794 4.5m-2.882-1.664A4.33 4.33 0 0 0 10.607 12m3.736 0 7.794 4.5-.802.215a4.5 4.5 0 0 1-2.48-.043l-5.326-1.629a4.324 4.324 0 0 1-2.068-1.379M14.343 12l-2.882 1.664" />
-        </svg>
-      ),
-    },
-    {
-      id: "draw" as const,
-      label: "Dibujar",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
         </svg>
       ),
     },
@@ -507,9 +305,6 @@ export default function MediaPreviewScreen({ file, onSend, onCancel }: MediaPrev
             <img ref={imgRef} src={displayUrl} alt="Preview" className="max-w-full max-h-full object-contain select-none" draggable={false} />
             {activeTool === "crop" && imgContainerRef.current && (
               <ImageCropOverlay containerRect={imgContainerRef.current.getBoundingClientRect()} onApply={handleCropApply} onClose={() => setActiveTool("none")} />
-            )}
-            {activeTool === "draw" && imgContainerRef.current && (
-              <DrawOverlay containerRect={imgContainerRef.current.getBoundingClientRect()} onApply={handleDrawApply} onClose={() => setActiveTool("none")} />
             )}
           </div>
         )}
