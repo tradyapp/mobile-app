@@ -22,10 +22,12 @@ function formatTime(s: number) {
 }
 
 // ============================================================================
-// Image Crop Overlay
+// Image Crop Overlay — free rectangle, all edges & corners draggable
 // ============================================================================
 
-interface CropArea { x: number; y: number; size: number }
+interface CropRect { x: number; y: number; w: number; h: number }
+
+type DragHandle = "move" | "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 
 function ImageCropOverlay({
   containerRect,
@@ -33,68 +35,148 @@ function ImageCropOverlay({
   onClose,
 }: {
   containerRect: DOMRect;
-  onApply: (crop: CropArea) => void;
+  onApply: (crop: CropRect) => void;
   onClose: () => void;
 }) {
-  const initSize = Math.min(containerRect.width, containerRect.height) * 0.7;
-  const [crop, setCrop] = useState<CropArea>({
-    x: (containerRect.width - initSize) / 2,
-    y: (containerRect.height - initSize) / 2,
-    size: initSize,
-  });
-  const dragging = useRef<{ sx: number; sy: number; sc: CropArea } | null>(null);
-  const resizing = useRef<{ sx: number; sy: number; ss: number } | null>(null);
+  const cw = containerRect.width;
+  const ch = containerRect.height;
+  const MIN = 50;
 
-  const onDown = (e: React.PointerEvent, mode: "move" | "resize") => {
+  const [crop, setCrop] = useState<CropRect>({
+    x: cw * 0.15, y: ch * 0.15,
+    w: cw * 0.7, h: ch * 0.7,
+  });
+
+  const drag = useRef<{ handle: DragHandle; sx: number; sy: number; sc: CropRect } | null>(null);
+
+  const clamp = (r: CropRect): CropRect => ({
+    x: Math.max(0, Math.min(cw - MIN, r.x)),
+    y: Math.max(0, Math.min(ch - MIN, r.y)),
+    w: Math.max(MIN, Math.min(cw - Math.max(0, r.x), r.w)),
+    h: Math.max(MIN, Math.min(ch - Math.max(0, r.y), r.h)),
+  });
+
+  const onDown = (e: React.PointerEvent, handle: DragHandle) => {
     e.preventDefault();
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    if (mode === "move") dragging.current = { sx: e.clientX, sy: e.clientY, sc: { ...crop } };
-    else resizing.current = { sx: e.clientX, sy: e.clientY, ss: crop.size };
+    drag.current = { handle, sx: e.clientX, sy: e.clientY, sc: { ...crop } };
   };
+
   const onMove = (e: React.PointerEvent) => {
-    const w = containerRect.width, h = containerRect.height;
-    if (dragging.current) {
-      const d = dragging.current;
-      setCrop({ x: Math.max(0, Math.min(w - d.sc.size, d.sc.x + e.clientX - d.sx)), y: Math.max(0, Math.min(h - d.sc.size, d.sc.y + e.clientY - d.sy)), size: d.sc.size });
+    if (!drag.current) return;
+    const { handle, sx, sy, sc } = drag.current;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+
+    let next: CropRect;
+    switch (handle) {
+      case "move":
+        next = { ...sc, x: sc.x + dx, y: sc.y + dy };
+        // Keep size, clamp position
+        next.x = Math.max(0, Math.min(cw - sc.w, next.x));
+        next.y = Math.max(0, Math.min(ch - sc.h, next.y));
+        break;
+      case "nw":
+        next = { x: sc.x + dx, y: sc.y + dy, w: sc.w - dx, h: sc.h - dy };
+        break;
+      case "ne":
+        next = { x: sc.x, y: sc.y + dy, w: sc.w + dx, h: sc.h - dy };
+        break;
+      case "sw":
+        next = { x: sc.x + dx, y: sc.y, w: sc.w - dx, h: sc.h + dy };
+        break;
+      case "se":
+        next = { x: sc.x, y: sc.y, w: sc.w + dx, h: sc.h + dy };
+        break;
+      case "n":
+        next = { x: sc.x, y: sc.y + dy, w: sc.w, h: sc.h - dy };
+        break;
+      case "s":
+        next = { ...sc, h: sc.h + dy };
+        break;
+      case "w":
+        next = { x: sc.x + dx, y: sc.y, w: sc.w - dx, h: sc.h };
+        break;
+      case "e":
+        next = { ...sc, w: sc.w + dx };
+        break;
+      default:
+        return;
     }
-    if (resizing.current) {
-      const r = resizing.current;
-      const ns = Math.max(60, Math.min(w, h, r.ss + Math.max(e.clientX - r.sx, e.clientY - r.sy)));
-      setCrop((p) => ({ x: Math.min(p.x, w - ns), y: Math.min(p.y, h - ns), size: ns }));
-    }
+    setCrop(clamp(next));
   };
-  const onUp = () => { dragging.current = null; resizing.current = null; };
+
+  const onUp = () => { drag.current = null; };
+
+  // Edge/corner handle definitions
+  const EDGE = 12; // touch target size
+  const handles: { id: DragHandle; style: React.CSSProperties; cursor: string }[] = [
+    // Edges
+    { id: "n",  style: { top: -EDGE / 2, left: EDGE, right: EDGE, height: EDGE }, cursor: "ns-resize" },
+    { id: "s",  style: { bottom: -EDGE / 2, left: EDGE, right: EDGE, height: EDGE }, cursor: "ns-resize" },
+    { id: "w",  style: { left: -EDGE / 2, top: EDGE, bottom: EDGE, width: EDGE }, cursor: "ew-resize" },
+    { id: "e",  style: { right: -EDGE / 2, top: EDGE, bottom: EDGE, width: EDGE }, cursor: "ew-resize" },
+    // Corners
+    { id: "nw", style: { top: -EDGE / 2, left: -EDGE / 2, width: EDGE * 2, height: EDGE * 2 }, cursor: "nwse-resize" },
+    { id: "ne", style: { top: -EDGE / 2, right: -EDGE / 2, width: EDGE * 2, height: EDGE * 2 }, cursor: "nesw-resize" },
+    { id: "sw", style: { bottom: -EDGE / 2, left: -EDGE / 2, width: EDGE * 2, height: EDGE * 2 }, cursor: "nesw-resize" },
+    { id: "se", style: { bottom: -EDGE / 2, right: -EDGE / 2, width: EDGE * 2, height: EDGE * 2 }, cursor: "nwse-resize" },
+  ];
+
+  // Corner bracket visuals
+  const BRACKET = 20;
+  const corners: { pos: string; border: string }[] = [
+    { pos: "top-0 left-0", border: "border-t-[3px] border-l-[3px] rounded-tl" },
+    { pos: "top-0 right-0", border: "border-t-[3px] border-r-[3px] rounded-tr" },
+    { pos: "bottom-0 left-0", border: "border-b-[3px] border-l-[3px] rounded-bl" },
+    { pos: "bottom-0 right-0", border: "border-b-[3px] border-r-[3px] rounded-br" },
+  ];
 
   return (
     <div className="absolute inset-0 z-10" onPointerMove={onMove} onPointerUp={onUp}>
+      {/* Dark mask */}
       <svg className="absolute inset-0 w-full h-full">
         <defs>
           <mask id="cmask">
             <rect width="100%" height="100%" fill="white" />
-            <rect x={crop.x} y={crop.y} width={crop.size} height={crop.size} fill="black" rx="4" />
+            <rect x={crop.x} y={crop.y} width={crop.w} height={crop.h} fill="black" rx="2" />
           </mask>
         </defs>
         <rect width="100%" height="100%" fill="rgba(0,0,0,0.6)" mask="url(#cmask)" />
       </svg>
+
+      {/* Crop frame */}
       <div
-        className="absolute rounded"
-        style={{ left: crop.x, top: crop.y, width: crop.size, height: crop.size, border: `2px solid ${BRAND}` }}
+        className="absolute"
+        style={{ left: crop.x, top: crop.y, width: crop.w, height: crop.h, border: `2px solid ${BRAND}` }}
         onPointerDown={(e) => onDown(e, "move")}
       >
+        {/* Grid lines */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute left-1/3 inset-y-0 w-px" style={{ background: BRAND_DIM }} />
           <div className="absolute left-2/3 inset-y-0 w-px" style={{ background: BRAND_DIM }} />
           <div className="absolute top-1/3 inset-x-0 h-px" style={{ background: BRAND_DIM }} />
           <div className="absolute top-2/3 inset-x-0 h-px" style={{ background: BRAND_DIM }} />
         </div>
-        {/* Resize handle bottom-right */}
-        <div
-          className="absolute -bottom-2.5 -right-2.5 w-5 h-5 rounded-full shadow-lg cursor-nwse-resize"
-          style={{ background: BRAND }}
-          onPointerDown={(e) => onDown(e, "resize")}
-        />
+
+        {/* Corner bracket visuals */}
+        {corners.map((c, i) => (
+          <div key={i} className={`absolute pointer-events-none ${c.pos} ${c.border}`} style={{ width: BRACKET, height: BRACKET, borderColor: BRAND }} />
+        ))}
+
+        {/* Invisible drag handles for edges & corners */}
+        {handles.map((h) => (
+          <div
+            key={h.id}
+            className="absolute"
+            style={{ ...h.style, cursor: h.cursor }}
+            onPointerDown={(e) => onDown(e, h.id)}
+          />
+        ))}
       </div>
+
+      {/* Action buttons */}
       <div className="absolute bottom-4 inset-x-0 flex justify-center gap-3">
         <button onClick={onClose} className="px-5 py-2.5 rounded-full bg-zinc-800/90 text-zinc-300 text-sm font-medium active:bg-zinc-700">
           Cancelar
@@ -207,18 +289,20 @@ export default function MediaPreviewScreen({ file, onSend, onCancel }: MediaPrev
   }, [previewUrl, croppedUrl]);
 
   // --- Image Crop ---
-  const handleCropApply = useCallback((crop: CropArea) => {
+  const handleCropApply = useCallback((crop: CropRect) => {
     if (!imgRef.current || !imgContainerRef.current) return;
     const img = imgRef.current;
     const rect = imgContainerRef.current.getBoundingClientRect();
     const scaleX = img.naturalWidth / rect.width;
     const scaleY = img.naturalHeight / rect.height;
     const sx = crop.x * scaleX, sy = crop.y * scaleY;
-    const sSize = crop.size * Math.min(scaleX, scaleY);
+    const sw = crop.w * scaleX, sh = crop.h * scaleY;
+    const maxDim = 1600;
+    const ratio = Math.min(1, maxDim / sw, maxDim / sh);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.min(sSize, 1600);
-    canvas.height = Math.min(sSize, 1600);
-    canvas.getContext("2d")!.drawImage(img, sx, sy, sSize, sSize, 0, 0, canvas.width, canvas.height);
+    canvas.width = Math.round(sw * ratio);
+    canvas.height = Math.round(sh * ratio);
+    canvas.getContext("2d")!.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => {
       if (!blob) return;
       const f = new File([blob], "cropped.webp", { type: "image/webp" });
