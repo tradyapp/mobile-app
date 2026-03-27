@@ -173,20 +173,17 @@ class ChatService {
   private generateVideoThumbnail(file: File): Promise<File> {
     return new Promise((resolve, reject) => {
       const video = document.createElement("video");
-      video.preload = "metadata";
+      video.preload = "auto";
       video.muted = true;
       video.playsInline = true;
+      video.crossOrigin = "anonymous";
       const objectUrl = URL.createObjectURL(file);
 
-      video.onloadeddata = () => {
-        // Seek to 1s or 25% of duration, whichever is smaller
-        video.currentTime = Math.min(1, video.duration * 0.25);
-      };
-
-      video.onseeked = () => {
+      const capture = () => {
         const canvas = document.createElement("canvas");
         const maxW = 480;
         let { videoWidth: w, videoHeight: h } = video;
+        if (!w || !h) { w = 480; h = 270; }
         if (w > maxW) {
           h = Math.round(h * (maxW / w));
           w = maxW;
@@ -207,6 +204,17 @@ class ChatService {
           "image/webp",
           0.75,
         );
+      };
+
+      video.onseeked = capture;
+
+      video.onloadeddata = () => {
+        if (video.duration > 0.5) {
+          video.currentTime = Math.min(1, video.duration * 0.25);
+        } else {
+          // Very short video – capture first available frame
+          capture();
+        }
       };
 
       video.onerror = () => {

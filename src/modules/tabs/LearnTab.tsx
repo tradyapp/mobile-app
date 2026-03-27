@@ -1046,6 +1046,71 @@ export default function LearnTab() {
   }, [chatMessages]);
 
   // ---------------------------------------------------------------------------
+  // Component: Chat Video Preview (thumbnail → inline player)
+  // ---------------------------------------------------------------------------
+
+  function ChatVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thumbnailUrl: string | null }) {
+    const [loaded, setLoaded] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    const handlePlay = () => {
+      setLoading(true);
+      setLoaded(true);
+    };
+
+    const handleCanPlay = () => {
+      setLoading(false);
+      videoRef.current?.play();
+    };
+
+    if (loaded) {
+      return (
+        <div className="relative rounded-lg overflow-hidden mb-1.5">
+          {loading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
+              <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            controls
+            playsInline
+            onCanPlay={handleCanPlay}
+            className="rounded-lg max-w-full"
+            poster={thumbnailUrl ?? undefined}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <button
+        onClick={handlePlay}
+        className="relative rounded-lg overflow-hidden mb-1.5 block w-full text-left"
+      >
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="Video" className="w-full rounded-lg" />
+        ) : (
+          <div className="w-full aspect-video bg-zinc-900 rounded-lg flex items-center justify-center">
+            <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+          </div>
+        )}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+            <svg className="w-7 h-7 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Render: Chat Room (fullscreen)
   // ---------------------------------------------------------------------------
 
@@ -1089,38 +1154,10 @@ export default function LearnTab() {
                       <ProgressiveImage src={msg.attachment_url} thumbnail={msg.thumbnail_url} alt={msg.attachment_name ?? "image"} />
                     )}
                     {msg.attachment_url && msg.attachment_type === "video" && (
-                      <div className="relative rounded-lg overflow-hidden mb-1.5">
-                        {msg.thumbnail_url ? (
-                          <img src={msg.thumbnail_url} alt="Video preview" className="w-full rounded-lg" />
-                        ) : (
-                          <div className="w-full aspect-video bg-zinc-900 rounded-lg flex items-center justify-center">
-                            <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-                            </svg>
-                          </div>
-                        )}
-                        {/* Play icon overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-                            <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          </div>
-                        </div>
-                        {/* Download button */}
-                        <a
-                          href={msg.attachment_url}
-                          download={msg.attachment_name ?? "video"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`mt-1.5 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${isOwn ? "bg-emerald-700/50 text-emerald-100" : "bg-zinc-700/50 text-zinc-200"}`}
-                        >
-                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                          </svg>
-                          Descargar video
-                        </a>
-                      </div>
+                      <ChatVideoPreview
+                        videoUrl={msg.attachment_url}
+                        thumbnailUrl={msg.thumbnail_url}
+                      />
                     )}
                     {msg.attachment_url && msg.attachment_type === "document" && (
                       <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 rounded-lg px-3 py-2 mb-1.5 ${isOwn ? "bg-emerald-700/50" : "bg-zinc-700/50"}`}>
