@@ -910,9 +910,9 @@ export default function LearnTab() {
               className="w-full text-left rounded-2xl bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 p-4 flex items-center gap-4 active:scale-[0.98] active:bg-zinc-800/80 transition-all duration-150"
             >
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 shrink-0 flex items-center justify-center overflow-hidden shadow-lg shadow-black/20">
-                {room.icon_url ? (
+                {(room.icon_thumb_url || room.icon_url) ? (
                   <img
-                    src={room.icon_url}
+                    src={room.icon_thumb_url ?? room.icon_url!}
                     alt={room.name}
                     className="w-full h-full object-cover"
                   />
