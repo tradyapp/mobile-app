@@ -1128,10 +1128,14 @@ export default function LearnTab() {
   useEffect(() => {
     if (chatMessages.length === 0) return;
     if (!initialScrollDone.current) {
-      // First load — jump to bottom instantly
+      // First load — force scroll to bottom after DOM paints
       initialScrollDone.current = true;
+      // Double rAF ensures the browser has rendered the messages
       requestAnimationFrame(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "instant" });
+        requestAnimationFrame(() => {
+          const el = chatScrollRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
       });
     } else if (!loadingOlder) {
       // New message arrived — smooth scroll only if near bottom
@@ -1139,7 +1143,10 @@ export default function LearnTab() {
       if (el) {
         const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
         if (nearBottom) {
-          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          requestAnimationFrame(() => {
+            const scrollEl = chatScrollRef.current;
+            if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+          });
         }
       }
     }
