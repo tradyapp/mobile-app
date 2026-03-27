@@ -76,7 +76,7 @@ class UserService {
   async getUserProfile(uid: string): Promise<UserProfileResponse> {
     const { data, error } = await supabase
       .from("user_profiles")
-      .select("id, display_name, locale, timezone")
+      .select("id, display_name, avatar_url, locale, timezone")
       .eq("id", uid)
       .single();
 
@@ -87,6 +87,7 @@ class UserService {
     const userData: Partial<UserType> = {
       uid,
       displayName: data?.display_name ?? "",
+      avatarUrl: data?.avatar_url ?? null,
       locale: data?.locale ?? "es",
       timezone: data?.timezone ?? "America/Bogota",
     } as Partial<UserType>;

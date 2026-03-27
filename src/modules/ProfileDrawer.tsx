@@ -12,11 +12,21 @@ import { useUserPrefsStore } from "@/stores/userPrefsStore";
 
 // ── Shared context for profile state ──
 
+interface ProfileData {
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  locale: string;
+  timezone: string;
+  uid: string;
+}
+
 interface ProfileCtxValue {
   locale: "en" | "es";
   isUpdatingLocale: boolean;
   handleLanguageChange: (nextLocale: "en" | "es") => void;
   setIsLogoutDialogOpen: (open: boolean) => void;
+  profile: ProfileData;
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
@@ -25,28 +35,29 @@ const ProfileCtx = createContext<ProfileCtxValue>(null!);
 
 function AccountScreen() {
   const { navigateTo } = useDrawerNav();
-  const { locale, isUpdatingLocale, setIsLogoutDialogOpen } = useContext(ProfileCtx);
+  const { locale, isUpdatingLocale, setIsLogoutDialogOpen, profile } = useContext(ProfileCtx);
 
   return (
     <div>
       <List strong className="mb-6 rounded-xl overflow-hidden">
         <ListItem
           link
+          onClick={() => navigateTo("profile")}
           title={
             <div className="flex flex-col">
               <span className="text-base text-zinc-200 font-medium">
-                John Doe
+                {profile.displayName || "Usuario"}
               </span>
               <span className="text-sm text-zinc-500">
-                john.doe@email.com
+                {profile.email}
               </span>
             </div>
           }
           media={
             <img
-              src="/img/default-user.webp"
+              src={profile.avatarUrl || "/img/default-user.webp"}
               alt="Profile"
-              className="w-14 h-14 rounded-full"
+              className="w-14 h-14 rounded-full object-cover"
             />
           }
         />
@@ -77,6 +88,54 @@ function AccountScreen() {
         >
           Sign Out
         </ListButton>
+      </List>
+    </div>
+  );
+}
+
+// ── Screen: Profile ──
+
+function ProfileScreen() {
+  const { profile } = useContext(ProfileCtx);
+
+  const fields: { label: string; value: string }[] = [
+    { label: "Display Name", value: profile.displayName || "—" },
+    { label: "Email", value: profile.email || "—" },
+    { label: "Language", value: profile.locale === "es" ? "Español" : "English" },
+    { label: "Timezone", value: profile.timezone || "—" },
+    { label: "User ID", value: profile.uid },
+  ];
+
+  return (
+    <div>
+      {/* Avatar + name header */}
+      <div className="flex flex-col items-center py-6">
+        <img
+          src={profile.avatarUrl || "/img/default-user.webp"}
+          alt="Profile"
+          className="w-24 h-24 rounded-full object-cover mb-3"
+        />
+        <h2 className="text-white text-lg font-semibold">
+          {profile.displayName || "Usuario"}
+        </h2>
+        <p className="text-zinc-500 text-sm">{profile.email}</p>
+      </div>
+
+      {/* Profile fields */}
+      <List strong className="rounded-xl overflow-hidden">
+        {fields.map((f) => (
+          <ListItem
+            key={f.label}
+            title={
+              <span className="text-zinc-500 text-sm">{f.label}</span>
+            }
+            after={
+              <span className="text-zinc-200 text-sm truncate max-w-[200px]">
+                {f.value}
+              </span>
+            }
+          />
+        ))}
       </List>
     </div>
   );
@@ -117,6 +176,7 @@ function LanguageScreen() {
 
 const SCREENS: DrawerScreen[] = [
   { name: "account", title: "Account", component: AccountScreen, isRoot: true },
+  { name: "profile", title: "Profile", component: ProfileScreen },
   { name: "language", title: "Language", component: LanguageScreen },
 ];
 
@@ -136,6 +196,14 @@ export default function ProfileDrawer({
   const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
   const user = useAuthStore((state) => state.user);
   const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
+  const [profile, setProfile] = useState<ProfileData>({
+    displayName: "",
+    email: user?.email ?? "",
+    avatarUrl: null,
+    locale: "es",
+    timezone: "America/Bogota",
+    uid: user?.uid ?? "",
+  });
 
   useEffect(() => {
     let active = true;
@@ -144,13 +212,21 @@ export default function ProfileDrawer({
 
     const run = async () => {
       try {
-        const profile = await userService.getUserProfile(user.uid);
+        const result = await userService.getUserProfile(user.uid);
         if (!active) return;
-        const nextLocale = profile.userData.locale === "es" ? "es" : "en";
+        const nextLocale = result.userData.locale === "es" ? "es" : "en";
         setLocale(nextLocale);
         setStoreLocale(nextLocale);
+        setProfile({
+          displayName: (result.userData.displayName as string) ?? "",
+          email: user.email ?? "",
+          avatarUrl: (result.userData.avatarUrl as string) ?? null,
+          locale: (result.userData.locale as string) ?? "es",
+          timezone: (result.userData.timezone as string) ?? "America/Bogota",
+          uid: user.uid,
+        });
       } catch (error) {
-        console.error("Error loading language:", error);
+        console.error("Error loading profile:", error);
       }
     };
 
@@ -159,13 +235,14 @@ export default function ProfileDrawer({
     return () => {
       active = false;
     };
-  }, [isOpen, user?.uid, setStoreLocale]);
+  }, [isOpen, user?.uid, user?.email, setStoreLocale]);
 
   const handleLanguageChange = async (nextLocale: "en" | "es") => {
     if (!user?.uid || nextLocale === locale || isUpdatingLocale) return;
 
     setLocale(nextLocale);
     setStoreLocale(nextLocale);
+    setProfile((p) => ({ ...p, locale: nextLocale }));
     setIsUpdatingLocale(true);
     try {
       await userService.updateUserProfile(user.uid, { locale: nextLocale });
@@ -181,6 +258,7 @@ export default function ProfileDrawer({
     isUpdatingLocale,
     handleLanguageChange,
     setIsLogoutDialogOpen,
+    profile,
   };
 
   return (
