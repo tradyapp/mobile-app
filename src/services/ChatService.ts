@@ -116,8 +116,8 @@ class ChatService {
     });
   }
 
-  private async uploadFile(roomId: string, file: File, suffix = ""): Promise<string> {
-    const ext = file.name.split(".").pop() ?? "";
+  private async uploadFile(roomId: string, file: File, suffix = "", extOverride?: string): Promise<string> {
+    const ext = extOverride ?? (file.name.split(".").pop() ?? "");
     const path = `${roomId}/${crypto.randomUUID()}${suffix}.${ext}`;
 
     const { error } = await supabase.storage
@@ -156,11 +156,15 @@ class ChatService {
     if (file.type.startsWith("video/")) {
       type = "video";
 
+      // Compress video and generate thumbnail in parallel
+      const [compressedFile, thumbFile] = await Promise.all([
+        this.compressVideo(file),
+        this.generateVideoThumbnail(file),
+      ]);
+
       const [videoUrl, thumbUrl] = await Promise.all([
-        this.uploadFile(roomId, file),
-        this.generateVideoThumbnail(file).then((thumbFile) =>
-          this.uploadFile(roomId, thumbFile, "_thumb")
-        ),
+        this.uploadFile(roomId, compressedFile, "", "webm"),
+        this.uploadFile(roomId, thumbFile, "_thumb"),
       ]);
 
       return { url: videoUrl, type, name: file.name, thumbnailUrl: thumbUrl };
@@ -168,6 +172,124 @@ class ChatService {
 
     const url = await this.uploadFile(roomId, file);
     return { url, type, name: file.name, thumbnailUrl: null };
+  }
+
+  private compressVideo(file: File): Promise<File> {
+    // Max resolution 720p, target ~1 Mbps
+    const MAX_W = 720;
+    const MAX_H = 720;
+    const TARGET_BITRATE = 1_000_000;
+
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+      const objectUrl = URL.createObjectURL(file);
+
+      video.onloadedmetadata = () => {
+        const { videoWidth: ow, videoHeight: oh, duration } = video;
+
+        // Skip compression for already-small files (< 2 MB) or very short clips
+        if (file.size < 2 * 1024 * 1024 || duration < 1) {
+          URL.revokeObjectURL(objectUrl);
+          resolve(file);
+          return;
+        }
+
+        // Calculate target dimensions
+        let w = ow;
+        let h = oh;
+        if (w > MAX_W) { h = Math.round(h * (MAX_W / w)); w = MAX_W; }
+        if (h > MAX_H) { w = Math.round(w * (MAX_H / h)); h = MAX_H; }
+        // Ensure even dimensions (required by some codecs)
+        w = w % 2 === 0 ? w : w + 1;
+        h = h % 2 === 0 ? h : h + 1;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d")!;
+
+        const stream = canvas.captureStream(30);
+
+        // Add audio track if present
+        try {
+          const audioCtx = new AudioContext();
+          const source = audioCtx.createMediaElementSource(video);
+          const dest = audioCtx.createMediaStreamDestination();
+          source.connect(dest);
+          source.connect(audioCtx.destination);
+          dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        } catch {
+          // No audio or not supported — continue without audio
+        }
+
+        const recorderOptions: MediaRecorderOptions = { mimeType: "video/webm" };
+        // Try to set bitrate (not all browsers support it)
+        try {
+          recorderOptions.videoBitsPerSecond = TARGET_BITRATE;
+        } catch { /* ignore */ }
+
+        let recorder: MediaRecorder;
+        try {
+          recorder = new MediaRecorder(stream, recorderOptions);
+        } catch {
+          // Fallback without bitrate control
+          recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+        }
+
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+        recorder.onstop = () => {
+          URL.revokeObjectURL(objectUrl);
+          const blob = new Blob(chunks, { type: "video/webm" });
+          const baseName = file.name.replace(/\.[^.]+$/, "");
+          resolve(new File([blob], `${baseName}.webm`, { type: "video/webm" }));
+        };
+
+        recorder.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve(file); // Fallback to original on error
+        };
+
+        // Draw frames to canvas
+        const drawFrame = () => {
+          if (video.paused || video.ended) return;
+          ctx.drawImage(video, 0, 0, w, h);
+          requestAnimationFrame(drawFrame);
+        };
+
+        video.onplay = () => {
+          recorder.start(100); // Collect data every 100ms
+          drawFrame();
+        };
+
+        video.onended = () => {
+          recorder.stop();
+          stream.getTracks().forEach((t) => t.stop());
+        };
+
+        video.currentTime = 0;
+        video.muted = false;
+        video.play().catch(() => {
+          // Autoplay blocked - try muted
+          video.muted = true;
+          video.play().catch(() => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(file); // Can't play — return original
+          });
+        });
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Failed to load video for compression"));
+      };
+
+      video.src = objectUrl;
+    });
   }
 
   private generateVideoThumbnail(file: File): Promise<File> {
