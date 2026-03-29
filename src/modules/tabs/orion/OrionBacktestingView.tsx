@@ -48,14 +48,18 @@ type BacktestingSessionState = {
 
 const BACKTESTING_DB_NAME = 'orion-backtesting';
 const BACKTESTING_STORE = 'sessions';
+const EVAL_CACHE_STORE = 'eval-cache';
 
 function openBacktestingDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(BACKTESTING_DB_NAME, 1);
+    const request = window.indexedDB.open(BACKTESTING_DB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(BACKTESTING_STORE)) {
         db.createObjectStore(BACKTESTING_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(EVAL_CACHE_STORE)) {
+        db.createObjectStore(EVAL_CACHE_STORE, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -93,6 +97,70 @@ async function saveBacktestingSession(strategyId: string, state: BacktestingSess
       resolve();
     };
     tx.onerror = () => reject(tx.error ?? new Error('Failed to save session'));
+  });
+}
+
+type EvalCacheEntry = { datetime: string; hit: BacktestHit | null };
+
+type EvalCacheRecord = {
+  id: string;
+  updatedAt: string;
+  processedCount: number;
+  entries: EvalCacheEntry[];
+};
+
+async function loadEvalCache(scopeId: string): Promise<EvalCacheRecord | null> {
+  const db = await openBacktestingDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EVAL_CACHE_STORE, 'readonly');
+    const store = tx.objectStore(EVAL_CACHE_STORE);
+    const request = store.get(scopeId);
+    request.onsuccess = () => {
+      resolve((request.result as EvalCacheRecord | undefined) ?? null);
+    };
+    request.onerror = () => reject(request.error ?? new Error('Failed to read eval cache'));
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function saveEvalCache(
+  scopeId: string,
+  cache: Map<string, BacktestHit | null>,
+  processedCount: number,
+): Promise<void> {
+  const entries: EvalCacheEntry[] = [];
+  for (const [datetime, hit] of cache) {
+    entries.push({ datetime, hit });
+  }
+  const db = await openBacktestingDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EVAL_CACHE_STORE, 'readwrite');
+    const store = tx.objectStore(EVAL_CACHE_STORE);
+    store.put({
+      id: scopeId,
+      updatedAt: new Date().toISOString(),
+      processedCount,
+      entries,
+    } satisfies EvalCacheRecord);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to save eval cache'));
+  });
+}
+
+async function deleteEvalCache(scopeId: string): Promise<void> {
+  const db = await openBacktestingDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EVAL_CACHE_STORE, 'readwrite');
+    const store = tx.objectStore(EVAL_CACHE_STORE);
+    store.delete(scopeId);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to delete eval cache'));
   });
 }
 
@@ -242,7 +310,7 @@ export default function OrionBacktestingView({
   const [isCandlesLoading, setIsCandlesLoading] = useState(false);
   const [candlesError, setCandlesError] = useState<string | null>(null);
   const evaluationQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const evaluatedCandlesRef = useRef<Set<string>>(new Set());
+  const evalCacheRef = useRef<Map<string, BacktestHit | null>>(new Map());
 
   const activeSymbol = useMemo(() => {
     const selectedTicker = selectedExecutionSymbol?.ticker?.toUpperCase();
@@ -308,7 +376,7 @@ export default function OrionBacktestingView({
     setIsPaused(false);
     setShowDateControls(!hasDateRange);
     setCandles([]);
-    evaluatedCandlesRef.current = new Set();
+    evalCacheRef.current = new Map();
     evaluationQueueRef.current = Promise.resolve();
   }, [hasDateRange, isOpen]);
 
@@ -369,7 +437,7 @@ export default function OrionBacktestingView({
       symbolType,
       12000,
     )
-      .then((rows) => {
+      .then(async (rows) => {
         if (!active) return;
         const mapped = rows.map((row: CandleData) => ({
           datetime: row.datetime,
@@ -379,10 +447,28 @@ export default function OrionBacktestingView({
           close: row.close,
         }));
         setCandles(mapped);
-        setProcessedCount(0);
-        setHits([]);
-        setIsRunning(false);
-        setIsPaused(false);
+
+        const cached = await loadEvalCache(sessionScopeId).catch(() => null);
+        if (!active) return;
+        if (cached && cached.entries.length > 0 && cached.processedCount <= mapped.length) {
+          const restoredCache = new Map<string, BacktestHit | null>();
+          const restoredHits: BacktestHit[] = [];
+          for (const entry of cached.entries) {
+            restoredCache.set(entry.datetime, entry.hit);
+            if (entry.hit) restoredHits.push(entry.hit);
+          }
+          evalCacheRef.current = restoredCache;
+          setHits(restoredHits.reverse());
+          setProcessedCount(cached.processedCount);
+          setIsRunning(false);
+          setIsPaused(false);
+        } else {
+          evalCacheRef.current = new Map();
+          setProcessedCount(0);
+          setHits([]);
+          setIsRunning(false);
+          setIsPaused(false);
+        }
       })
       .catch((error) => {
         if (!active) return;
@@ -433,12 +519,28 @@ export default function OrionBacktestingView({
   }, [candles.length, hasDateRange, isOpen, isPaused, isRunning]);
 
   useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    const shouldPersist = (isPaused || !isRunning) && evalCacheRef.current.size > 0 && processedCount > 0;
+    if (!shouldPersist) return;
+    void saveEvalCache(sessionScopeId, evalCacheRef.current, processedCount).catch(() => undefined);
+  }, [isOpen, isPaused, isRunning, processedCount, sessionScopeId]);
+
+  useEffect(() => {
     if (!isOpen || isMultiTimeframeUnsupported) return;
     if (processedCount <= 0) return;
     const candle = candles[Math.max(0, processedCount - 1)];
     if (!candle) return;
-    if (evaluatedCandlesRef.current.has(candle.datetime)) return;
-    evaluatedCandlesRef.current.add(candle.datetime);
+
+    if (evalCacheRef.current.has(candle.datetime)) {
+      const cached = evalCacheRef.current.get(candle.datetime);
+      if (cached) {
+        setHits((prev) => {
+          if (prev.some((h) => h.id === cached.id)) return prev;
+          return [cached, ...prev];
+        });
+      }
+      return;
+    }
 
     const executionTicker = activeSymbol?.ticker ?? selectedExecutionSymbol?.ticker ?? '';
     const executionSymbol = activeSymbol
@@ -460,15 +562,23 @@ export default function OrionBacktestingView({
         candlesWindow,
       });
 
-      if (outcome.error || !outcome.hit) return;
+      if (outcome.error) return;
+
+      if (!outcome.hit) {
+        evalCacheRef.current.set(candle.datetime, null);
+        return;
+      }
+
       const hit: BacktestIterationHit = outcome.hit;
-      setHits((prev) => [{
+      const backtestHit: BacktestHit = {
         id: `${candle.datetime}-${hit.nodeId}-${hit.kind}`,
         anchorTime: candle.datetime,
         nodeType: hit.nodeType,
         rating: hit.rating,
         percentage: hit.percentage,
-      }, ...prev]);
+      };
+      evalCacheRef.current.set(candle.datetime, backtestHit);
+      setHits((prev) => [backtestHit, ...prev]);
     }).catch(() => undefined);
   }, [
     activeSymbol,
@@ -501,8 +611,14 @@ export default function OrionBacktestingView({
   const handlePlayPause = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading || isMultiTimeframeUnsupported) return;
     if (!isRunning) {
+      if (evalCacheRef.current.size > 0 && processedCount > 0) {
+        setIsRunning(true);
+        setIsPaused(false);
+        return;
+      }
       setProcessedCount(0);
       setHits([]);
+      evalCacheRef.current = new Map();
       setIsRunning(true);
       setIsPaused(false);
       return;
@@ -545,12 +661,16 @@ export default function OrionBacktestingView({
       setIsPaused(false);
       setProcessedCount(0);
       setHits([]);
+      evalCacheRef.current = new Map();
+      void deleteEvalCache(sessionScopeId).catch(() => undefined);
     }
     if (confirmAction === 'close') {
       setIsRunning(false);
       setIsPaused(false);
       setProcessedCount(0);
       setHits([]);
+      evalCacheRef.current = new Map();
+      void deleteEvalCache(sessionScopeId).catch(() => undefined);
       onClose();
     }
     setConfirmAction(null);
