@@ -294,11 +294,11 @@ export default function OrionBacktestingView({
   trackedSymbols,
   onClose,
 }: OrionBacktestingViewProps) {
+  const EVAL_CHUNK_SIZE = 20;
   const visibleCandlesCap = 50;
   const [candles, setCandles] = useState<MiniCandle[]>(() => buildMockCandles());
   const [processedCount, setProcessedCount] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [hits, setHits] = useState<BacktestHit[]>([]);
   const [confirmAction, setConfirmAction] = useState<'close' | 'stop' | null>(null);
   const [fromDate, setFromDate] = useState('');
@@ -309,7 +309,8 @@ export default function OrionBacktestingView({
   const [availableRange, setAvailableRange] = useState<{ from: string; to: string } | null>(null);
   const [isCandlesLoading, setIsCandlesLoading] = useState(false);
   const [candlesError, setCandlesError] = useState<string | null>(null);
-  const evaluationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [chartPage, setChartPage] = useState(0);
+  const cancelledRef = useRef(false);
   const evalCacheRef = useRef<Map<string, BacktestHit | null>>(new Map());
 
   const activeSymbol = useMemo(() => {
@@ -370,14 +371,14 @@ export default function OrionBacktestingView({
 
   useEffect(() => {
     if (!isOpen) return;
+    cancelledRef.current = true;
     setProcessedCount(0);
     setHits([]);
-    setIsRunning(false);
-    setIsPaused(false);
+    setIsEvaluating(false);
     setShowDateControls(!hasDateRange);
     setCandles([]);
+    setChartPage(0);
     evalCacheRef.current = new Map();
-    evaluationQueueRef.current = Promise.resolve();
   }, [hasDateRange, isOpen]);
 
   useEffect(() => {
@@ -460,14 +461,12 @@ export default function OrionBacktestingView({
           evalCacheRef.current = restoredCache;
           setHits(restoredHits.reverse());
           setProcessedCount(cached.processedCount);
-          setIsRunning(false);
-          setIsPaused(false);
+          setIsEvaluating(false);
         } else {
           evalCacheRef.current = new Map();
           setProcessedCount(0);
           setHits([]);
-          setIsRunning(false);
-          setIsPaused(false);
+          setIsEvaluating(false);
         }
       })
       .catch((error) => {
@@ -485,11 +484,11 @@ export default function OrionBacktestingView({
 
   useEffect(() => {
     if (!isOpen || !isMultiTimeframeUnsupported) return;
+    cancelledRef.current = true;
     setIsCandlesLoading(false);
     setCandles([]);
     setProcessedCount(0);
-    setIsRunning(false);
-    setIsPaused(false);
+    setIsEvaluating(false);
     setHits([]);
     setCandlesError(multiTimeframeMessage);
   }, [isMultiTimeframeUnsupported, isOpen]);
@@ -503,131 +502,150 @@ export default function OrionBacktestingView({
     }).catch(() => undefined);
   }, [fromDate, hasHydratedSession, sessionScopeId, showDateControls, toDate]);
 
-  useEffect(() => {
-    if (!isOpen || !isRunning || isPaused) return;
-    const timer = window.setInterval(() => {
-      setProcessedCount((prev) => {
-        const next = Math.min(candles.length, prev + 1);
-        if (next >= candles.length) {
-          setIsRunning(false);
-          setIsPaused(false);
-        }
-        return next;
-      });
-    }, 180);
-    return () => window.clearInterval(timer);
-  }, [candles.length, hasDateRange, isOpen, isPaused, isRunning]);
+  const runBatchEvaluation = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!isOpen || typeof window === 'undefined') return;
-    const shouldPersist = (isPaused || !isRunning) && evalCacheRef.current.size > 0 && processedCount > 0;
-    if (!shouldPersist) return;
-    void saveEvalCache(sessionScopeId, evalCacheRef.current, processedCount).catch(() => undefined);
-  }, [isOpen, isPaused, isRunning, processedCount, sessionScopeId]);
+    if (!isOpen || !isEvaluating || isMultiTimeframeUnsupported || candles.length === 0) return;
 
-  useEffect(() => {
-    if (!isOpen || isMultiTimeframeUnsupported) return;
-    if (processedCount <= 0) return;
-    const candle = candles[Math.max(0, processedCount - 1)];
-    if (!candle) return;
-
-    if (evalCacheRef.current.has(candle.datetime)) {
-      const cached = evalCacheRef.current.get(candle.datetime);
-      if (cached) {
-        setHits((prev) => {
-          if (prev.some((h) => h.id === cached.id)) return prev;
-          return [cached, ...prev];
-        });
-      }
-      return;
-    }
-
+    cancelledRef.current = false;
+    const cache = evalCacheRef.current;
     const executionTicker = activeSymbol?.ticker ?? selectedExecutionSymbol?.ticker ?? '';
     const executionSymbol = activeSymbol
       ? { ticker: activeSymbol.ticker, name: activeSymbol.name, market: activeSymbol.market }
       : selectedExecutionSymbol
         ? { ticker: selectedExecutionSymbol.ticker, name: selectedExecutionSymbol.name, market: selectedExecutionSymbol.market ?? 'STOCK' }
         : null;
-    const candlesWindow = candles.slice(0, processedCount);
 
-    evaluationQueueRef.current = evaluationQueueRef.current.then(async () => {
-      const outcome = await runBacktestSingleIteration({
-        strategyId,
-        nodes,
-        edges,
-        nodeTypesCatalog,
-        selectedExecutionTicker: executionTicker,
-        selectedExecutionSymbol: executionSymbol,
-        executionTimeISO: candle.datetime,
-        candlesWindow,
-      });
+    let cursor = processedCount;
 
-      if (outcome.error) return;
+    const processChunk = async () => {
+      if (cancelledRef.current) return;
 
-      if (!outcome.hit) {
-        evalCacheRef.current.set(candle.datetime, null);
+      const chunkEnd = Math.min(cursor + EVAL_CHUNK_SIZE, candles.length);
+      const newHits: BacktestHit[] = [];
+
+      for (let i = cursor; i < chunkEnd; i += 1) {
+        if (cancelledRef.current) break;
+        const candle = candles[i];
+        if (!candle) continue;
+
+        if (cache.has(candle.datetime)) {
+          const cached = cache.get(candle.datetime);
+          if (cached) newHits.push(cached);
+          continue;
+        }
+
+        const candlesWindow = candles.slice(0, i + 1);
+        const outcome = await runBacktestSingleIteration({
+          strategyId,
+          nodes,
+          edges,
+          nodeTypesCatalog,
+          selectedExecutionTicker: executionTicker,
+          selectedExecutionSymbol: executionSymbol,
+          executionTimeISO: candle.datetime,
+          candlesWindow,
+        });
+
+        if (cancelledRef.current) break;
+
+        if (outcome.error) {
+          cache.set(candle.datetime, null);
+          continue;
+        }
+
+        if (!outcome.hit) {
+          cache.set(candle.datetime, null);
+          continue;
+        }
+
+        const hit: BacktestIterationHit = outcome.hit;
+        const backtestHit: BacktestHit = {
+          id: `${candle.datetime}-${hit.nodeId}-${hit.kind}`,
+          anchorTime: candle.datetime,
+          nodeType: hit.nodeType,
+          rating: hit.rating,
+          percentage: hit.percentage,
+        };
+        cache.set(candle.datetime, backtestHit);
+        newHits.push(backtestHit);
+      }
+
+      if (cancelledRef.current) return;
+
+      cursor = chunkEnd;
+      if (newHits.length > 0) {
+        setHits((prev) => {
+          const existingIds = new Set(prev.map((h) => h.id));
+          const unique = newHits.filter((h) => !existingIds.has(h.id));
+          return [...unique.reverse(), ...prev];
+        });
+      }
+      setProcessedCount(cursor);
+
+      if (cursor >= candles.length) {
+        setIsEvaluating(false);
+        void saveEvalCache(sessionScopeId, cache, cursor).catch(() => undefined);
         return;
       }
 
-      const hit: BacktestIterationHit = outcome.hit;
-      const backtestHit: BacktestHit = {
-        id: `${candle.datetime}-${hit.nodeId}-${hit.kind}`,
-        anchorTime: candle.datetime,
-        nodeType: hit.nodeType,
-        rating: hit.rating,
-        percentage: hit.percentage,
-      };
-      evalCacheRef.current.set(candle.datetime, backtestHit);
-      setHits((prev) => [backtestHit, ...prev]);
-    }).catch(() => undefined);
+      requestAnimationFrame(() => { void processChunk(); });
+    };
+
+    runBatchEvaluation.current = () => { void processChunk(); };
+    void processChunk();
+
+    return () => {
+      cancelledRef.current = true;
+      runBatchEvaluation.current = null;
+    };
   }, [
     activeSymbol,
     candles,
     edges,
+    isEvaluating,
     isMultiTimeframeUnsupported,
     isOpen,
     nodeTypesCatalog,
     nodes,
-    processedCount,
     selectedExecutionSymbol,
+    sessionScopeId,
     strategyId,
-  ]);
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
-  const processedCandle = processedCount > 0
-    ? candles[Math.min(processedCount - 1, Math.max(0, candles.length - 1))]
-    : null;
-  const chartPageIndex = processedCount <= 0
-    ? 0
-    : Math.floor((Math.min(processedCount, candles.length) - 1) / visibleCandlesCap);
-  const chartWindowStart = Math.min(chartPageIndex * visibleCandlesCap, Math.max(0, candles.length - visibleCandlesCap));
+  const totalPages = Math.max(1, Math.ceil(candles.length / visibleCandlesCap));
+  const clampedPage = Math.max(0, Math.min(chartPage, totalPages - 1));
+  const chartWindowStart = clampedPage * visibleCandlesCap;
   const visibleCandles = candles.slice(chartWindowStart, chartWindowStart + visibleCandlesCap);
   const min = visibleCandles.length > 0 ? Math.min(...visibleCandles.map((item) => item.low)) : 0;
   const max = visibleCandles.length > 0 ? Math.max(...visibleCandles.map((item) => item.high)) : 1;
   const range = Math.max(0.0001, max - min);
   const hitTimes = new Set(hits.map((hit) => hit.anchorTime));
+  const progressPercent = candles.length > 0 ? Math.round((processedCount / candles.length) * 100) : 0;
 
-  const handlePlayPause = () => {
+  const handleRun = () => {
     if (!hasDateRange || candles.length === 0 || isCandlesLoading || isMultiTimeframeUnsupported) return;
-    if (!isRunning) {
-      if (evalCacheRef.current.size > 0 && processedCount > 0) {
-        setIsRunning(true);
-        setIsPaused(false);
-        return;
-      }
-      setProcessedCount(0);
-      setHits([]);
-      evalCacheRef.current = new Map();
-      setIsRunning(true);
-      setIsPaused(false);
+    if (isEvaluating) {
+      cancelledRef.current = true;
+      setIsEvaluating(false);
+      void saveEvalCache(sessionScopeId, evalCacheRef.current, processedCount).catch(() => undefined);
       return;
     }
-    setIsPaused((prev) => !prev);
+    if (evalCacheRef.current.size > 0 && processedCount > 0 && processedCount < candles.length) {
+      setIsEvaluating(true);
+      return;
+    }
+    setProcessedCount(0);
+    setHits([]);
+    setChartPage(0);
+    evalCacheRef.current = new Map();
+    setIsEvaluating(true);
   };
 
   const requestStop = () => {
-    if (!isRunning && processedCount === 0) return;
+    if (!isEvaluating && processedCount === 0) return;
     setConfirmAction('stop');
   };
 
@@ -648,7 +666,7 @@ export default function OrionBacktestingView({
   };
 
   const requestClose = () => {
-    if (isRunning) {
+    if (isEvaluating) {
       setConfirmAction('close');
       return;
     }
@@ -656,19 +674,20 @@ export default function OrionBacktestingView({
   };
 
   const confirmExit = () => {
+    cancelledRef.current = true;
     if (confirmAction === 'stop') {
-      setIsRunning(false);
-      setIsPaused(false);
+      setIsEvaluating(false);
       setProcessedCount(0);
       setHits([]);
+      setChartPage(0);
       evalCacheRef.current = new Map();
       void deleteEvalCache(sessionScopeId).catch(() => undefined);
     }
     if (confirmAction === 'close') {
-      setIsRunning(false);
-      setIsPaused(false);
+      setIsEvaluating(false);
       setProcessedCount(0);
       setHits([]);
+      setChartPage(0);
       evalCacheRef.current = new Map();
       void deleteEvalCache(sessionScopeId).catch(() => undefined);
       onClose();
@@ -712,13 +731,13 @@ export default function OrionBacktestingView({
 
         <button
           type="button"
-          onClick={handlePlayPause}
+          onClick={handleRun}
           disabled={!hasDateRange || isCandlesLoading || candles.length === 0 || isMultiTimeframeUnsupported}
           className="ml-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-600 bg-emerald-950/70 text-emerald-300 shadow-[0_8px_20px_rgba(16,185,129,0.25)] disabled:opacity-45"
-          aria-label={isRunning && !isPaused ? 'Pause backtesting' : 'Play backtesting'}
-          title={isRunning && !isPaused ? 'Pause' : 'Play'}
+          aria-label={isEvaluating ? 'Pause evaluation' : 'Run backtest'}
+          title={isEvaluating ? 'Pause' : 'Run'}
         >
-          {isRunning && !isPaused ? <PauseIcon /> : <PlayIcon />}
+          {isEvaluating ? <PauseIcon /> : <PlayIcon />}
         </button>
         <button
           type="button"
@@ -745,10 +764,40 @@ export default function OrionBacktestingView({
               >
                 {showDateControls ? <ChartIcon className="h-5 w-5" /> : <ClockIcon className="h-5 w-5" />}
               </button>
-              <div className="min-w-0 text-right text-[11px] text-zinc-400">
-                <p className="truncate">{processedCandle ? new Date(processedCandle.datetime).toLocaleString() : 'No processing yet'}</p>
+              <div className="flex items-center gap-2">
+                {candles.length > visibleCandlesCap && !showDateControls && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setChartPage((p) => Math.max(0, p - 1))}
+                      disabled={clampedPage <= 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs text-zinc-300 disabled:opacity-30"
+                      aria-label="Previous page"
+                    >
+                      &lt;
+                    </button>
+                    <span className="text-[10px] text-zinc-400">{clampedPage + 1}/{totalPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => setChartPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={clampedPage >= totalPages - 1}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs text-zinc-300 disabled:opacity-30"
+                      aria-label="Next page"
+                    >
+                      &gt;
+                    </button>
+                  </>
+                )}
               </div>
             </div>
+            {isEvaluating && (
+              <div className="mb-1 h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-200"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            )}
             <div className={`relative ${isLandscape ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-48px)]'}`}>
               {showDateControls || !hasDateRange ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-2">
@@ -808,17 +857,15 @@ export default function OrionBacktestingView({
                   </div>
                 ) : (
                   <div className="flex h-full items-end gap-[2px] overflow-hidden">
-                    {visibleCandles.map((candle, idx) => {
-                      const index = chartWindowStart + idx;
+                    {visibleCandles.map((candle) => {
                       const bodyTop = ((Math.max(candle.open, candle.close) - min) / range) * 100;
                       const bodyBottom = ((Math.min(candle.open, candle.close) - min) / range) * 100;
                       const wickTop = ((candle.high - min) / range) * 100;
                       const wickBottom = ((candle.low - min) / range) * 100;
                       const isBull = candle.close >= candle.open;
-                      const isProcessed = index < processedCount;
                       const isHitCandle = hitTimes.has(candle.datetime);
                       return (
-                        <div key={candle.datetime} className={`relative h-full flex-1 ${isProcessed ? 'opacity-95' : 'opacity-20'}`}>
+                        <div key={candle.datetime} className="relative h-full flex-1">
                           <div
                             className={`absolute left-1/2 w-px -translate-x-1/2 ${isHitCandle ? 'bg-white' : (isBull ? 'bg-emerald-400' : 'bg-red-400')}`}
                             style={{ bottom: `${wickBottom}%`, height: `${Math.max(1, wickTop - wickBottom)}%` }}
@@ -840,7 +887,7 @@ export default function OrionBacktestingView({
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-semibold text-zinc-100">Aciertos</p>
               <div className="flex items-center gap-3 text-[11px] text-zinc-400">
-                <span>{processedCount}/{candles.length}</span>
+                <span>{processedCount}/{candles.length}{isEvaluating ? ` (${progressPercent}%)` : processedCount > 0 ? ' done' : ''}</span>
                 <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-200">{hits.length}</span>
               </div>
             </div>
@@ -874,8 +921,8 @@ export default function OrionBacktestingView({
         onBackdropClick={() => setConfirmAction(null)}
         title={confirmAction === 'stop' ? 'Detener backtesting' : 'Salir de backtesting'}
         text={confirmAction === 'stop'
-          ? 'Esto detendrá el proceso actual y limpiará el progreso mostrado.'
-          : '¿Quieres salir antes de que termine el backtesting? Esto cancelará el proceso.'}
+          ? 'Esto detendrá la evaluación y limpiará los resultados.'
+          : '¿Quieres salir? Esto cancelará la evaluación en curso.'}
       >
         <DialogButton onClick={() => setConfirmAction(null)}>Cancelar</DialogButton>
         <DialogButton danger onClick={confirmExit}>Confirmar</DialogButton>
