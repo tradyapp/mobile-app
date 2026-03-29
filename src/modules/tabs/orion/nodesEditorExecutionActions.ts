@@ -1664,7 +1664,10 @@ export async function runBacktestSingleIteration(params: {
 
     try {
       if (nodeTypeKey === 'logic.candles') {
-        output = backtestCandles;
+        const candleAttrs = fieldsToObject(nodeData.attributes);
+        const quantity = normalizeNumber(candleAttrs.quantity) ?? 100;
+        const count = Math.max(1, Math.min(backtestCandles.length, Math.floor(quantity)));
+        output = backtestCandles.slice(Math.max(0, backtestCandles.length - count));
       } else {
         const resolvedAttributes = resolveAttributeReferences(nodeData.attributes, frozenHistory);
         const localResult = executeLocalNodeIfSupported({
