@@ -977,6 +977,98 @@ function executeLocalNodeIfSupported(params: {
     };
   }
 
+  if (key === 'logic.check_candle_datetime' && op === 'check_candle_datetime_v1') {
+    const attributesObj = fieldsToObject(resolvedAttributes);
+    const sourceCandle = normalizeCandle(attributesObj.source_candle);
+    const candle = sourceCandle ?? findLatestCandleInHistory(history);
+
+    if (!candle) throw new Error('check_candle_datetime requires a candle input');
+
+    const datetimePart = String(attributesObj.datetime_part ?? 'full').trim().toLowerCase();
+    const operator = String(attributesObj.operator ?? 'equals').trim().toLowerCase();
+    const compareValue = String(attributesObj.value ?? '');
+
+    const dt = new Date(candle.datetime);
+    const isValidDate = !isNaN(dt.getTime());
+    const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+
+    let extracted: string;
+    switch (datetimePart) {
+      case 'date':
+        extracted = isValidDate
+          ? `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`
+          : candle.datetime.slice(0, 10);
+        break;
+      case 'time':
+        extracted = isValidDate
+          ? `${pad2(dt.getUTCHours())}:${pad2(dt.getUTCMinutes())}:${pad2(dt.getUTCSeconds())}`
+          : candle.datetime.slice(11, 19);
+        break;
+      case 'year':
+        extracted = isValidDate ? String(dt.getUTCFullYear()) : candle.datetime.slice(0, 4);
+        break;
+      case 'month':
+        extracted = isValidDate ? pad2(dt.getUTCMonth() + 1) : candle.datetime.slice(5, 7);
+        break;
+      case 'day':
+        extracted = isValidDate ? pad2(dt.getUTCDate()) : candle.datetime.slice(8, 10);
+        break;
+      case 'hour':
+        extracted = isValidDate ? pad2(dt.getUTCHours()) : candle.datetime.slice(11, 13);
+        break;
+      case 'minute':
+        extracted = isValidDate ? pad2(dt.getUTCMinutes()) : candle.datetime.slice(14, 16);
+        break;
+      case 'day_of_week':
+        extracted = isValidDate ? dayNames[dt.getUTCDay()] : '';
+        break;
+      default:
+        extracted = candle.datetime;
+        break;
+    }
+
+    const leftNum = Number(extracted);
+    const rightNum = Number(compareValue);
+    const canCompareNumeric = Number.isFinite(leftNum) && Number.isFinite(rightNum);
+
+    let result = false;
+    if (operator === 'equals' || operator === 'eq') {
+      result = canCompareNumeric ? leftNum === rightNum : extracted === compareValue;
+    } else if (operator === 'not_equals' || operator === 'neq') {
+      result = canCompareNumeric ? leftNum !== rightNum : extracted !== compareValue;
+    } else if (operator === 'includes') {
+      result = extracted.includes(compareValue);
+    } else if (operator === 'starts_with') {
+      result = extracted.startsWith(compareValue);
+    } else if (operator === 'ends_with') {
+      result = extracted.endsWith(compareValue);
+    } else if (canCompareNumeric) {
+      if (operator === 'greater_than' || operator === 'gt') result = leftNum > rightNum;
+      else if (operator === 'greater_or_equal' || operator === 'gte') result = leftNum >= rightNum;
+      else if (operator === 'less_than' || operator === 'lt') result = leftNum < rightNum;
+      else if (operator === 'less_or_equal' || operator === 'lte') result = leftNum <= rightNum;
+    } else {
+      if (operator === 'greater_than' || operator === 'gt') result = extracted > compareValue;
+      else if (operator === 'greater_or_equal' || operator === 'gte') result = extracted >= compareValue;
+      else if (operator === 'less_than' || operator === 'lt') result = extracted < compareValue;
+      else if (operator === 'less_or_equal' || operator === 'lte') result = extracted <= compareValue;
+    }
+
+    return {
+      handled: true,
+      output: {
+        result,
+        datetime: candle.datetime,
+        datetime_part: datetimePart,
+        extracted,
+        operator,
+        compare_value: compareValue,
+        candle,
+      },
+    };
+  }
+
   if (key === 'logic.greater_wick' && op === 'greater_wick_v1') {
     const attributesObj = fieldsToObject(resolvedAttributes);
     const sourceCandle = normalizeCandle(attributesObj.source_candle);
