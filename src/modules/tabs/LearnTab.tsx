@@ -181,19 +181,69 @@ function NavLessonTitle({ title, align = "left" }: { title: string; align?: "lef
 
 function ProgressiveImage({ src, thumbnail, alt }: { src: string; thumbnail: string | null; alt: string }) {
   const [loaded, setLoaded] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
-    <div className="relative rounded-lg overflow-hidden mb-1.5">
-      {thumbnail && !loaded && (
-        <img src={thumbnail} alt="" className="w-full rounded-lg blur-sm scale-105" />
+    <>
+      {/* Standardized image container in chat bubble */}
+      <button
+        onClick={() => setPreviewOpen(true)}
+        className="relative rounded-lg overflow-hidden mb-1.5 block w-full text-left"
+        style={{ height: 220 }}
+      >
+        {/* Blurred thumbnail placeholder */}
+        {thumbnail && (
+          <img
+            src={thumbnail}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover rounded-lg blur-sm scale-105"
+          />
+        )}
+        {/* Full image with cover fit */}
+        <img
+          src={src}
+          alt={alt}
+          className={`absolute inset-0 w-full h-full object-cover rounded-lg transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+          onLoad={() => setLoaded(true)}
+        />
+        {/* Loading skeleton when no thumbnail */}
+        {!thumbnail && !loaded && (
+          <div className="absolute inset-0 bg-zinc-800 rounded-lg animate-pulse" />
+        )}
+      </button>
+
+      {/* Fullscreen image preview */}
+      {previewOpen && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/95 flex flex-col"
+          onClick={() => setPreviewOpen(false)}
+        >
+          {/* Close button */}
+          <div
+            className="flex items-center px-4 shrink-0"
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)", minHeight: "3.5rem" }}
+          >
+            <button
+              onClick={() => setPreviewOpen(false)}
+              className="w-9 h-9 flex items-center justify-center text-white rounded-full active:bg-white/10"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Full image with real proportions */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+            <img
+              src={src}
+              alt={alt}
+              className="max-w-full max-h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
       )}
-      <img
-        src={src}
-        alt={alt}
-        className={`rounded-lg max-w-full ${thumbnail && !loaded ? "absolute inset-0 w-full h-full object-cover opacity-0" : ""}`}
-        onLoad={() => setLoaded(true)}
-      />
-    </div>
+    </>
   );
 }
 
