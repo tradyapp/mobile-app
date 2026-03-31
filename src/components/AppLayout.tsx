@@ -14,6 +14,7 @@ import ChartIcon from "./icons/ChartIcon";
 import OrionIcon from "./icons/OrionIcon";
 import TradeIcon from "./icons/TradeIcon";
 import TradeTab from "@/modules/tabs/TradeTab";
+import ChatRoomPage from "@/modules/chat/ChatRoomPage";
 
 const AppLayout = () => {
   const { currentTab, setCurrentTab } = useNavigationStore();
@@ -36,11 +37,15 @@ const AppLayout = () => {
     () => tabs.find((tab) => location.pathname.startsWith(tab.path)) ?? tabs[0],
     [tabs, location.pathname]
   );
+  const isChatRoom = useMemo(
+    () => /^\/learn\/chat\/[^/]+$/.test(location.pathname),
+    [location.pathname]
+  );
   const isFullscreenRoute = useMemo(
     () =>
       /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname) ||
-      /^\/learn\/chat\/[^/]+$/.test(location.pathname),
-    [location.pathname]
+      isChatRoom,
+    [location.pathname, isChatRoom]
   );
   const ActiveTabComponent = activeTab.component;
 
@@ -55,6 +60,11 @@ const AppLayout = () => {
       setCurrentTab(activeTab.id);
     }
   }, [activeTab.id, currentTab, setCurrentTab]);
+
+  // Chat room renders standalone — no Page, no tabbar, no AnimatePresence
+  if (isChatRoom) {
+    return <ChatRoomPage />;
+  }
 
   return (
     <Page>
