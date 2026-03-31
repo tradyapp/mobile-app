@@ -118,9 +118,6 @@ function ProfileScreen() {
   const fields: { label: string; value: string }[] = [
     { label: "Display Name", value: profile.displayName || "—" },
     { label: "Email", value: profile.email || "—" },
-    { label: "Language", value: profile.locale === "es" ? "Español" : "English" },
-    { label: "Timezone", value: profile.timezone || "—" },
-    { label: "User ID", value: profile.uid },
   ];
 
   return (
