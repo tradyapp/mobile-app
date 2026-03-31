@@ -74,6 +74,10 @@ function AccountScreen() {
         <ListItem link title="Trading Accounts" />
         <ListItem link title="Subscriptions" />
         <ListItem
+          title="Time Zone"
+          after={profile.timezone || "—"}
+        />
+        <ListItem
           link
           title="Language"
           after={isUpdatingLocale ? "Saving..." : locale === "es" ? "Español" : "English"}
