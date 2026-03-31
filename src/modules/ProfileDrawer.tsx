@@ -9,6 +9,8 @@ import { createPortal } from "react-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
+import Cropper, { type Area, type Point } from "react-easy-crop";
+import "react-easy-crop/react-easy-crop.css";
 
 // ── Shared context for profile state ──
 
@@ -31,6 +33,57 @@ interface ProfileCtxValue {
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+
+const loadImage = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
+  });
+
+const getCroppedAvatarFile = async (imageSrc: string, cropPixels: Area): Promise<File> => {
+  const image = await loadImage(imageSrc);
+  const outputSize = Math.max(1, Math.round(Math.min(cropPixels.width, cropPixels.height)));
+  const canvas = document.createElement("canvas");
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    throw new Error("Canvas context is not available");
+  }
+
+  ctx.drawImage(
+    image,
+    cropPixels.x,
+    cropPixels.y,
+    cropPixels.width,
+    cropPixels.height,
+    0,
+    0,
+    outputSize,
+    outputSize
+  );
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (result) => (result ? resolve(result) : reject(new Error("Failed to create cropped image"))),
+      "image/webp",
+      0.92
+    );
+  });
+
+  return new File([blob], "avatar-cropped.webp", { type: "image/webp" });
+};
 
 // ── Screen: Account (root) ──
 
@@ -104,19 +157,49 @@ function ProfileScreen() {
   const { profile, updateAvatar } = useContext(ProfileCtx);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [cropAreaPixels, setCropAreaPixels] = useState<Area | null>(null);
+  const [isSavingCrop, setIsSavingCrop] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+
+    try {
+      const imageSrc = await readFileAsDataUrl(file);
+      setCropImageSrc(imageSrc);
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCropAreaPixels(null);
+    } catch {
+      // silent fail
+    }
+  };
+
+  const handleCropConfirm = async () => {
+    if (!cropImageSrc || !cropAreaPixels || isSavingCrop) return;
+    setIsSavingCrop(true);
     setUploading(true);
     try {
-      await updateAvatar(file);
+      const croppedFile = await getCroppedAvatarFile(cropImageSrc, cropAreaPixels);
+      await updateAvatar(croppedFile);
+      setCropImageSrc(null);
+      setCropAreaPixels(null);
     } catch {
       // silent fail
     } finally {
+      setIsSavingCrop(false);
       setUploading(false);
     }
+  };
+
+  const handleCropCancel = () => {
+    if (isSavingCrop) return;
+    setCropImageSrc(null);
+    setCropAreaPixels(null);
   };
 
   const fields: { label: string; value: string }[] = [
@@ -179,6 +262,61 @@ function ProfileScreen() {
           />
         ))}
       </List>
+
+      {cropImageSrc && (
+        <div className="fixed inset-0 z-[10001] bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-4">
+            <h3 className="text-white text-base font-semibold">Ajusta tu foto</h3>
+            <p className="text-zinc-400 text-sm mt-1">Recorta la imagen en formato cuadrado.</p>
+
+            <div className="relative mt-4 h-72 w-full overflow-hidden rounded-xl bg-black">
+              <Cropper
+                image={cropImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={(_, areaPixels) => setCropAreaPixels(areaPixels)}
+              />
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="profile-avatar-zoom" className="mb-2 block text-sm text-zinc-300">
+                Zoom
+              </label>
+              <input
+                id="profile-avatar-zoom"
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full accent-[#00ff99]"
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                onClick={handleCropCancel}
+                disabled={isSavingCrop}
+                className="rounded-xl border border-zinc-600 py-2 text-sm text-zinc-200 disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCropConfirm}
+                disabled={isSavingCrop || !cropAreaPixels}
+                className="rounded-xl py-2 text-sm font-medium text-black disabled:opacity-40"
+                style={{ background: "#00ff99" }}
+              >
+                {isSavingCrop ? "Guardando..." : "Usar imagen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
