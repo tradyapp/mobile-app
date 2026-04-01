@@ -16,7 +16,7 @@ export interface ChatMessage {
   id: string;
   room_id: string;
   user_id: string;
-  user_email: string;
+  user_displayname: string | null;
   text: string;
   attachment_url: string | null;
   attachment_type: "image" | "video" | "document" | null;
@@ -32,7 +32,7 @@ export interface AttachmentResult {
   thumbnailUrl: string | null;
 }
 
-const MESSAGE_FIELDS = "id, room_id, user_id, user_email, text, attachment_url, attachment_type, attachment_name, thumbnail_url, created_at";
+const MESSAGE_FIELDS = "id, room_id, user_id, user_displayname, text, attachment_url, attachment_type, attachment_name, thumbnail_url, created_at";
 
 class ChatService {
   async getRooms(): Promise<ChatRoom[]> {
@@ -78,7 +78,7 @@ class ChatService {
   async sendMessage(
     roomId: string,
     userId: string,
-    userEmail: string,
+    userDisplayname: string,
     text: string,
     attachment?: AttachmentResult
   ): Promise<ChatMessage> {
@@ -87,7 +87,7 @@ class ChatService {
       .insert({
         room_id: roomId,
         user_id: userId,
-        user_email: userEmail,
+        user_displayname: userDisplayname,
         text: text || "",
         attachment_url: attachment?.url ?? null,
         attachment_type: attachment?.type ?? null,

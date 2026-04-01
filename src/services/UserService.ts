@@ -6,8 +6,15 @@ const PROFILE_SCHEMA: UserFieldMetadata[] = [
     name: "displayName",
     type: "string",
     required: true,
-    label: "Display Name",
+    label: "Nombre",
     placeholder: "Tu nombre",
+  },
+  {
+    name: "displayname",
+    type: "string",
+    required: true,
+    label: "Displayname",
+    placeholder: "usuario_publico",
   },
   {
     name: "locale",
@@ -61,14 +68,16 @@ class UserService {
 
     const { data, error } = await supabase
       .from("user_profiles")
-      .select("id, display_name, avatar_url")
+      .select("id, display_name, displayname, avatar_url")
       .in("id", uniqueIds);
 
     if (error) throw error;
 
     return (data ?? []).map((row) => ({
       id: row.id as string,
-      displayName: typeof row.display_name === "string" && row.display_name.trim().length > 0 ? row.display_name : "User",
+      displayName: typeof row.displayname === "string" && row.displayname.trim().length > 0
+        ? row.displayname
+        : (typeof row.display_name === "string" && row.display_name.trim().length > 0 ? row.display_name : "User"),
       avatarUrl: typeof row.avatar_url === "string" ? row.avatar_url : null,
     }));
   }
@@ -76,7 +85,7 @@ class UserService {
   async getUserProfile(uid: string): Promise<UserProfileResponse> {
     const { data, error } = await supabase
       .from("user_profiles")
-      .select("id, display_name, avatar_url, locale, timezone")
+      .select("id, display_name, displayname, avatar_url, locale, timezone")
       .eq("id", uid)
       .single();
 
@@ -87,6 +96,7 @@ class UserService {
     const userData: Partial<UserType> = {
       uid,
       displayName: data?.display_name ?? "",
+      displayname: data?.displayname ?? "",
       avatarUrl: data?.avatar_url ?? null,
       locale: data?.locale ?? "es",
       timezone: data?.timezone ?? "America/Bogota",
@@ -109,8 +119,12 @@ class UserService {
   }
 
   async updateUserProfile(uid: string, data: Partial<UserType>): Promise<void> {
+    const normalizedDisplayname = typeof data.displayname === "string"
+      ? data.displayname.trim().toLowerCase()
+      : "";
     const payload: Record<string, unknown> = {
       display_name: typeof data.displayName === "string" ? data.displayName : "",
+      displayname: normalizedDisplayname,
       locale: typeof data.locale === "string" && data.locale ? data.locale : "es",
       timezone: typeof data.timezone === "string" && data.timezone ? data.timezone : "America/Bogota",
       updated_at: new Date().toISOString(),

@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
-import { List, ListItem, ListButton, Dialog, DialogButton } from "konsta/react";
+import { List, ListItem, ListButton, ListInput, Dialog, DialogButton } from "konsta/react";
 import AppDrawer, { type DrawerScreen } from "../components/uiux/AppDrawer";
 import { useDrawerNav } from "../components/uiux/drawer-nav";
 import { authService } from "@/services/AuthService";
@@ -16,6 +16,7 @@ import "react-easy-crop/react-easy-crop.css";
 
 interface ProfileData {
   displayName: string;
+  displayname: string;
   email: string;
   avatarUrl: string | null;
   locale: string;
@@ -30,6 +31,7 @@ interface ProfileCtxValue {
   setIsLogoutDialogOpen: (open: boolean) => void;
   profile: ProfileData;
   updateAvatar: (file: File) => Promise<void>;
+  updateProfileNames: (values: { displayName: string; displayname: string }) => Promise<void>;
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
@@ -154,14 +156,23 @@ function AccountScreen() {
 // ── Screen: Profile ──
 
 function ProfileScreen() {
-  const { profile, updateAvatar } = useContext(ProfileCtx);
+  const { profile, updateAvatar, updateProfileNames } = useContext(ProfileCtx);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [savingNames, setSavingNames] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [cropAreaPixels, setCropAreaPixels] = useState<Area | null>(null);
   const [isSavingCrop, setIsSavingCrop] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState(profile.displayName ?? "");
+  const [displaynameDraft, setDisplaynameDraft] = useState(profile.displayname ?? "");
+
+  useEffect(() => {
+    setDisplayNameDraft(profile.displayName ?? "");
+    setDisplaynameDraft(profile.displayname ?? "");
+  }, [profile.displayName, profile.displayname]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -202,10 +213,28 @@ function ProfileScreen() {
     setCropAreaPixels(null);
   };
 
-  const fields: { label: string; value: string }[] = [
-    { label: "Display Name", value: profile.displayName || "—" },
-    { label: "Email", value: profile.email || "—" },
-  ];
+  const handleSaveNames = async () => {
+    if (savingNames) return;
+    const nextDisplayName = displayNameDraft.trim();
+    const nextDisplayname = displaynameDraft.trim().toLowerCase();
+    if (!nextDisplayName) {
+      setNameError("Nombre es obligatorio.");
+      return;
+    }
+    if (!/^[a-z0-9._]{3,30}$/.test(nextDisplayname)) {
+      setNameError("Displayname debe tener 3-30 caracteres (a-z, 0-9, . o _).");
+      return;
+    }
+    setNameError(null);
+    setSavingNames(true);
+    try {
+      await updateProfileNames({ displayName: nextDisplayName, displayname: nextDisplayname });
+    } catch {
+      setNameError("No se pudo guardar el perfil.");
+    } finally {
+      setSavingNames(false);
+    }
+  };
 
   return (
     <div>
@@ -248,20 +277,34 @@ function ProfileScreen() {
 
       {/* Profile fields */}
       <List strong className="rounded-xl overflow-hidden">
-        {fields.map((f) => (
-          <ListItem
-            key={f.label}
-            title={
-              <span className="text-zinc-500 text-sm">{f.label}</span>
-            }
-            after={
-              <span className="text-zinc-200 text-sm truncate max-w-[200px]">
-                {f.value}
-              </span>
-            }
-          />
-        ))}
+        <ListInput
+          label="Nombre"
+          type="text"
+          value={displayNameDraft}
+          onChange={(e) => setDisplayNameDraft(e.target.value)}
+          placeholder="Tu nombre"
+        />
+        <ListInput
+          label="Displayname"
+          type="text"
+          value={displaynameDraft}
+          onChange={(e) => setDisplaynameDraft(e.target.value)}
+          placeholder="usuario_publico"
+        />
+        <ListItem
+          title={<span className="text-zinc-500 text-sm">Email</span>}
+          after={<span className="text-zinc-200 text-sm truncate max-w-[200px]">{profile.email || "—"}</span>}
+        />
       </List>
+      {nameError && <p className="text-rose-400 text-xs mt-3 px-2">{nameError}</p>}
+      <button
+        onClick={() => void handleSaveNames()}
+        disabled={savingNames}
+        className="mt-3 w-full px-4 py-2 rounded-full text-sm font-medium text-black disabled:opacity-40 active:opacity-80 transition-opacity"
+        style={{ background: "#00ff99" }}
+      >
+        {savingNames ? "Guardando..." : "Guardar perfil"}
+      </button>
 
       {cropImageSrc && (
         <div className="fixed inset-0 z-[10001] bg-black/80 flex items-center justify-center p-4">
@@ -378,6 +421,7 @@ export default function ProfileDrawer({
   const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
   const [profile, setProfile] = useState<ProfileData>({
     displayName: "",
+    displayname: "",
     email: user?.email ?? "",
     avatarUrl: null,
     locale: "es",
@@ -399,6 +443,7 @@ export default function ProfileDrawer({
         setStoreLocale(nextLocale);
         setProfile({
           displayName: (result.userData.displayName as string) ?? "",
+          displayname: (result.userData.displayname as string) ?? "",
           email: user.email ?? "",
           avatarUrl: (result.userData.avatarUrl as string) ?? null,
           locale: (result.userData.locale as string) ?? "es",
@@ -439,6 +484,12 @@ export default function ProfileDrawer({
     setProfile((p) => ({ ...p, avatarUrl: newUrl }));
   };
 
+  const updateProfileNames = async (values: { displayName: string; displayname: string }) => {
+    if (!user?.uid) return;
+    await userService.updateUserProfile(user.uid, values);
+    setProfile((p) => ({ ...p, displayName: values.displayName, displayname: values.displayname }));
+  };
+
   const ctxValue: ProfileCtxValue = {
     locale,
     isUpdatingLocale,
@@ -446,6 +497,7 @@ export default function ProfileDrawer({
     setIsLogoutDialogOpen,
     profile,
     updateAvatar,
+    updateProfileNames,
   };
 
   return (

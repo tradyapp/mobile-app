@@ -237,6 +237,7 @@ export default function ChatRoomPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [ownDisplayname, setOwnDisplayname] = useState("user");
 
   // Media
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -288,6 +289,25 @@ export default function ChatRoomPage() {
       // silent
     }
   }, [userNames]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let active = true;
+    const run = async () => {
+      try {
+        const profile = await userService.getUserProfile(user.uid);
+        if (!active) return;
+        const next = typeof profile.userData.displayname === "string" && profile.userData.displayname.trim().length > 0
+          ? profile.userData.displayname
+          : "user";
+        setOwnDisplayname(next);
+      } catch {
+        // silent
+      }
+    };
+    void run();
+    return () => { active = false; };
+  }, [user?.uid]);
 
   // ---------------------------------------------------------------------------
   // Fetch messages + realtime subscription
@@ -415,7 +435,7 @@ export default function ChatRoomPage() {
 
     setSending(true);
     try {
-      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", text);
+      await chatService.sendMessage(roomId, user.uid, ownDisplayname, text);
     } catch {
       setChatMessage(text);
     } finally {
@@ -459,7 +479,7 @@ export default function ChatRoomPage() {
       setUploading(true);
       const attachment = await chatService.uploadAttachment(roomId, file);
       setUploading(false);
-      await chatService.sendMessage(roomId, user.uid, user.email ?? "User", caption, attachment);
+      await chatService.sendMessage(roomId, user.uid, ownDisplayname, caption, attachment);
     } catch {
       // silent
     } finally {
