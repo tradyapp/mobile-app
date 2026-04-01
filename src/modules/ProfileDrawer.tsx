@@ -249,14 +249,30 @@ function TradingAccountsScreen() {
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Ej: 1000"
             />
-            <ListInput
-              label="Tipo de cuenta"
-              type="select"
-              value={accountType}
-              onChange={(e) => setAccountType(e.target.value as "simulation")}
-            >
-              <option value="simulation">Simulación</option>
-            </ListInput>
+            <div className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2">
+              <label className="block text-xs text-zinc-400">Tipo de cuenta</label>
+              <div className="relative mt-1">
+                <select
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value as "simulation")}
+                  className="w-full appearance-none bg-transparent pr-8 text-sm text-zinc-100 focus:outline-none"
+                >
+                  <option value="simulation">Simulación</option>
+                </select>
+                <svg
+                  className="pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.1 1.02l-4.25 4.5a.75.75 0 0 1-1.1 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
           {error && <p className="text-rose-400 text-xs mt-2">{error}</p>}
           <div className="mt-3 grid grid-cols-2 gap-2">
