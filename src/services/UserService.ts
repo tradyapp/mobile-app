@@ -119,12 +119,9 @@ class UserService {
   }
 
   async updateUserProfile(uid: string, data: Partial<UserType>): Promise<void> {
-    const normalizedDisplayname = typeof data.displayname === "string"
-      ? data.displayname.trim().toLowerCase()
-      : "";
     const payload: Record<string, unknown> = {
       display_name: typeof data.displayName === "string" ? data.displayName : "",
-      displayname: normalizedDisplayname,
+      displayname: typeof data.displayname === "string" ? data.displayname : "",
       locale: typeof data.locale === "string" && data.locale ? data.locale : "es",
       timezone: typeof data.timezone === "string" && data.timezone ? data.timezone : "America/Bogota",
       updated_at: new Date().toISOString(),

@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
+import { toast } from "sonner";
 import Cropper, { type Area, type Point } from "react-easy-crop";
 import "react-easy-crop/react-easy-crop.css";
 
@@ -216,21 +217,23 @@ function ProfileScreen() {
   const handleSaveNames = async () => {
     if (savingNames) return;
     const nextDisplayName = displayNameDraft.trim();
-    const nextDisplayname = displaynameDraft.trim().toLowerCase();
+    const nextDisplayname = displaynameDraft;
     if (!nextDisplayName) {
       setNameError("Nombre es obligatorio.");
       return;
     }
-    if (!/^[a-z0-9._]{3,30}$/.test(nextDisplayname)) {
-      setNameError("Displayname debe tener 3-30 caracteres (a-z, 0-9, . o _).");
+    if (!nextDisplayname.trim()) {
+      setNameError("Displayname es obligatorio.");
       return;
     }
     setNameError(null);
     setSavingNames(true);
     try {
       await updateProfileNames({ displayName: nextDisplayName, displayname: nextDisplayname });
+      toast.success("Cambios guardados");
     } catch {
       setNameError("No se pudo guardar el perfil.");
+      toast.error("No se pudo guardar el perfil");
     } finally {
       setSavingNames(false);
     }
