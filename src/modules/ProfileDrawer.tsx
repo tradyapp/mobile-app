@@ -25,14 +25,23 @@ interface ProfileData {
   uid: string;
 }
 
+interface TradingAccountData {
+  id: string;
+  name: string;
+  amount: number;
+  createdAt: string;
+}
+
 interface ProfileCtxValue {
   locale: "en" | "es";
   isUpdatingLocale: boolean;
   handleLanguageChange: (nextLocale: "en" | "es") => void;
   setIsLogoutDialogOpen: (open: boolean) => void;
   profile: ProfileData;
+  tradingAccounts: TradingAccountData[];
   updateAvatar: (file: File) => Promise<void>;
   updateProfileNames: (values: { displayName: string; displayname: string }) => Promise<void>;
+  addTradingAccount: (values: { name: string; amount: number }) => Promise<void>;
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
@@ -92,7 +101,7 @@ const getCroppedAvatarFile = async (imageSrc: string, cropPixels: Area): Promise
 
 function AccountScreen() {
   const { navigateTo } = useDrawerNav();
-  const { locale, isUpdatingLocale, setIsLogoutDialogOpen, profile } = useContext(ProfileCtx);
+  const { locale, isUpdatingLocale, setIsLogoutDialogOpen, profile, tradingAccounts } = useContext(ProfileCtx);
 
   return (
     <div>
@@ -127,7 +136,12 @@ function AccountScreen() {
       </List>
 
       <List strong className="mb-6 rounded-xl overflow-hidden">
-        <ListItem link title="Trading Accounts" />
+        <ListItem
+          link
+          title="Trading Accounts"
+          after={`${tradingAccounts.length}`}
+          onClick={() => navigateTo("trading-accounts")}
+        />
         <ListItem link title="Subscriptions" />
         <ListItem
           title="Time Zone"
@@ -149,6 +163,109 @@ function AccountScreen() {
         >
           Sign Out
         </ListButton>
+      </List>
+    </div>
+  );
+}
+
+function TradingAccountsScreen() {
+  const { tradingAccounts, addTradingAccount } = useContext(ProfileCtx);
+  const [isCreating, setIsCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (saving) return;
+    const nextName = name.trim();
+    const parsedAmount = Number(amount.replace(",", "."));
+    if (!nextName) {
+      setError("El nombre de la cuenta es obligatorio.");
+      return;
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError("El monto debe ser mayor a 0.");
+      return;
+    }
+
+    setError(null);
+    setSaving(true);
+    try {
+      await addTradingAccount({ name: nextName, amount: parsedAmount });
+      setName("");
+      setAmount("");
+      setIsCreating(false);
+      toast.success("Cuenta creada");
+    } catch {
+      setError("No se pudo crear la cuenta.");
+      toast.error("No se pudo crear la cuenta");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatAmount = (value: number) =>
+    new Intl.NumberFormat("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+
+  return (
+    <div>
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={() => {
+            setIsCreating((prev) => !prev);
+            setError(null);
+          }}
+          className="w-10 h-10 rounded-full text-black text-xl font-semibold flex items-center justify-center"
+          style={{ background: "#00ff99" }}
+          aria-label="Agregar cuenta"
+        >
+          +
+        </button>
+      </div>
+
+      {isCreating && (
+        <div className="mb-4 rounded-xl border border-zinc-700 bg-zinc-900 p-3">
+          <div className="space-y-2">
+            <ListInput
+              label="Nombre de la cuenta"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: Cuenta Principal"
+            />
+            <ListInput
+              label="Monto"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="Ej: 1000"
+            />
+          </div>
+          {error && <p className="text-rose-400 text-xs mt-2">{error}</p>}
+          <button
+            onClick={() => void handleCreate()}
+            disabled={saving}
+            className="mt-3 w-full px-4 py-2 rounded-full text-sm font-medium text-black disabled:opacity-40"
+            style={{ background: "#00ff99" }}
+          >
+            {saving ? "Creando..." : "Crear cuenta"}
+          </button>
+        </div>
+      )}
+
+      <List strong className="rounded-xl overflow-hidden">
+        {tradingAccounts.length === 0 ? (
+          <ListItem title="No tienes cuentas de trading todavía." />
+        ) : (
+          tradingAccounts.map((item) => (
+            <ListItem
+              key={item.id}
+              title={item.name}
+              after={formatAmount(item.amount)}
+            />
+          ))
+        )}
       </List>
     </div>
   );
@@ -403,6 +520,7 @@ function LanguageScreen() {
 const SCREENS: DrawerScreen[] = [
   { name: "account", title: "Account", component: AccountScreen, isRoot: true },
   { name: "profile", title: "Profile", component: ProfileScreen },
+  { name: "trading-accounts", title: "Trading Accounts", component: TradingAccountsScreen },
   { name: "language", title: "Language", component: LanguageScreen },
 ];
 
@@ -422,6 +540,7 @@ export default function ProfileDrawer({
   const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
   const user = useAuthStore((state) => state.user);
   const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
+  const [tradingAccounts, setTradingAccounts] = useState<TradingAccountData[]>([]);
   const [profile, setProfile] = useState<ProfileData>({
     displayName: "",
     displayname: "",
@@ -465,6 +584,26 @@ export default function ProfileDrawer({
     };
   }, [isOpen, user?.uid, user?.email, setStoreLocale]);
 
+  useEffect(() => {
+    if (!isOpen || !user?.uid) return;
+    const key = `trady_trading_accounts_${user.uid}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setTradingAccounts([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as TradingAccountData[];
+      if (!Array.isArray(parsed)) {
+        setTradingAccounts([]);
+        return;
+      }
+      setTradingAccounts(parsed);
+    } catch {
+      setTradingAccounts([]);
+    }
+  }, [isOpen, user?.uid]);
+
   const handleLanguageChange = async (nextLocale: "en" | "es") => {
     if (!user?.uid || nextLocale === locale || isUpdatingLocale) return;
 
@@ -493,14 +632,31 @@ export default function ProfileDrawer({
     setProfile((p) => ({ ...p, displayName: values.displayName, displayname: values.displayname }));
   };
 
+  const addTradingAccount = async (values: { name: string; amount: number }) => {
+    if (!user?.uid) return;
+    const next: TradingAccountData = {
+      id: crypto.randomUUID(),
+      name: values.name,
+      amount: values.amount,
+      createdAt: new Date().toISOString(),
+    };
+    setTradingAccounts((prev) => {
+      const updated = [next, ...prev];
+      localStorage.setItem(`trady_trading_accounts_${user.uid}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const ctxValue: ProfileCtxValue = {
     locale,
     isUpdatingLocale,
     handleLanguageChange,
     setIsLogoutDialogOpen,
     profile,
+    tradingAccounts,
     updateAvatar,
     updateProfileNames,
+    addTradingAccount,
   };
 
   return (
