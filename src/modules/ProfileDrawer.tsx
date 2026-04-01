@@ -29,6 +29,7 @@ interface TradingAccountData {
   id: string;
   name: string;
   amount: number;
+  accountType: "simulation";
   createdAt: string;
 }
 
@@ -41,7 +42,7 @@ interface ProfileCtxValue {
   tradingAccounts: TradingAccountData[];
   updateAvatar: (file: File) => Promise<void>;
   updateProfileNames: (values: { displayName: string; displayname: string }) => Promise<void>;
-  addTradingAccount: (values: { name: string; amount: number }) => Promise<void>;
+  addTradingAccount: (values: { name: string; amount: number; accountType: "simulation" }) => Promise<void>;
 }
 
 const ProfileCtx = createContext<ProfileCtxValue>(null!);
@@ -173,6 +174,7 @@ function TradingAccountsScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
+  const [accountType, setAccountType] = useState<"simulation">("simulation");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -192,9 +194,10 @@ function TradingAccountsScreen() {
     setError(null);
     setSaving(true);
     try {
-      await addTradingAccount({ name: nextName, amount: parsedAmount });
+      await addTradingAccount({ name: nextName, amount: parsedAmount, accountType });
       setName("");
       setAmount("");
+      setAccountType("simulation");
       setIsCreating(false);
       toast.success("Cuenta creada");
     } catch {
@@ -203,6 +206,11 @@ function TradingAccountsScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const getTypeLabel = (type: TradingAccountData["accountType"]) => {
+    if (type === "simulation") return "Simulación";
+    return type;
   };
 
   const formatAmount = (value: number) =>
@@ -241,16 +249,37 @@ function TradingAccountsScreen() {
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Ej: 1000"
             />
+            <ListInput
+              label="Tipo de cuenta"
+              type="select"
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as "simulation")}
+            >
+              <option value="simulation">Simulación</option>
+            </ListInput>
           </div>
           {error && <p className="text-rose-400 text-xs mt-2">{error}</p>}
-          <button
-            onClick={() => void handleCreate()}
-            disabled={saving}
-            className="mt-3 w-full px-4 py-2 rounded-full text-sm font-medium text-black disabled:opacity-40"
-            style={{ background: "#00ff99" }}
-          >
-            {saving ? "Creando..." : "Crear cuenta"}
-          </button>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                if (saving) return;
+                setIsCreating(false);
+                setError(null);
+              }}
+              disabled={saving}
+              className="w-full px-4 py-2 rounded-full text-sm font-medium text-zinc-200 border border-zinc-600 disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => void handleCreate()}
+              disabled={saving}
+              className="w-full px-4 py-2 rounded-full text-sm font-medium text-black disabled:opacity-40"
+              style={{ background: "#00ff99" }}
+            >
+              {saving ? "Creando..." : "Crear cuenta"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -262,6 +291,7 @@ function TradingAccountsScreen() {
             <ListItem
               key={item.id}
               title={item.name}
+              subtitle={getTypeLabel(item.accountType)}
               after={formatAmount(item.amount)}
             />
           ))
@@ -598,7 +628,12 @@ export default function ProfileDrawer({
         setTradingAccounts([]);
         return;
       }
-      setTradingAccounts(parsed);
+      setTradingAccounts(
+        parsed.map((item) => ({
+          ...item,
+          accountType: item?.accountType === "simulation" ? "simulation" : "simulation",
+        }))
+      );
     } catch {
       setTradingAccounts([]);
     }
@@ -632,12 +667,13 @@ export default function ProfileDrawer({
     setProfile((p) => ({ ...p, displayName: values.displayName, displayname: values.displayname }));
   };
 
-  const addTradingAccount = async (values: { name: string; amount: number }) => {
+  const addTradingAccount = async (values: { name: string; amount: number; accountType: "simulation" }) => {
     if (!user?.uid) return;
     const next: TradingAccountData = {
       id: crypto.randomUUID(),
       name: values.name,
       amount: values.amount,
+      accountType: values.accountType,
       createdAt: new Date().toISOString(),
     };
     setTradingAccounts((prev) => {
