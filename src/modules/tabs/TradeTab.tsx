@@ -61,7 +61,7 @@ export default function TradeTab() {
   };
 
   const leftNode = (
-    <div className="relative max-w-[220px]">
+    <div className="relative w-[170px] sm:w-[210px]">
       <select
         value={selectedAccountId}
         onChange={(e) => handleAccountChange(e.target.value)}
