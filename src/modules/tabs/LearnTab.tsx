@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block, BlockTitle } from "konsta/react";
+import { Block, BlockTitle, Card, List, ListItem } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
 import GroupAvatarIcon from "@/components/icons/GroupAvatarIcon";
@@ -537,67 +537,68 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderCatalogSkeleton = () => (
-    <div className="space-y-3">
+    <div className="space-y-3 px-4">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="w-full bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row">
-          <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 animate-pulse" />
-          <div className="p-3 space-y-2 flex-1">
+        <Card outline key={i} contentWrapPadding="p-0" className="overflow-hidden">
+          <div className="aspect-video bg-zinc-800 animate-pulse" />
+          <div className="p-4 space-y-2">
             <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
             <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
             <div className="h-3 w-1/2 bg-zinc-800/60 rounded animate-pulse" />
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );
 
   const renderCatalog = () => (
-    <>
-      <BlockTitle className="mt-2">Training</BlockTitle>
-      <Block strong inset className="pb-24">
-        {loading && renderCatalogSkeleton()}
-        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-        {!loading && !error && courses.length === 0 && (
-          <p className="text-zinc-400 text-sm">No published courses yet.</p>
-        )}
-        <div className="space-y-3">
-          {courses.map((course) => {
-            const summary = courseSummaries.get(course.id);
-            return (
-              <button
-                key={course.id}
-                onClick={() => openCourse(course)}
-                className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
-              >
-                <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
-                  {course.thumbnail_url ? (
-                    <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
-                  )}
-                  {summary && summary.total > 0 && (
-                    <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
-                      <ProgressPie completed={summary.completed} total={summary.total} size={32} />
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
-                  <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
-                  {course.description && (
-                    <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
-                  )}
-                  {summary && summary.total > 0 && (
-                    <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
-                      {summary.completed}/{summary.total} lessons completed
-                    </p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </Block>
-    </>
+    <div className="pb-24">
+      {loading && renderCatalogSkeleton()}
+      {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
+      {!loading && !error && courses.length === 0 && (
+        <Block><p className="text-zinc-400 text-sm">No published courses yet.</p></Block>
+      )}
+      {courses.map((course) => {
+        const summary = courseSummaries.get(course.id);
+        return (
+          <Card
+            key={course.id}
+            outline
+            contentWrapPadding="p-0"
+            className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+            onClick={() => openCourse(course)}
+            header={
+              <div className="relative">
+                {course.thumbnail_url ? (
+                  <img src={course.thumbnail_url} alt={course.title} className="w-full aspect-video object-cover" />
+                ) : (
+                  <div className="w-full aspect-video bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
+                )}
+                {summary && summary.total > 0 && (
+                  <div className="absolute bottom-2 right-2 bg-black/70 rounded-full p-0.5">
+                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
+                  </div>
+                )}
+              </div>
+            }
+            footer={
+              summary && summary.total > 0 ? (
+                <p className={`text-xs ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
+                  {summary.completed}/{summary.total} lessons completed
+                </p>
+              ) : undefined
+            }
+          >
+            <div className="p-4">
+              <h3 className="text-white font-semibold">{course.title}</h3>
+              {course.description && (
+                <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
+              )}
+            </div>
+          </Card>
+        );
+      })}
+    </div>
   );
 
   // ---------------------------------------------------------------------------
@@ -605,114 +606,121 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderCourseSkeleton = () => (
-    <div className="space-y-3">
-      {[0, 1].map((i) => (
-        <div key={i} className="bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="px-3 py-3 space-y-2">
-            <div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />
-            <div className="h-3 w-1/4 bg-zinc-800/60 rounded animate-pulse" />
-          </div>
-          <div className="border-t border-zinc-800">
-            {[0, 1, 2].map((j) => (
-              <div key={j} className="px-3 py-3 border-b border-zinc-800 last:border-b-0 flex items-center gap-3">
-                <div className="w-16 h-10 shrink-0 rounded-md bg-zinc-800 animate-pulse" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse" />
-                  <div className="h-2.5 w-1/3 bg-zinc-800/60 rounded animate-pulse" />
-                </div>
-              </div>
-            ))}
-          </div>
+    <div className="px-4 space-y-4">
+      <Card outline contentWrapPadding="p-4">
+        <div className="space-y-2">
+          <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
+          <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
+          <div className="h-2 w-1/3 bg-zinc-800/60 rounded animate-pulse mt-2" />
         </div>
+      </Card>
+      {[0, 1].map((i) => (
+        <List key={i} strong inset outline>
+          <ListItem
+            title={<div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />}
+            subtitle={<div className="h-3 w-1/4 bg-zinc-800/60 rounded animate-pulse mt-1" />}
+          />
+          {[0, 1, 2].map((j) => (
+            <ListItem
+              key={j}
+              media={<div className="w-14 h-9 rounded-md bg-zinc-800 animate-pulse" />}
+              title={<div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse" />}
+              subtitle={<div className="h-2.5 w-1/3 bg-zinc-800/60 rounded animate-pulse mt-1" />}
+            />
+          ))}
+        </List>
       ))}
     </div>
   );
 
   const renderCourse = () => (
-    <>
+    <div className="pb-24">
       {selectedCourse && (
-        <>
-          <BlockTitle className="mt-2">{selectedCourse.title}</BlockTitle>
-          <Block strong inset>
-            <p className="text-zinc-300 text-sm">{selectedCourse.description || "No description"}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-zinc-500 text-xs">
-                {moduleCount} modules • {lessonCount} lessons
-              </p>
-              {lessonCount > 0 && (
-                <span className="text-emerald-400 text-xs font-medium">
-                  {completedCount}/{lessonCount} completed
-                </span>
-              )}
-            </div>
-            {lessonCount > 0 && (
-              <div className="mt-2 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round((completedCount / lessonCount) * 100)}%` }}
-                />
+        <Card outline
+          footer={
+            lessonCount > 0 ? (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-zinc-500 text-xs">
+                    {moduleCount} modules &middot; {lessonCount} lessons
+                  </span>
+                  <span className="text-emerald-400 text-xs font-medium">
+                    {completedCount}/{lessonCount} completed
+                  </span>
+                </div>
+                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((completedCount / lessonCount) * 100)}%` }}
+                  />
+                </div>
               </div>
-            )}
-          </Block>
-        </>
+            ) : (
+              <span className="text-zinc-500 text-xs">{moduleCount} modules &middot; {lessonCount} lessons</span>
+            )
+          }
+          footerDivider
+        >
+          <p className="text-zinc-300 text-sm">{selectedCourse.description || "No description"}</p>
+        </Card>
       )}
 
-      <Block strong inset className="pb-24">
-        {loading && renderCourseSkeleton()}
-        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+      {loading && renderCourseSkeleton()}
+      {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
 
-        {!loading && modules.length === 0 && (
-          <p className="text-zinc-400 text-sm">This course has no published lessons.</p>
-        )}
+      {!loading && !error && modules.length === 0 && (
+        <Block><p className="text-zinc-400 text-sm">This course has no published lessons.</p></Block>
+      )}
 
-        <div className="space-y-3">
-          {modules.map((module) => {
-          const isOpen = expandedModules.has(module.id);
-          const modDone = getModuleProgress(module);
-          const modTotal = module.lessons.length;
-          return (
-            <div key={module.id} className="bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden">
-              <button
-                className="w-full px-3 py-3 text-left flex items-center justify-between"
-                onClick={() => toggleModule(module.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-medium">{module.title}</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-zinc-500 text-xs">{modTotal} lessons</p>
-                    {modTotal > 0 && (
-                      <span className={`text-xs font-medium ${modDone === modTotal ? "text-emerald-400" : "text-zinc-500"}`}>
-                        {modDone}/{modTotal}
-                      </span>
-                    )}
-                  </div>
-                  {modTotal > 0 && (
-                    <div className="mt-1.5 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${modDone === modTotal ? "bg-emerald-500" : "bg-emerald-500/70"}`}
-                        style={{ width: `${Math.round((modDone / modTotal) * 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <span className="text-zinc-400 text-xs ml-2 shrink-0">{isOpen ? "Hide" : "Show"}</span>
-              </button>
+      {!loading && modules.map((module) => {
+        const isOpen = expandedModules.has(module.id);
+        const modDone = getModuleProgress(module);
+        const modTotal = module.lessons.length;
+        return (
+          <div key={module.id}>
+            <BlockTitle
+              className="cursor-pointer flex items-center justify-between"
+              onClick={() => toggleModule(module.id)}
+            >
+              <span>{module.title}</span>
+              <span className="text-zinc-500 text-xs font-normal ml-2">
+                {modTotal > 0 && (
+                  <span className={modDone === modTotal ? "text-emerald-400" : ""}>
+                    {modDone}/{modTotal}
+                  </span>
+                )}
+                {" "}{isOpen ? "▴" : "▾"}
+              </span>
+            </BlockTitle>
 
-              {isOpen && (
-                <div className="border-t border-zinc-800">
-                  {module.lessons.length === 0 ? (
-                    <p className="px-3 py-3 text-zinc-500 text-xs">No lessons in this module.</p>
-                  ) : (
-                    module.lessons.map((lesson) => {
-                      const thumb = getLessonThumbnail(lesson);
-                      const isCompleted = progressMap.get(lesson.id)?.completed === true;
-                      return (
-                        <button
-                          key={lesson.id}
-                          onClick={() => openLesson(lesson)}
-                          className="w-full px-3 py-3 text-left border-b border-zinc-800 last:border-b-0 flex items-center gap-3"
-                        >
-                          <div className="w-16 h-10 shrink-0 rounded-md overflow-hidden bg-zinc-800 relative">
+            {isOpen && (
+              <List strong inset outline>
+                {module.lessons.length === 0 ? (
+                  <ListItem title={<span className="text-zinc-500 text-xs">No lessons in this module.</span>} />
+                ) : (
+                  module.lessons.map((lesson) => {
+                    const thumb = getLessonThumbnail(lesson);
+                    const isCompleted = progressMap.get(lesson.id)?.completed === true;
+                    return (
+                      <ListItem
+                        key={lesson.id}
+                        link
+                        chevron={false}
+                        onClick={() => openLesson(lesson)}
+                        title={
+                          <span className={isCompleted ? "text-zinc-400" : "text-zinc-100"}>
+                            {lesson.title}
+                          </span>
+                        }
+                        subtitle={
+                          <span className="text-zinc-500">
+                            {lesson.content_type.toUpperCase()}
+                            {lesson.duration_minutes ? ` · ${lesson.duration_minutes} min` : ""}
+                            {lesson.is_free ? " · Free" : ""}
+                          </span>
+                        }
+                        media={
+                          <div className="w-14 h-9 shrink-0 rounded-md overflow-hidden bg-zinc-800 relative">
                             {thumb ? (
                               <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
                             ) : (
@@ -722,37 +730,28 @@ export default function LearnTab() {
                             )}
                             {isCompleted && (
                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                               </div>
                             )}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-sm ${isCompleted ? "text-zinc-400" : "text-zinc-100"}`}>
-                              {lesson.title}
-                            </p>
-                            <p className="text-zinc-500 text-xs">
-                              {lesson.content_type.toUpperCase()}
-                              {lesson.duration_minutes ? ` • ${lesson.duration_minutes} min` : ""}
-                              {lesson.is_free ? " • Free" : ""}
-                            </p>
-                          </div>
-                          {isCompleted && (
-                            <span className="text-emerald-400 text-xs font-medium shrink-0">Done</span>
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      </Block>
-    </>
+                        }
+                        after={
+                          isCompleted ? (
+                            <span className="text-emerald-400 text-xs font-medium">Done</span>
+                          ) : undefined
+                        }
+                      />
+                    );
+                  })
+                )}
+              </List>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 
   // ---------------------------------------------------------------------------
@@ -777,41 +776,44 @@ export default function LearnTab() {
     const lessonPosition = currentLessonIndex >= 0 ? `${currentLessonIndex + 1}/${allLessons.length}` : "";
 
     return (
-      <>
-        <BlockTitle className="mt-2">{selectedLesson.title}</BlockTitle>
-        <Block strong inset className="pb-32 landscape:max-w-2xl landscape:mx-auto">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-zinc-500 text-xs">
-              {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
-              {selectedLesson.content_type.toUpperCase()}
-              {selectedLesson.duration_minutes ? ` • ${selectedLesson.duration_minutes} min` : ""}
-            </p>
-          </div>
+      <div className="pb-32 landscape:max-w-2xl landscape:mx-auto">
+        {videoUrl && (
+          <Card outline contentWrapPadding="p-0" className="overflow-hidden">
+            <video
+              key={selectedLesson.id}
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              poster={poster ?? undefined}
+              className="w-full aspect-video object-contain bg-black"
+              onTimeUpdate={handleTimeUpdate}
+              onEnded={handleVideoEnded}
+            />
+          </Card>
+        )}
 
-          {videoUrl && (
-            <div className="mb-4 rounded-xl overflow-hidden border border-zinc-800 bg-black">
-              <video
-                key={selectedLesson.id}
-                ref={videoRef}
-                src={videoUrl}
-                controls
-                poster={poster ?? undefined}
-                className="w-full aspect-video object-contain"
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={handleVideoEnded}
-              />
+        <Card outline
+          header={
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 text-xs">
+                {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
+                {selectedLesson.content_type.toUpperCase()}
+                {selectedLesson.duration_minutes ? ` · ${selectedLesson.duration_minutes} min` : ""}
+              </span>
             </div>
-          )}
-
+          }
+          headerDivider
+        >
           {textContent ? (
-            <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
+            <div className="prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
               <ReactMarkdown>{textContent}</ReactMarkdown>
             </div>
           ) : (
             !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
           )}
+        </Card>
 
-          {/* Prev / Next navigation bar + dark fill to bottom */}
+        {/* Prev / Next navigation bar + dark fill to bottom */}
         <div className="fixed bottom-0 left-0 right-0 z-20">
           <div className="bg-zinc-950" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)" }}>
             <div className="border-t border-zinc-800 flex" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
@@ -841,8 +843,7 @@ export default function LearnTab() {
             </div>
           </div>
         </div>
-        </Block>
-      </>
+      </div>
     );
   };
 
