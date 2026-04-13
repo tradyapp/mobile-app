@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block } from "konsta/react";
+import { Block, BlockTitle } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
 import GroupAvatarIcon from "@/components/icons/GroupAvatarIcon";
@@ -552,49 +552,52 @@ export default function LearnTab() {
   );
 
   const renderCatalog = () => (
-    <Block className="pt-2 pb-24">
-      {loading && renderCatalogSkeleton()}
-      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-      {!loading && !error && courses.length === 0 && (
-        <p className="text-zinc-400 text-sm">No published courses yet.</p>
-      )}
-      <div className="space-y-3">
-        {courses.map((course) => {
-          const summary = courseSummaries.get(course.id);
-          return (
-            <button
-              key={course.id}
-              onClick={() => openCourse(course)}
-              className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
-            >
-              <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
-                {course.thumbnail_url ? (
-                  <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
-                )}
-                {summary && summary.total > 0 && (
-                  <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
-                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
-                  </div>
-                )}
-              </div>
-              <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
-                <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
-                {course.description && (
-                  <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
-                )}
-                {summary && summary.total > 0 && (
-                  <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
-                    {summary.completed}/{summary.total} lessons completed
-                  </p>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </Block>
+    <>
+      <BlockTitle className="mt-2">Training</BlockTitle>
+      <Block strong inset className="pb-24">
+        {loading && renderCatalogSkeleton()}
+        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+        {!loading && !error && courses.length === 0 && (
+          <p className="text-zinc-400 text-sm">No published courses yet.</p>
+        )}
+        <div className="space-y-3">
+          {courses.map((course) => {
+            const summary = courseSummaries.get(course.id);
+            return (
+              <button
+                key={course.id}
+                onClick={() => openCourse(course)}
+                className="w-full text-left bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden flex flex-col landscape:flex-row"
+              >
+                <div className="aspect-video landscape:aspect-auto landscape:w-48 landscape:min-h-[7rem] shrink-0 bg-zinc-800 relative">
+                  {course.thumbnail_url ? (
+                    <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
+                  )}
+                  {summary && summary.total > 0 && (
+                    <div className="absolute bottom-1.5 right-1.5 bg-black/70 rounded-full p-0.5">
+                      <ProgressPie completed={summary.completed} total={summary.total} size={32} />
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 landscape:flex landscape:flex-col landscape:justify-center min-w-0">
+                  <h3 className="text-white font-semibold landscape:text-sm">{course.title}</h3>
+                  {course.description && (
+                    <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
+                  )}
+                  {summary && summary.total > 0 && (
+                    <p className={`text-xs mt-1 ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
+                      {summary.completed}/{summary.total} lessons completed
+                    </p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Block>
+    </>
   );
 
   // ---------------------------------------------------------------------------
@@ -626,40 +629,44 @@ export default function LearnTab() {
   );
 
   const renderCourse = () => (
-    <Block className="pt-2 pb-24">
+    <>
       {selectedCourse && (
-        <div className="mb-4">
-          <p className="text-zinc-300 text-sm">{selectedCourse.description || "No description"}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-zinc-500 text-xs">
-              {moduleCount} modules • {lessonCount} lessons
-            </p>
-            {lessonCount > 0 && (
-              <span className="text-emerald-400 text-xs font-medium">
-                {completedCount}/{lessonCount} completed
-              </span>
-            )}
-          </div>
-          {lessonCount > 0 && (
-            <div className="mt-2 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                style={{ width: `${Math.round((completedCount / lessonCount) * 100)}%` }}
-              />
+        <>
+          <BlockTitle className="mt-2">{selectedCourse.title}</BlockTitle>
+          <Block strong inset>
+            <p className="text-zinc-300 text-sm">{selectedCourse.description || "No description"}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-zinc-500 text-xs">
+                {moduleCount} modules • {lessonCount} lessons
+              </p>
+              {lessonCount > 0 && (
+                <span className="text-emerald-400 text-xs font-medium">
+                  {completedCount}/{lessonCount} completed
+                </span>
+              )}
             </div>
-          )}
-        </div>
+            {lessonCount > 0 && (
+              <div className="mt-2 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((completedCount / lessonCount) * 100)}%` }}
+                />
+              </div>
+            )}
+          </Block>
+        </>
       )}
 
-      {loading && renderCourseSkeleton()}
-      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+      <Block strong inset className="pb-24">
+        {loading && renderCourseSkeleton()}
+        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-      {!loading && modules.length === 0 && (
-        <p className="text-zinc-400 text-sm">This course has no published lessons.</p>
-      )}
+        {!loading && modules.length === 0 && (
+          <p className="text-zinc-400 text-sm">This course has no published lessons.</p>
+        )}
 
-      <div className="space-y-3">
-        {modules.map((module) => {
+        <div className="space-y-3">
+          {modules.map((module) => {
           const isOpen = expandedModules.has(module.id);
           const modDone = getModuleProgress(module);
           const modTotal = module.lessons.length;
@@ -744,7 +751,8 @@ export default function LearnTab() {
           );
         })}
       </div>
-    </Block>
+      </Block>
+    </>
   );
 
   // ---------------------------------------------------------------------------
@@ -769,39 +777,41 @@ export default function LearnTab() {
     const lessonPosition = currentLessonIndex >= 0 ? `${currentLessonIndex + 1}/${allLessons.length}` : "";
 
     return (
-      <Block className="pt-2 pb-32 landscape:max-w-2xl landscape:mx-auto">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-zinc-500 text-xs">
-            {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
-            {selectedLesson.content_type.toUpperCase()}
-            {selectedLesson.duration_minutes ? ` • ${selectedLesson.duration_minutes} min` : ""}
-          </p>
-        </div>
-
-        {videoUrl && (
-          <div className="mb-4 rounded-xl overflow-hidden border border-zinc-800 bg-black">
-            <video
-              key={selectedLesson.id}
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              poster={poster ?? undefined}
-              className="w-full aspect-video object-contain"
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={handleVideoEnded}
-            />
+      <>
+        <BlockTitle className="mt-2">{selectedLesson.title}</BlockTitle>
+        <Block strong inset className="pb-32 landscape:max-w-2xl landscape:mx-auto">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-zinc-500 text-xs">
+              {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
+              {selectedLesson.content_type.toUpperCase()}
+              {selectedLesson.duration_minutes ? ` • ${selectedLesson.duration_minutes} min` : ""}
+            </p>
           </div>
-        )}
 
-        {textContent ? (
-          <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
-            <ReactMarkdown>{textContent}</ReactMarkdown>
-          </div>
-        ) : (
-          !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
-        )}
+          {videoUrl && (
+            <div className="mb-4 rounded-xl overflow-hidden border border-zinc-800 bg-black">
+              <video
+                key={selectedLesson.id}
+                ref={videoRef}
+                src={videoUrl}
+                controls
+                poster={poster ?? undefined}
+                className="w-full aspect-video object-contain"
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={handleVideoEnded}
+              />
+            </div>
+          )}
 
-        {/* Prev / Next navigation bar + dark fill to bottom */}
+          {textContent ? (
+            <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
+              <ReactMarkdown>{textContent}</ReactMarkdown>
+            </div>
+          ) : (
+            !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
+          )}
+
+          {/* Prev / Next navigation bar + dark fill to bottom */}
         <div className="fixed bottom-0 left-0 right-0 z-20">
           <div className="bg-zinc-950" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)" }}>
             <div className="border-t border-zinc-800 flex" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
@@ -831,7 +841,8 @@ export default function LearnTab() {
             </div>
           </div>
         </div>
-      </Block>
+        </Block>
+      </>
     );
   };
 
