@@ -405,40 +405,50 @@ export default function LearnTab() {
   const courseScrollRef = useRef(0);
   const prevViewRef = useRef(view);
 
+  const getScrollContainer = useCallback(() => {
+    return document.querySelector(".k-page") as HTMLElement | null;
+  }, []);
+
   useEffect(() => {
-    const pageContent = document.querySelector(".page-content");
+    const container = getScrollContainer();
 
     // If leaving course view, save scroll position
     if (prevViewRef.current === "course" && view !== "course") {
-      courseScrollRef.current = pageContent?.scrollTop ?? window.scrollY;
+      courseScrollRef.current = container?.scrollTop ?? window.scrollY;
     }
 
     if (view === "lesson") {
       // Always scroll to top when entering a lesson
       const scrollToTop = () => {
-        if (pageContent) pageContent.scrollTop = 0;
+        const el = getScrollContainer();
+        if (el) el.scrollTop = 0;
         window.scrollTo({ top: 0 });
       };
       scrollToTop();
-      const timer = setTimeout(scrollToTop, 50);
+      // Retry after animation frame and after transition
+      requestAnimationFrame(scrollToTop);
+      const t1 = setTimeout(scrollToTop, 100);
+      const t2 = setTimeout(scrollToTop, 250);
       prevViewRef.current = view;
-      return () => clearTimeout(timer);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
 
     if (view === "course" && prevViewRef.current === "lesson") {
       // Restore scroll position when coming back from a lesson
       const restore = () => {
-        if (pageContent) pageContent.scrollTop = courseScrollRef.current;
+        const el = getScrollContainer();
+        if (el) el.scrollTop = courseScrollRef.current;
         else window.scrollTo({ top: courseScrollRef.current });
       };
       restore();
-      const timer = setTimeout(restore, 50);
+      requestAnimationFrame(restore);
+      const timer = setTimeout(restore, 100);
       prevViewRef.current = view;
       return () => clearTimeout(timer);
     }
 
     prevViewRef.current = view;
-  }, [view, lessonId]);
+  }, [view, lessonId, getScrollContainer]);
 
   // Auto-mark text lessons as completed
   useEffect(() => {
