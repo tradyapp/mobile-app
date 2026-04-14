@@ -91,6 +91,51 @@ const listColors = {
   outlineMaterial: "border-white/8",
 };
 
+function ProgressRing({ completed, total, size = 120 }: { completed: number; total: number; size?: number }) {
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = total > 0 ? completed / total : 0;
+  const offset = circumference * (1 - pct);
+  const isComplete = total > 0 && completed === total;
+  const gradientId = "progress-ring-gradient";
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <defs>
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#6ee7b7" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke="currentColor" className="text-white/5"
+          strokeWidth={strokeWidth}
+        />
+        {pct > 0 && (
+          <circle
+            cx={size / 2} cy={size / 2} r={radius} fill="none"
+            stroke={isComplete ? "#34d399" : `url(#${gradientId})`}
+            strokeWidth={strokeWidth} strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          />
+        )}
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span className={`text-2xl font-bold ${isComplete ? "text-emerald-400" : "text-white"}`}>
+          {Math.round(pct * 100)}%
+        </span>
+        <span className="text-[10px] text-zinc-500 mt-0.5">
+          {completed}/{total}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ProgressPie({ completed, total, size = 36 }: { completed: number; total: number; size?: number }) {
   const radius = (size - 4) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -651,32 +696,18 @@ export default function LearnTab() {
   const renderCourse = () => (
     <div className="pb-24">
       {selectedCourse && (
-        <Card outline colors={cardColors}
-          footer={
-            lessonCount > 0 ? (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-zinc-500 text-xs">
-                    {moduleCount} modules &middot; {lessonCount} lessons
-                  </span>
-                  <span className="text-emerald-400 text-xs font-medium">
-                    {completedCount}/{lessonCount} completed
-                  </span>
-                </div>
-                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round((completedCount / lessonCount) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <span className="text-zinc-500 text-xs">{moduleCount} modules &middot; {lessonCount} lessons</span>
-            )
-          }
-          footerDivider
-        >
-          <p className="text-zinc-300 text-sm">{selectedCourse.description || "No description"}</p>
+        <Card outline colors={cardColors}>
+          {lessonCount > 0 && (
+            <div className="flex justify-center py-2">
+              <ProgressRing completed={completedCount} total={lessonCount} />
+            </div>
+          )}
+          <p className="text-zinc-300 text-sm text-center mt-2">
+            {selectedCourse.description || "No description"}
+          </p>
+          <p className="text-zinc-500 text-xs text-center mt-2">
+            {moduleCount} modules &middot; {lessonCount} lessons
+          </p>
         </Card>
       )}
 
