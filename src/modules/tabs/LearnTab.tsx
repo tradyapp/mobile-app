@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block, BlockTitle, Card, Fab, List, ListItem } from "konsta/react";
+import { Block, BlockTitle, Button, Card, List, ListItem } from "konsta/react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
@@ -875,43 +875,55 @@ export default function LearnTab() {
           )}
         </Card>
 
-        {/* Prev / Next floating buttons */}
-        {prevLesson && (
-          <div className="fixed left-4 z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)" }}>
-            <Fab
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              }
-              onClick={() => navigateToLesson(prevLesson)}
-              colors={{
-                bgIos: "bg-zinc-800/80 backdrop-blur-sm",
-                bgMaterial: "bg-zinc-800/80 backdrop-blur-sm",
-                textIos: "text-white",
-                textMaterial: "text-white",
-              }}
-              className="!w-11 !h-11 shadow-lg shadow-black/30"
-            />
-          </div>
-        )}
-        {nextLesson && (
-          <div className="fixed right-4 z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)" }}>
-            <Fab
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              }
-              onClick={() => navigateToLesson(nextLesson)}
-              colors={{
-                bgIos: "bg-zinc-800/80 backdrop-blur-sm",
-                bgMaterial: "bg-zinc-800/80 backdrop-blur-sm",
-                textIos: "text-white",
-                textMaterial: "text-white",
-              }}
-              className="!w-11 !h-11 shadow-lg shadow-black/30"
-            />
+        {/* Prev / Next navigation */}
+        {(prevLesson || nextLesson) && (
+          <div className="flex gap-3 px-4 mt-4">
+            {prevLesson ? (
+              <Button
+                tonal
+                rounded
+                className="flex-1"
+                onClick={() => navigateToLesson(prevLesson)}
+                colors={{
+                  tonalBgIos: "bg-white/8 active:bg-white/15",
+                  tonalBgMaterial: "bg-white/8 active:bg-white/15",
+                  tonalTextIos: "text-zinc-300",
+                  tonalTextMaterial: "text-zinc-300",
+                }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Anterior
+                </span>
+              </Button>
+            ) : (
+              <div className="flex-1" />
+            )}
+            {nextLesson ? (
+              <Button
+                tonal
+                rounded
+                className="flex-1"
+                onClick={() => navigateToLesson(nextLesson)}
+                colors={{
+                  tonalBgIos: "bg-white/8 active:bg-white/15",
+                  tonalBgMaterial: "bg-white/8 active:bg-white/15",
+                  tonalTextIos: "text-zinc-300",
+                  tonalTextMaterial: "text-zinc-300",
+                }}
+              >
+                <span className="flex items-center gap-1.5">
+                  Siguiente
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </Button>
+            ) : (
+              <div className="flex-1" />
+            )}
           </div>
         )}
       </div>
