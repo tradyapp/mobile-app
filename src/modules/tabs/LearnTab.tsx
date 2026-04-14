@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Block, BlockTitle, Card, List, ListItem } from "konsta/react";
+import { motion, AnimatePresence } from "framer-motion";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
 import GroupAvatarIcon from "@/components/icons/GroupAvatarIcon";
@@ -1016,10 +1017,20 @@ export default function LearnTab() {
           ) : undefined
         }
       />
-      {view === "catalog" && renderCatalog()}
-      {view === "chat" && renderChat()}
-      {view === "course" && renderCourse()}
-      {view === "lesson" && renderLesson()}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={view + (courseId ?? "") + (lessonId ?? "")}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          {view === "catalog" && renderCatalog()}
+          {view === "chat" && renderChat()}
+          {view === "course" && renderCourse()}
+          {view === "lesson" && renderLesson()}
+        </motion.div>
+      </AnimatePresence>
     </>
   );
 }
