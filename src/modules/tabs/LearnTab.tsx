@@ -84,6 +84,13 @@ const cardColors = {
   outlineMaterial: "border-white/8",
 };
 
+const listColors = {
+  strongBgIos: "bg-transparent",
+  strongBgMaterial: "bg-transparent",
+  outlineIos: "border-white/8",
+  outlineMaterial: "border-white/8",
+};
+
 function ProgressPie({ completed, total, size = 36 }: { completed: number; total: number; size?: number }) {
   const radius = (size - 4) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -702,7 +709,7 @@ export default function LearnTab() {
             </BlockTitle>
 
             {isOpen && (
-              <List strong inset outline>
+              <List strong inset outline colors={listColors}>
                 {module.lessons.length === 0 ? (
                   <ListItem title={<span className="text-zinc-500 text-xs">No lessons in this module.</span>} />
                 ) : (
