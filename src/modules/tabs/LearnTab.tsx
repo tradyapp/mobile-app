@@ -1020,9 +1020,9 @@ export default function LearnTab() {
       <AnimatePresence mode="wait">
         <motion.div
           key={view + (courseId ?? "") + (lessonId ?? "")}
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.96 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {view === "catalog" && renderCatalog()}
