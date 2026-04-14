@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["img/**/*"],
       manifest: {
-        name: "Trady",
-        short_name: "Trady",
+        name: "T.V2",
+        short_name: "T.V2",
         description: "Trading education and tools",
         theme_color: "#09090b",
         background_color: "#09090b",
