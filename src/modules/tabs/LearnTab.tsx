@@ -401,17 +401,20 @@ export default function LearnTab() {
     }
   }, [courseId, selectedCourse, courses]);
 
-  // Scroll to top whenever we enter a lesson (or the lesson changes)
+  // Scroll to top whenever the view or content changes
   useEffect(() => {
-    if (view === "lesson") {
-      // Konsta Page uses .page-content as scroll container, not window
+    // Konsta Page uses .page-content as scroll container, not window
+    const scrollToTop = () => {
       const pageContent = document.querySelector(".page-content");
-      if (pageContent) {
-        pageContent.scrollTop = 0;
-      }
+      if (pageContent) pageContent.scrollTop = 0;
       window.scrollTo({ top: 0 });
-    }
-  }, [view, lessonId]);
+    };
+    // Immediate scroll
+    scrollToTop();
+    // Also after framer-motion transition completes
+    const timer = setTimeout(scrollToTop, 50);
+    return () => clearTimeout(timer);
+  }, [view, courseId, lessonId]);
 
   // Auto-mark text lessons as completed
   useEffect(() => {
