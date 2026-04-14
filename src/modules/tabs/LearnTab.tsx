@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { Block, BlockTitle, Card, List, ListItem } from "konsta/react";
+import { Block, BlockTitle, Card, Fab, List, ListItem } from "konsta/react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppNavbar from "@/components/AppNavbar";
 import MessageIcon from "@/components/icons/MessageIcon";
@@ -875,38 +875,45 @@ export default function LearnTab() {
           )}
         </Card>
 
-        {/* Prev / Next navigation */}
-        <Card outline colors={cardColors} contentWrapPadding="p-0">
-          <div className="flex">
-            <button
-              onClick={prevLesson ? () => navigateToLesson(prevLesson) : undefined}
-              disabled={!prevLesson}
-              className={`w-1/2 flex items-center gap-3 px-4 py-4 transition-colors ${prevLesson ? "active:bg-white/5" : "opacity-30"}`}
-            >
-              <svg className="w-5 h-5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              <div className="min-w-0 flex-1 text-left">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Anterior</p>
-                <p className="text-sm text-zinc-300 truncate">{prevLesson?.title ?? "—"}</p>
-              </div>
-            </button>
-            <div className="w-px bg-white/8 shrink-0 my-3" />
-            <button
-              onClick={nextLesson ? () => navigateToLesson(nextLesson) : undefined}
-              disabled={!nextLesson}
-              className={`w-1/2 flex items-center gap-3 px-4 py-4 transition-colors ${nextLesson ? "active:bg-white/5" : "opacity-30"}`}
-            >
-              <div className="min-w-0 flex-1 text-right">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Siguiente</p>
-                <p className="text-sm text-zinc-300 truncate">{nextLesson?.title ?? "—"}</p>
-              </div>
-              <svg className="w-5 h-5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+        {/* Prev / Next floating buttons */}
+        {prevLesson && (
+          <div className="fixed left-4 z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)" }}>
+            <Fab
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              }
+              onClick={() => navigateToLesson(prevLesson)}
+              colors={{
+                bgIos: "bg-zinc-800/80 backdrop-blur-sm",
+                bgMaterial: "bg-zinc-800/80 backdrop-blur-sm",
+                textIos: "text-white",
+                textMaterial: "text-white",
+              }}
+              className="!w-11 !h-11 shadow-lg shadow-black/30"
+            />
           </div>
-        </Card>
+        )}
+        {nextLesson && (
+          <div className="fixed right-4 z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)" }}>
+            <Fab
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              }
+              onClick={() => navigateToLesson(nextLesson)}
+              colors={{
+                bgIos: "bg-zinc-800/80 backdrop-blur-sm",
+                bgMaterial: "bg-zinc-800/80 backdrop-blur-sm",
+                textIos: "text-white",
+                textMaterial: "text-white",
+              }}
+              className="!w-11 !h-11 shadow-lg shadow-black/30"
+            />
+          </div>
+        )}
       </div>
     );
   };
