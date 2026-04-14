@@ -91,8 +91,8 @@ const listColors = {
   outlineMaterial: "border-white/8",
 };
 
-function ProgressRing({ completed, total, size = 120 }: { completed: number; total: number; size?: number }) {
-  const strokeWidth = 6;
+function ProgressRing({ completed, total, size = 96 }: { completed: number; total: number; size?: number }) {
+  const strokeWidth = 5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const pct = total > 0 ? completed / total : 0;
@@ -125,10 +125,10 @@ function ProgressRing({ completed, total, size = 120 }: { completed: number; tot
         )}
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className={`text-2xl font-bold ${isComplete ? "text-emerald-400" : "text-white"}`}>
+        <span className={`text-xl font-bold ${isComplete ? "text-emerald-400" : "text-white"}`}>
           {Math.round(pct * 100)}%
         </span>
-        <span className="text-[10px] text-zinc-500 mt-0.5">
+        <span className="text-[9px] text-zinc-500">
           {completed}/{total}
         </span>
       </div>
@@ -697,17 +697,33 @@ export default function LearnTab() {
     <div className="pb-24">
       {selectedCourse && (
         <Card outline colors={cardColors}>
-          {lessonCount > 0 && (
-            <div className="flex justify-center py-2">
-              <ProgressRing completed={completedCount} total={lessonCount} />
+          <div className="flex items-center gap-4">
+            {lessonCount > 0 && (
+              <div className="shrink-0">
+                <ProgressRing completed={completedCount} total={lessonCount} size={96} />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-semibold text-base">
+                {lessonCount > 0
+                  ? completedCount === 0
+                    ? "Comienza tu camino"
+                    : completedCount === lessonCount
+                      ? "¡Completado!"
+                      : completedCount / lessonCount <= 0.25
+                        ? "Buen inicio"
+                        : completedCount / lessonCount <= 0.5
+                          ? "Vas por buen camino"
+                          : completedCount / lessonCount <= 0.75
+                            ? "Ya falta poco"
+                            : "Casi lo logras"
+                  : selectedCourse.title}
+              </p>
+              <p className="text-zinc-500 text-xs mt-1">
+                {moduleCount} modules &middot; {lessonCount} lessons
+              </p>
             </div>
-          )}
-          <p className="text-zinc-300 text-sm text-center mt-2">
-            {selectedCourse.description || "No description"}
-          </p>
-          <p className="text-zinc-500 text-xs text-center mt-2">
-            {moduleCount} modules &middot; {lessonCount} lessons
-          </p>
+          </div>
         </Card>
       )}
 
