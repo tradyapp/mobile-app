@@ -858,7 +858,7 @@ export default function LearnTab() {
         <Card outline colors={cardColors}
           header={
             <div>
-              <h3 className="text-white font-semibold text-base">{selectedLesson.title}</h3>
+              <h3 className="text-white font-semibold text-xl">{selectedLesson.title}</h3>
               <span className="text-zinc-500 text-xs">
                 {lessonPosition && <span className="text-zinc-400 mr-1.5">{lessonPosition}</span>}
                 {selectedLesson.content_type.toUpperCase()}
