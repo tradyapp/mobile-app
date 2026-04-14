@@ -77,6 +77,13 @@ const localeToLanguage: Record<string, LmsCourse["language"]> = {
 
 const NEAR_END_THRESHOLD = 15;
 
+const cardColors = {
+  bgIos: "bg-transparent",
+  bgMaterial: "bg-transparent",
+  outlineIos: "border-white/8",
+  outlineMaterial: "border-white/8",
+};
+
 function ProgressPie({ completed, total, size = 36 }: { completed: number; total: number; size?: number }) {
   const radius = (size - 4) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -539,7 +546,7 @@ export default function LearnTab() {
   const renderCatalogSkeleton = () => (
     <div className="space-y-3 px-4">
       {[0, 1, 2].map((i) => (
-        <Card outline key={i} contentWrapPadding="p-0" className="overflow-hidden">
+        <Card outline colors={cardColors} key={i} contentWrapPadding="p-0" className="overflow-hidden">
           <div className="aspect-video bg-zinc-800 animate-pulse" />
           <div className="p-4 space-y-2">
             <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
@@ -564,6 +571,7 @@ export default function LearnTab() {
           <Card
             key={course.id}
             outline
+            colors={cardColors}
             contentWrapPadding="p-0"
             className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
             onClick={() => openCourse(course)}
@@ -607,7 +615,7 @@ export default function LearnTab() {
 
   const renderCourseSkeleton = () => (
     <div className="px-4 space-y-4">
-      <Card outline contentWrapPadding="p-4">
+      <Card outline colors={cardColors} contentWrapPadding="p-4">
         <div className="space-y-2">
           <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
           <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
@@ -636,7 +644,7 @@ export default function LearnTab() {
   const renderCourse = () => (
     <div className="pb-24">
       {selectedCourse && (
-        <Card outline
+        <Card outline colors={cardColors}
           footer={
             lessonCount > 0 ? (
               <div>
@@ -778,7 +786,7 @@ export default function LearnTab() {
     return (
       <div className="pb-32 landscape:max-w-2xl landscape:mx-auto">
         {videoUrl && (
-          <Card outline contentWrapPadding="p-0" className="overflow-hidden">
+          <Card outline colors={cardColors} contentWrapPadding="p-0" className="overflow-hidden">
             <video
               key={selectedLesson.id}
               ref={videoRef}
@@ -792,7 +800,7 @@ export default function LearnTab() {
           </Card>
         )}
 
-        <Card outline
+        <Card outline colors={cardColors}
           header={
             <div className="flex items-center justify-between">
               <span className="text-zinc-500 text-xs">
