@@ -869,7 +869,7 @@ export default function LearnTab() {
           headerDivider
         >
           {textContent ? (
-            <div className="prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-ul:my-1 prose-ol:my-1">
+            <div className="prose prose-invert prose-sm max-w-none prose-headings:text-zinc-100 prose-headings:text-base prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-h4:text-sm prose-p:text-zinc-300 prose-p:text-sm prose-strong:text-zinc-100 prose-li:text-zinc-300 prose-li:text-sm prose-ul:my-1 prose-ol:my-1">
               <ReactMarkdown>{textContent}</ReactMarkdown>
             </div>
           ) : (
