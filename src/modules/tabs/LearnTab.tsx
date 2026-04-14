@@ -401,20 +401,44 @@ export default function LearnTab() {
     }
   }, [courseId, selectedCourse, courses]);
 
-  // Scroll to top whenever the view or content changes
+  // Save/restore scroll position for course view; scroll to top for lessons
+  const courseScrollRef = useRef(0);
+  const prevViewRef = useRef(view);
+
   useEffect(() => {
-    // Konsta Page uses .page-content as scroll container, not window
-    const scrollToTop = () => {
-      const pageContent = document.querySelector(".page-content");
-      if (pageContent) pageContent.scrollTop = 0;
-      window.scrollTo({ top: 0 });
-    };
-    // Immediate scroll
-    scrollToTop();
-    // Also after framer-motion transition completes
-    const timer = setTimeout(scrollToTop, 50);
-    return () => clearTimeout(timer);
-  }, [view, courseId, lessonId]);
+    const pageContent = document.querySelector(".page-content");
+
+    // If leaving course view, save scroll position
+    if (prevViewRef.current === "course" && view !== "course") {
+      courseScrollRef.current = pageContent?.scrollTop ?? window.scrollY;
+    }
+
+    if (view === "lesson") {
+      // Always scroll to top when entering a lesson
+      const scrollToTop = () => {
+        if (pageContent) pageContent.scrollTop = 0;
+        window.scrollTo({ top: 0 });
+      };
+      scrollToTop();
+      const timer = setTimeout(scrollToTop, 50);
+      prevViewRef.current = view;
+      return () => clearTimeout(timer);
+    }
+
+    if (view === "course" && prevViewRef.current === "lesson") {
+      // Restore scroll position when coming back from a lesson
+      const restore = () => {
+        if (pageContent) pageContent.scrollTop = courseScrollRef.current;
+        else window.scrollTo({ top: courseScrollRef.current });
+      };
+      restore();
+      const timer = setTimeout(restore, 50);
+      prevViewRef.current = view;
+      return () => clearTimeout(timer);
+    }
+
+    prevViewRef.current = view;
+  }, [view, lessonId]);
 
   // Auto-mark text lessons as completed
   useEffect(() => {
