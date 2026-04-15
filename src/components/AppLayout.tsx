@@ -2,7 +2,7 @@
 import { Page, Tabbar, TabbarLink, ToolbarPane } from "konsta/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigationStore } from "@/stores/navigationStore";
 import OrionTab from "@/modules/tabs/OrionTab";
 import ChartTab from "@/modules/tabs/ChartTab";
@@ -41,11 +41,29 @@ const AppLayout = () => {
     () => /^\/learn\/chat\/[^/]+$/.test(location.pathname),
     [location.pathname]
   );
+  // Detect landscape orientation
+  const [isLandscape, setIsLandscape] = useState(
+    () => window.matchMedia("(orientation: landscape)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: landscape)");
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // Detect lesson view: /learn/:courseId/:lessonId (not /learn/chat/*)
+  const isLearnLesson = useMemo(
+    () => /^\/learn\/(?!chat\/)([^/]+)\/([^/]+)$/.test(location.pathname),
+    [location.pathname]
+  );
+
   const isFullscreenRoute = useMemo(
     () =>
       /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname) ||
-      isChatRoom,
-    [location.pathname, isChatRoom]
+      isChatRoom ||
+      (isLearnLesson && isLandscape),
+    [location.pathname, isChatRoom, isLearnLesson, isLandscape]
   );
   const ActiveTabComponent = activeTab.component;
 
