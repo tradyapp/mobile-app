@@ -19,6 +19,14 @@
   --k-ios-on-primary: #000000;
   --k-md-primary: #00ff99;
   --k-md-on-primary: #000000;
+
+  /* Transparent surfaces so Cards/Lists/Blocks blend with app bg */
+  --color-ios-dark-surface-1: transparent;
+  --color-ios-dark-surface-2: transparent;
+  --color-ios-dark-surface-3: transparent;
+  --color-md-dark-surface-1: transparent;
+  --color-md-dark-surface-2: transparent;
+  --color-md-dark-surface-3: transparent;
 }
 
 *,
