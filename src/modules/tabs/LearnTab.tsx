@@ -595,14 +595,14 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderCatalogSkeleton = () => (
-    <div className="space-y-3 px-4">
+    <div className="pb-24">
       {[0, 1, 2].map((i) => (
         <Card outline colors={cardColors} key={i} contentWrapPadding="p-0" className="overflow-hidden">
-          <div className="aspect-video bg-zinc-800 animate-pulse" />
+          <div className="aspect-video bg-white/5 animate-pulse" />
           <div className="p-4 space-y-2">
-            <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
-            <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
-            <div className="h-3 w-1/2 bg-zinc-800/60 rounded animate-pulse" />
+            <div className="h-4 w-3/4 bg-white/8 rounded-full animate-pulse" />
+            <div className="h-3 w-full bg-white/5 rounded-full animate-pulse" />
+            <div className="h-3 w-1/2 bg-white/5 rounded-full animate-pulse" />
           </div>
         </Card>
       ))}
@@ -665,29 +665,32 @@ export default function LearnTab() {
   // ---------------------------------------------------------------------------
 
   const renderCourseSkeleton = () => (
-    <div className="px-4 space-y-4">
-      <Card outline colors={cardColors} contentWrapPadding="p-4">
-        <div className="space-y-2">
-          <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
-          <div className="h-3 w-full bg-zinc-800/60 rounded animate-pulse" />
-          <div className="h-2 w-1/3 bg-zinc-800/60 rounded animate-pulse mt-2" />
+    <div className="pb-24">
+      <Card outline colors={cardColors}>
+        <div className="flex items-center gap-4">
+          <div className="w-24 h-24 rounded-full bg-white/5 animate-pulse shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-3/4 bg-white/8 rounded-full animate-pulse" />
+            <div className="h-3 w-1/2 bg-white/5 rounded-full animate-pulse" />
+          </div>
         </div>
       </Card>
       {[0, 1].map((i) => (
-        <List key={i} strong inset outline>
-          <ListItem
-            title={<div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />}
-            subtitle={<div className="h-3 w-1/4 bg-zinc-800/60 rounded animate-pulse mt-1" />}
-          />
-          {[0, 1, 2].map((j) => (
-            <ListItem
-              key={j}
-              media={<div className="w-14 h-9 rounded-md bg-zinc-800 animate-pulse" />}
-              title={<div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse" />}
-              subtitle={<div className="h-2.5 w-1/3 bg-zinc-800/60 rounded animate-pulse mt-1" />}
-            />
-          ))}
-        </List>
+        <div key={i}>
+          <BlockTitle>
+            <div className="h-4 w-1/3 bg-white/8 rounded-full animate-pulse" />
+          </BlockTitle>
+          <List strong inset outline colors={listColors}>
+            {[0, 1, 2].map((j) => (
+              <ListItem
+                key={j}
+                media={<div className="w-14 h-9 rounded-md bg-white/5 animate-pulse" />}
+                title={<div className="h-3.5 w-3/4 bg-white/8 rounded-full animate-pulse" />}
+                subtitle={<div className="h-2.5 w-1/3 bg-white/5 rounded-full animate-pulse mt-1" />}
+              />
+            ))}
+          </List>
+        </div>
       ))}
     </div>
   );
