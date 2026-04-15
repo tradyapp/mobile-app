@@ -914,12 +914,12 @@ export default function LearnTab() {
 
         {/* Prev / Next navigation */}
         {(prevLesson || nextLesson) && (
-          <div className="flex gap-3 px-4 mt-4">
+          <div className="flex gap-3 px-4 mt-4 landscape:max-w-md landscape:mx-auto">
             {prevLesson ? (
               <Button
                 tonal
                 rounded
-                className="flex-1"
+                className="flex-1 min-w-0"
                 onClick={() => navigateToLesson(prevLesson)}
                 colors={{
                   tonalBgIos: "bg-white/8 active:bg-white/15",
@@ -928,11 +928,14 @@ export default function LearnTab() {
                   tonalTextMaterial: "text-zinc-300",
                 }}
               >
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <span className="flex items-center gap-2 w-full">
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
-                  Anterior
+                  <span className="truncate text-left">
+                    <span className="block text-[10px] text-zinc-500 leading-tight">Anterior</span>
+                    <span className="block text-xs truncate">{prevLesson.title}</span>
+                  </span>
                 </span>
               </Button>
             ) : (
@@ -942,7 +945,7 @@ export default function LearnTab() {
               <Button
                 tonal
                 rounded
-                className="flex-1"
+                className="flex-1 min-w-0"
                 onClick={() => navigateToLesson(nextLesson)}
                 colors={{
                   tonalBgIos: "bg-white/8 active:bg-white/15",
@@ -951,9 +954,12 @@ export default function LearnTab() {
                   tonalTextMaterial: "text-zinc-300",
                 }}
               >
-                <span className="flex items-center gap-1.5">
-                  Siguiente
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <span className="flex items-center gap-2 w-full justify-end">
+                  <span className="truncate text-right">
+                    <span className="block text-[10px] text-zinc-500 leading-tight">Siguiente</span>
+                    <span className="block text-xs truncate">{nextLesson.title}</span>
+                  </span>
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </span>
