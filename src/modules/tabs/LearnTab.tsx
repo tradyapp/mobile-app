@@ -919,7 +919,7 @@ export default function LearnTab() {
 
         {/* Prev / Next navigation */}
         {(prevLesson || nextLesson) && (
-          <div className="flex gap-3 px-4 mt-4 landscape:max-w-md landscape:mx-auto">
+          <div className="flex gap-3 px-4 mt-4">
             {prevLesson ? (
               <Button
                 tonal
