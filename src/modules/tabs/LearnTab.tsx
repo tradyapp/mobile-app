@@ -127,9 +127,14 @@ function ProgressRing({ completed, total, size = 96 }: { completed: number; tota
       </svg>
       <div className="absolute flex flex-col items-center">
         {pct === 0 ? (
-          <svg className="w-8 h-8 text-zinc-500" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+          <>
+            <span className="text-lg font-bold text-zinc-400">
+              0/{total}
+            </span>
+            <span className="text-[9px] text-zinc-500">
+              lecciones
+            </span>
+          </>
         ) : (
           <>
             <span className={`text-xl font-bold ${isComplete ? "text-emerald-400" : "text-white"}`}>
