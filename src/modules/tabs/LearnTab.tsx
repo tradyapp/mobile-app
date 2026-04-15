@@ -605,18 +605,19 @@ export default function LearnTab() {
           className="overflow-hidden"
           header={
             <div className="relative">
-              <div className="w-full aspect-video bg-white/5 animate-pulse" />
-              <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white/5 animate-pulse" />
+              <div className="w-full aspect-video bg-white/[0.03] animate-pulse" />
             </div>
           }
           footer={
-            <div className="h-3 w-1/3 bg-white/5 rounded-full animate-pulse" />
+            <div className="h-3 w-28 bg-white/[0.04] rounded-full animate-pulse" />
           }
         >
-          <div className="p-4 space-y-2">
-            <div className="h-5 w-3/4 bg-white/8 rounded-full animate-pulse" />
-            <div className="h-3 w-full bg-white/5 rounded-full animate-pulse" />
-            <div className="h-3 w-2/3 bg-white/5 rounded-full animate-pulse" />
+          <div className="p-4">
+            <div className="h-[18px] w-3/5 bg-white/[0.06] rounded-full animate-pulse" />
+            <div className="mt-2 space-y-1.5">
+              <div className="h-3 w-full bg-white/[0.03] rounded-full animate-pulse" />
+              <div className="h-3 w-4/5 bg-white/[0.03] rounded-full animate-pulse" />
+            </div>
           </div>
         </Card>
       ))}
