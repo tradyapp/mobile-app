@@ -596,7 +596,7 @@ export default function LearnTab() {
 
   const renderCatalogSkeleton = () => (
     <div className="pb-24">
-      {[0, 1, 2].map((i) => (
+      {[0].map((i) => (
         <Card
           key={i}
           outline
