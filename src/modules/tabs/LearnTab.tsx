@@ -597,12 +597,26 @@ export default function LearnTab() {
   const renderCatalogSkeleton = () => (
     <div className="pb-24">
       {[0, 1, 2].map((i) => (
-        <Card outline colors={cardColors} key={i} contentWrapPadding="p-0" className="overflow-hidden">
-          <div className="aspect-video bg-white/5 animate-pulse" />
+        <Card
+          key={i}
+          outline
+          colors={cardColors}
+          contentWrapPadding="p-0"
+          className="overflow-hidden"
+          header={
+            <div className="relative">
+              <div className="w-full aspect-video bg-white/5 animate-pulse" />
+              <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white/5 animate-pulse" />
+            </div>
+          }
+          footer={
+            <div className="h-3 w-1/3 bg-white/5 rounded-full animate-pulse" />
+          }
+        >
           <div className="p-4 space-y-2">
-            <div className="h-4 w-3/4 bg-white/8 rounded-full animate-pulse" />
+            <div className="h-5 w-3/4 bg-white/8 rounded-full animate-pulse" />
             <div className="h-3 w-full bg-white/5 rounded-full animate-pulse" />
-            <div className="h-3 w-1/2 bg-white/5 rounded-full animate-pulse" />
+            <div className="h-3 w-2/3 bg-white/5 rounded-full animate-pulse" />
           </div>
         </Card>
       ))}
@@ -666,27 +680,38 @@ export default function LearnTab() {
 
   const renderCourseSkeleton = () => (
     <div className="pb-24">
+      {/* Progress ring + info card */}
       <Card outline colors={cardColors}>
         <div className="flex items-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white/5 animate-pulse shrink-0" />
+          <div className="shrink-0">
+            <div className="w-24 h-24 rounded-full border-[5px] border-white/5 animate-pulse" />
+          </div>
           <div className="flex-1 space-y-2">
-            <div className="h-4 w-3/4 bg-white/8 rounded-full animate-pulse" />
+            <div className="h-5 w-3/4 bg-white/8 rounded-full animate-pulse" />
             <div className="h-3 w-1/2 bg-white/5 rounded-full animate-pulse" />
           </div>
         </div>
       </Card>
+
+      {/* Module sections */}
       {[0, 1].map((i) => (
         <div key={i}>
           <BlockTitle>
-            <div className="h-4 w-1/3 bg-white/8 rounded-full animate-pulse" />
+            <div className="flex items-center justify-between w-full">
+              <div className="h-4 w-28 bg-white/8 rounded-full animate-pulse" />
+              <div className="h-3 w-12 bg-white/5 rounded-full animate-pulse" />
+            </div>
           </BlockTitle>
           <List strong inset outline colors={listColors}>
             {[0, 1, 2].map((j) => (
               <ListItem
                 key={j}
+                link
+                chevron={false}
                 media={<div className="w-14 h-9 rounded-md bg-white/5 animate-pulse" />}
                 title={<div className="h-3.5 w-3/4 bg-white/8 rounded-full animate-pulse" />}
                 subtitle={<div className="h-2.5 w-1/3 bg-white/5 rounded-full animate-pulse mt-1" />}
+                after={j === 0 ? <div className="h-3 w-8 bg-white/5 rounded-full animate-pulse" /> : undefined}
               />
             ))}
           </List>
