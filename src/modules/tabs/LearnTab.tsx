@@ -928,14 +928,11 @@ export default function LearnTab() {
                   tonalTextMaterial: "text-zinc-300",
                 }}
               >
-                <span className="flex items-center gap-2 w-full">
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
-                  <span className="truncate text-left">
-                    <span className="block text-[10px] text-zinc-500 leading-tight">Anterior</span>
-                    <span className="block text-xs truncate">{prevLesson.title}</span>
-                  </span>
+                  Anterior
                 </span>
               </Button>
             ) : (
@@ -954,12 +951,9 @@ export default function LearnTab() {
                   tonalTextMaterial: "text-zinc-300",
                 }}
               >
-                <span className="flex items-center gap-2 w-full justify-end">
-                  <span className="truncate text-right">
-                    <span className="block text-[10px] text-zinc-500 leading-tight">Siguiente</span>
-                    <span className="block text-xs truncate">{nextLesson.title}</span>
-                  </span>
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <span className="flex items-center gap-1.5">
+                  Siguiente
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </span>
