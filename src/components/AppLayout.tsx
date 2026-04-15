@@ -52,9 +52,9 @@ const AppLayout = () => {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Detect lesson view: /learn/:courseId/:lessonId (not /learn/chat/*)
-  const isLearnLesson = useMemo(
-    () => /^\/learn\/(?!chat\/)([^/]+)\/([^/]+)$/.test(location.pathname),
+  // Detect course or lesson view: /learn/:courseId or /learn/:courseId/:lessonId (not /learn/chat/*)
+  const isLearnCourseOrLesson = useMemo(
+    () => /^\/learn\/(?!chat\/)([^/]+)(\/[^/]+)?$/.test(location.pathname),
     [location.pathname]
   );
 
@@ -62,8 +62,8 @@ const AppLayout = () => {
     () =>
       /^\/orion\/marketplace\/my-strategies\/[^/]+\/nodes$/.test(location.pathname) ||
       isChatRoom ||
-      (isLearnLesson && isLandscape),
-    [location.pathname, isChatRoom, isLearnLesson, isLandscape]
+      (isLearnCourseOrLesson && isLandscape),
+    [location.pathname, isChatRoom, isLearnCourseOrLesson, isLandscape]
   );
   const ActiveTabComponent = activeTab.component;
 
