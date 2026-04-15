@@ -736,7 +736,7 @@ export default function LearnTab() {
 
   const renderCourse = () => (
     <div className="pb-24">
-      {selectedCourse && (
+      {selectedCourse && !loading && (
         <Card outline colors={cardColors}>
           <div className="flex items-center gap-4">
             {lessonCount > 0 && (
