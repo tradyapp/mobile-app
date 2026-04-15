@@ -879,7 +879,7 @@ export default function LearnTab() {
     const lessonPosition = currentLessonIndex >= 0 ? `${currentLessonIndex + 1}/${allLessons.length}` : "";
 
     return (
-      <div className="pb-24 landscape:max-w-2xl landscape:mx-auto">
+      <div className="pb-24 landscape:pb-4 landscape:max-w-2xl landscape:mx-auto landscape:min-h-[calc(100dvh-56px)] landscape:flex landscape:flex-col">
         {videoUrl && (
           <Card outline colors={cardColors} contentWrapPadding="p-0" className="overflow-hidden">
             <video
@@ -919,7 +919,7 @@ export default function LearnTab() {
 
         {/* Prev / Next navigation */}
         {(prevLesson || nextLesson) && (
-          <div className="flex gap-3 px-4 mt-4">
+          <div className="flex gap-3 px-4 mt-4 landscape:mt-auto landscape:pb-2">
             {prevLesson ? (
               <Button
                 tonal
