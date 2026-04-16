@@ -652,35 +652,50 @@ export default function LearnTab() {
             outline
             colors={cardColors}
             contentWrapPadding="p-0"
-            className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+            className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity landscape:max-w-3xl landscape:mx-auto"
             onClick={() => openCourse(course)}
-            header={
-              <div className="relative">
+          >
+            <div className="landscape:flex landscape:items-stretch">
+              <div className="relative landscape:w-56 landscape:shrink-0">
                 {course.thumbnail_url ? (
-                  <img src={course.thumbnail_url} alt={course.title} className="w-full aspect-video object-cover" />
+                  <img
+                    src={course.thumbnail_url}
+                    alt={course.title}
+                    className="w-full aspect-video object-cover landscape:h-full landscape:min-h-32"
+                  />
                 ) : (
-                  <div className="w-full aspect-video bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs">No thumbnail</div>
+                  <div className="w-full aspect-video bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs landscape:h-full landscape:min-h-32">
+                    No thumbnail
+                  </div>
                 )}
                 {summary && summary.total > 0 && (
-                  <div className="absolute bottom-2 right-2 bg-black/70 rounded-full p-0.5">
+                  <div className="absolute bottom-2 right-2 bg-black/70 rounded-full p-0.5 landscape:hidden">
                     <ProgressPie completed={summary.completed} total={summary.total} size={32} />
                   </div>
                 )}
               </div>
-            }
-            footer={
-              summary && summary.total > 0 ? (
-                <p className={`text-xs ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
-                  {summary.completed}/{summary.total} lessons completed
-                </p>
-              ) : undefined
-            }
-          >
-            <div className="p-4">
-              <h3 className="text-white font-semibold">{course.title}</h3>
-              {course.description && (
-                <p className="text-zinc-400 text-xs mt-1 line-clamp-2">{course.description}</p>
-              )}
+
+              <div className="p-4 landscape:flex landscape:flex-1 landscape:items-center landscape:justify-between landscape:gap-4">
+                <div className="min-w-0">
+                  <h3 className="text-white font-semibold">{course.title}</h3>
+                  {course.description && (
+                    <p className="text-zinc-400 text-xs mt-1 line-clamp-2 landscape:line-clamp-3">
+                      {course.description}
+                    </p>
+                  )}
+                  {summary && summary.total > 0 && (
+                    <p className={`mt-3 text-xs ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
+                      {summary.completed}/{summary.total} lessons completed
+                    </p>
+                  )}
+                </div>
+
+                {summary && summary.total > 0 && (
+                  <div className="hidden landscape:block shrink-0">
+                    <ProgressPie completed={summary.completed} total={summary.total} size={44} />
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         );
