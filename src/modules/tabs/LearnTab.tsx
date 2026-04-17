@@ -783,9 +783,9 @@ export default function LearnTab() {
                       onClick={() => openModule(course, module)}
                       className="text-left overflow-hidden rounded-lg bg-transparent border border-white/10 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
                     >
-                      <div className="relative h-24 bg-zinc-900">
+                      <div className="relative h-24 overflow-hidden bg-zinc-900">
                         {thumb ? (
-                          <img src={thumb} alt={module.title} className="w-full h-full object-cover scale-125 -translate-y-2" />
+                          <img src={thumb} alt={module.title} className="absolute inset-0 w-full h-full object-cover object-top scale-125 origin-top" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
