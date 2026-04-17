@@ -690,6 +690,14 @@ export default function LearnTab() {
     return "Entra y continua tu aprendizaje.";
   };
 
+  const getModuleImageClass = (mod: LmsModuleWithLessons) => {
+    const title = mod.title.toLowerCase();
+    const base = "absolute inset-0 w-full h-full object-cover";
+    if (title.includes("nivel 3")) return `${base} scale-150 -translate-y-6`;
+    if (title.includes("nivel 4")) return `${base} scale-140 -translate-y-5`;
+    return `${base} object-top scale-125 origin-top`;
+  };
+
   const catalogModuleCards = useMemo(
     () => courses.flatMap((course) => (
       (catalogModulesByCourse.get(course.id) ?? []).map((module) => ({ course, module }))
@@ -785,7 +793,7 @@ export default function LearnTab() {
                     >
                       <div className="relative h-24 overflow-hidden bg-zinc-900">
                         {thumb ? (
-                          <img src={thumb} alt={module.title} className="absolute inset-0 w-full h-full object-cover object-top scale-125 origin-top" />
+                          <img src={thumb} alt={module.title} className={getModuleImageClass(module)} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
