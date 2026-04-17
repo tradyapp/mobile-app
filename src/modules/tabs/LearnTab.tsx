@@ -770,7 +770,7 @@ export default function LearnTab() {
                     <button
                       key={module.id}
                       onClick={() => openModule(course, module)}
-                      className="text-left rounded-lg bg-transparent active:scale-[0.98] transition-transform"
+                      className="text-left rounded-lg bg-transparent border border-white/10 p-2 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
                     >
                       <div className="relative h-24 overflow-hidden rounded-lg bg-zinc-900 shadow-lg shadow-black/20">
                         {thumb ? (
@@ -782,7 +782,7 @@ export default function LearnTab() {
                         )}
                       </div>
 
-                      <div className="pt-2">
+                      <div className="pt-2 px-0.5 pb-0.5">
                         <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
