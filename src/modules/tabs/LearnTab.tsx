@@ -690,11 +690,11 @@ export default function LearnTab() {
     return "Entra y continua tu aprendizaje.";
   };
 
-  const getModuleImageClass = (mod: LmsModuleWithLessons) => {
+  const getModuleImageClass = (mod: LmsModuleWithLessons, index: number) => {
     const title = mod.title.toLowerCase();
     const base = "absolute inset-0 w-full h-full object-cover";
-    if (title.includes("nivel 3")) return `${base} scale-150 -translate-y-6`;
-    if (title.includes("nivel 4")) return `${base} scale-140 -translate-y-5`;
+    if (title.includes("nivel 3") || index === 3) return `${base} scale-[1.85] -translate-y-10`;
+    if (title.includes("nivel 4") || index === 4) return `${base} scale-[1.65] -translate-y-8`;
     return `${base} object-top scale-125 origin-top`;
   };
 
@@ -779,7 +779,7 @@ export default function LearnTab() {
               <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
             ) : (
               <div className="grid grid-cols-2 gap-3 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
-                {catalogModuleCards.map(({ course, module }) => {
+                {catalogModuleCards.map(({ course, module }, index) => {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
                   const total = module.lessons.length;
@@ -793,7 +793,7 @@ export default function LearnTab() {
                     >
                       <div className="relative h-24 overflow-hidden bg-zinc-900">
                         {thumb ? (
-                          <img src={thumb} alt={module.title} className={getModuleImageClass(module)} />
+                          <img src={thumb} alt={module.title} className={getModuleImageClass(module, index)} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
