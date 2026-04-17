@@ -745,7 +745,7 @@ export default function LearnTab() {
           <img
             src="/img/learn-hero.webp"
             alt=""
-            className="w-full aspect-[2.5/1] object-cover"
+            className="w-full aspect-[2.15/1] object-cover"
           />
         </div>
       </div>
