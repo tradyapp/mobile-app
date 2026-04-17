@@ -763,7 +763,7 @@ export default function LearnTab() {
         <>
           {renderCatalogHero()}
 
-          <div className="px-4 mt-6">
+          <div className="px-3 mt-6">
             <div className="flex items-end justify-between gap-4 mb-3">
               <div>
                 <p className="text-zinc-500 text-xs font-medium uppercase tracking-normal">
@@ -781,7 +781,7 @@ export default function LearnTab() {
             {catalogModuleCards.length === 0 ? (
               <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-3 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
+              <div className="grid grid-cols-2 gap-2.5 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
                 {catalogModuleCards.map(({ course, module }, index) => {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
@@ -794,7 +794,7 @@ export default function LearnTab() {
                       onClick={() => openModule(course, module)}
                       className="text-left overflow-hidden rounded-lg bg-transparent border border-white/10 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
                     >
-                      <div className="relative h-24 overflow-hidden bg-zinc-900">
+                      <div className="relative h-[88px] overflow-hidden bg-zinc-900">
                         {thumb ? (
                           <img src={thumb} alt={module.title} className={getModuleImageClass(module, index)} />
                         ) : (
@@ -807,7 +807,7 @@ export default function LearnTab() {
                         </div>
                       </div>
 
-                      <div className="px-2.5 pt-2 pb-2.5">
+                      <div className="px-2.5 pt-1.5 pb-2">
                         <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
