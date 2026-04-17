@@ -717,59 +717,14 @@ export default function LearnTab() {
   );
 
   const renderCatalogHero = () => {
-    const firstCourse = courses[0] ?? null;
-    const firstSummary = firstCourse ? courseSummaries.get(firstCourse.id) : null;
-    const totalLessons = catalogModuleCards.reduce((sum, item) => sum + item.module.lessons.length, 0);
-    const completedLessons = catalogModuleCards.reduce((sum, item) => {
-      const progress = catalogProgressByCourse.get(item.course.id) ?? new Map<string, LessonProgress>();
-      return sum + getModuleProgress(item.module, progress);
-    }, 0);
-    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-    const firstModuleCard = catalogModuleCards[0];
-    const heroImage = firstCourse?.thumbnail_url ?? (
-      firstModuleCard ? getModuleThumbnail(firstModuleCard.course, firstModuleCard.module) : null
-    );
-
     return (
       <div className="px-4 pt-2">
         <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-lg shadow-black/25">
-          {heroImage ? (
-            <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-45" />
-          ) : (
-            <div className="absolute inset-0 bg-zinc-900" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/70 to-zinc-950/20" />
-          <div className="relative min-h-40 p-4 flex flex-col justify-end">
-            <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
-              Trading Academy
-            </p>
-            <h2 className="text-white text-xl font-bold mt-1.5 leading-tight">
-              Aprende trading paso a paso
-            </h2>
-            <p className="text-zinc-300 text-xs mt-2 leading-snug max-w-md">
-              Empieza por la introduccion o continua desde el nivel que estes trabajando.
-            </p>
-
-            {totalLessons > 0 && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-300">
-                    {completedLessons}/{totalLessons} lecciones
-                  </span>
-                  <span className="text-emerald-300 font-semibold">{pct}%</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            )}
-
-            {firstSummary && firstSummary.total > 0 && (
-              <p className="mt-2 text-[11px] text-zinc-400">
-                Curso principal: {firstSummary.completed}/{firstSummary.total} completadas
-              </p>
-            )}
-          </div>
+          <img
+            src="/img/learn-hero.webp"
+            alt=""
+            className="w-full aspect-[2.5/1] object-cover"
+          />
         </div>
       </div>
     );
