@@ -670,8 +670,11 @@ export default function LearnTab() {
     return done;
   };
 
-  const getModuleThumbnail = (course: LmsCourse, mod: LmsModuleWithLessons) => {
-    const lessonThumb = mod.lessons.map(getLessonThumbnail).find(Boolean);
+  const getModuleThumbnail = (course: LmsCourse, mod: LmsModuleWithLessons, index?: number) => {
+    const lessonThumbnails = mod.lessons.map(getLessonThumbnail).filter(Boolean) as string[];
+    const lessonThumb = index === 3 || index === 4
+      ? lessonThumbnails[1] ?? lessonThumbnails[lessonThumbnails.length - 1] ?? null
+      : lessonThumbnails[0] ?? null;
     return lessonThumb ?? course.thumbnail_url;
   };
 
@@ -693,9 +696,9 @@ export default function LearnTab() {
   const getModuleImageClass = (mod: LmsModuleWithLessons, index: number) => {
     const title = mod.title.toLowerCase();
     const base = "absolute inset-0 w-full h-full object-cover";
-    if (title.includes("nivel 3") || index === 3) return `${base} scale-[1.85] -translate-y-10`;
-    if (title.includes("nivel 4") || index === 4) return `${base} scale-[1.65] -translate-y-8`;
-    return `${base} object-top scale-125 origin-top`;
+    if (title.includes("nivel 3") || index === 3) return `${base} object-center`;
+    if (title.includes("nivel 4") || index === 4) return `${base} object-center`;
+    return `${base} object-cover object-top`;
   };
 
   const catalogModuleCards = useMemo(
@@ -783,7 +786,7 @@ export default function LearnTab() {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
                   const total = module.lessons.length;
-                  const thumb = getModuleThumbnail(course, module);
+                  const thumb = getModuleThumbnail(course, module, index);
 
                   return (
                     <button
