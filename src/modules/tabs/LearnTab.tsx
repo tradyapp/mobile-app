@@ -702,13 +702,13 @@ export default function LearnTab() {
           </div>
         </div>
       </div>
-      <div className="mt-6 grid grid-cols-1 gap-4 landscape:grid-cols-2">
+      <div className="mt-5 grid grid-cols-2 gap-3 landscape:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="rounded-lg overflow-hidden bg-zinc-900/80 border border-white/8">
-            <div className="h-32 bg-white/[0.03] animate-pulse" />
-            <div className="p-4">
-              <div className="h-4 w-2/3 bg-white/[0.06] rounded-full animate-pulse" />
-              <div className="mt-3 h-2 w-full bg-white/[0.04] rounded-full animate-pulse" />
+            <div className="h-24 bg-white/[0.03] animate-pulse" />
+            <div className="p-3">
+              <div className="h-3.5 w-2/3 bg-white/[0.06] rounded-full animate-pulse" />
+              <div className="mt-3 h-1.5 w-full bg-white/[0.04] rounded-full animate-pulse" />
             </div>
           </div>
         ))}
@@ -739,19 +739,19 @@ export default function LearnTab() {
             <div className="absolute inset-0 bg-zinc-900" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/70 to-zinc-950/20" />
-          <div className="relative min-h-48 p-5 flex flex-col justify-end">
+          <div className="relative min-h-40 p-4 flex flex-col justify-end">
             <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
               Trading Academy
             </p>
-            <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+            <h2 className="text-white text-xl font-bold mt-1.5 leading-tight">
               Aprende trading paso a paso
             </h2>
-            <p className="text-zinc-300 text-sm mt-2 leading-snug max-w-md">
+            <p className="text-zinc-300 text-xs mt-2 leading-snug max-w-md">
               Empieza por la introduccion o continua desde el nivel que estes trabajando.
             </p>
 
             {totalLessons > 0 && (
-              <div className="mt-4">
+              <div className="mt-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-zinc-300">
                     {completedLessons}/{totalLessons} lecciones
@@ -765,7 +765,7 @@ export default function LearnTab() {
             )}
 
             {firstSummary && firstSummary.total > 0 && (
-              <p className="mt-3 text-[11px] text-zinc-400">
+              <p className="mt-2 text-[11px] text-zinc-400">
                 Curso principal: {firstSummary.completed}/{firstSummary.total} completadas
               </p>
             )}
@@ -804,7 +804,7 @@ export default function LearnTab() {
             {catalogModuleCards.length === 0 ? (
               <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
             ) : (
-              <div className="grid grid-cols-1 gap-4 landscape:grid-cols-2 landscape:max-w-5xl landscape:mx-auto">
+              <div className="grid grid-cols-2 gap-3 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
                 {catalogModuleCards.map(({ course, module }) => {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
@@ -819,7 +819,7 @@ export default function LearnTab() {
                       onClick={() => openModule(course, module)}
                       className="text-left overflow-hidden rounded-lg bg-zinc-900/90 border border-white/8 shadow-lg shadow-black/20 active:scale-[0.98] active:bg-zinc-800/90 transition-all"
                     >
-                      <div className="relative h-36 bg-zinc-800">
+                      <div className="relative h-24 bg-zinc-800">
                         {thumb ? (
                           <img src={thumb} alt={module.title} className="w-full h-full object-cover" />
                         ) : (
@@ -828,27 +828,29 @@ export default function LearnTab() {
                           </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                        <div className="absolute left-3 bottom-3 rounded-full bg-black/70 px-3 py-1 text-[11px] text-zinc-200">
-                          {total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
+                        <div className="absolute left-2 bottom-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-zinc-200">
+                          {total} lecciones
                         </div>
-                        <div className="absolute right-3 bottom-3 bg-black/70 rounded-full p-0.5">
-                          <ProgressPie completed={completed} total={total} size={34} />
+                        <div className="absolute right-2 bottom-2 bg-black/70 rounded-full p-0.5">
+                          <ProgressPie completed={completed} total={total} size={30} />
                         </div>
                       </div>
 
-                      <div className="p-4">
-                        <h4 className="text-white font-semibold text-base leading-tight">
+                      <div className="p-3">
+                        <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
-                        <p className="text-zinc-400 text-xs mt-2 line-clamp-2 leading-snug">
+                        <p className="text-zinc-400 text-[11px] mt-1.5 line-clamp-2 leading-snug">
                           {module.description || course.description || "Lecciones guiadas para avanzar en tu formacion de trading."}
                         </p>
-                        <div className="mt-4">
+                        <div className="mt-3">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className={completed === total && total > 0 ? "text-emerald-400" : "text-zinc-500"}>
-                              {completed}/{total} completadas
+                              {completed}/{total}
                             </span>
-                            <span className="text-zinc-500">{pct}%</span>
+                            <span className="text-zinc-500">
+                              {duration > 0 ? `${duration}m` : `${pct}%`}
+                            </span>
                           </div>
                           <div className="mt-2 h-1.5 rounded-full bg-white/8 overflow-hidden">
                             <div
