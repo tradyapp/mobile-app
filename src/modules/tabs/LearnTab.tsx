@@ -770,9 +770,9 @@ export default function LearnTab() {
                     <button
                       key={module.id}
                       onClick={() => openModule(course, module)}
-                      className="text-left rounded-lg bg-transparent border border-white/10 p-2 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
+                      className="text-left overflow-hidden rounded-lg bg-transparent border border-white/10 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
                     >
-                      <div className="relative h-24 overflow-hidden rounded-lg bg-zinc-900 shadow-lg shadow-black/20">
+                      <div className="relative h-24 bg-zinc-900">
                         {thumb ? (
                           <img src={thumb} alt={module.title} className="w-full h-full object-cover" />
                         ) : (
@@ -780,9 +780,12 @@ export default function LearnTab() {
                             Sin imagen
                           </div>
                         )}
+                        <div className="absolute right-2 bottom-2 bg-black/70 rounded-full p-0.5">
+                          <ProgressPie completed={completed} total={total} size={30} />
+                        </div>
                       </div>
 
-                      <div className="pt-2 px-0.5 pb-0.5">
+                      <div className="px-2.5 pt-2 pb-2.5">
                         <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
