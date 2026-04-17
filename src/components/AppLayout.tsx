@@ -52,9 +52,9 @@ const AppLayout = () => {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Detect course or lesson view: /learn/:courseId or /learn/:courseId/:lessonId (not /learn/chat/*)
+  // Detect course/module/lesson view under /learn (not /learn/chat/*)
   const isLearnCourseOrLesson = useMemo(
-    () => /^\/learn\/(?!chat\/)([^/]+)(\/[^/]+)?$/.test(location.pathname),
+    () => /^\/learn\/(?!chat\/)([^/]+)(\/[^/]+){0,2}$/.test(location.pathname),
     [location.pathname]
   );
 

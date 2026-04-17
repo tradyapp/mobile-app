@@ -29,8 +29,9 @@ import MediaPreviewScreen from "@/components/chat/MediaPreviewScreen";
 // ---------------------------------------------------------------------------
 
 interface LearnRouteState {
-  view: "catalog" | "course" | "lesson" | "chat";
+  view: "catalog" | "course" | "module" | "lesson" | "chat";
   courseId: string | null;
+  moduleId: string | null;
   lessonId: string | null;
 }
 
@@ -39,7 +40,18 @@ function parseLearnRoute(pathname: string): LearnRouteState {
 
   // /learn/chat
   if (normalized === "/learn/chat") {
-    return { view: "chat", courseId: null, lessonId: null };
+    return { view: "chat", courseId: null, moduleId: null, lessonId: null };
+  }
+
+  // /learn/:courseId/module/:moduleId
+  const moduleMatch = normalized.match(/^\/learn\/([^/]+)\/module\/([^/]+)$/);
+  if (moduleMatch) {
+    return {
+      view: "module",
+      courseId: decodeURIComponent(moduleMatch[1]),
+      moduleId: decodeURIComponent(moduleMatch[2]),
+      lessonId: null,
+    };
   }
 
   // /learn/:courseId/:lessonId
@@ -48,6 +60,7 @@ function parseLearnRoute(pathname: string): LearnRouteState {
     return {
       view: "lesson",
       courseId: decodeURIComponent(lessonMatch[1]),
+      moduleId: null,
       lessonId: decodeURIComponent(lessonMatch[2]),
     };
   }
@@ -58,12 +71,13 @@ function parseLearnRoute(pathname: string): LearnRouteState {
     return {
       view: "course",
       courseId: decodeURIComponent(courseMatch[1]),
+      moduleId: null,
       lessonId: null,
     };
   }
 
   // /learn
-  return { view: "catalog", courseId: null, lessonId: null };
+  return { view: "catalog", courseId: null, moduleId: null, lessonId: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +228,8 @@ export default function LearnTab() {
   const routeState = useMemo(() => parseLearnRoute(location.pathname), [location.pathname]);
 
   const [courses, setCourses] = useState<LmsCourse[]>([]);
+  const [catalogModulesByCourse, setCatalogModulesByCourse] = useState<Map<string, LmsModuleWithLessons[]>>(new Map());
+  const [catalogProgressByCourse, setCatalogProgressByCourse] = useState<Map<string, Map<string, LessonProgress>>>(new Map());
   const [modules, setModules] = useState<LmsModuleWithLessons[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<LmsCourse | null>(null);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
@@ -241,7 +257,7 @@ export default function LearnTab() {
   // Derived state from route
   // ---------------------------------------------------------------------------
 
-  const { view, courseId, lessonId } = routeState;
+  const { view, courseId, moduleId, lessonId } = routeState;
 
   // Flat ordered list of all lessons across modules
   const allLessons = useMemo(() => modules.flatMap((mod) => mod.lessons), [modules]);
@@ -250,6 +266,11 @@ export default function LearnTab() {
   const selectedLesson = useMemo(
     () => (lessonId ? allLessons.find((l) => l.id === lessonId) ?? null : null),
     [allLessons, lessonId]
+  );
+
+  const selectedModule = useMemo(
+    () => (moduleId ? modules.find((mod) => mod.id === moduleId) ?? null : null),
+    [modules, moduleId]
   );
 
   const currentLessonIndex = useMemo(
@@ -271,6 +292,8 @@ export default function LearnTab() {
     if (view !== "catalog") {
       navigate("/learn", { replace: true });
       setSelectedCourse(null);
+      setCatalogModulesByCourse(new Map());
+      setCatalogProgressByCourse(new Map());
       setModules([]);
       setExpandedModules(new Set());
       setProgressMap(new Map());
@@ -308,8 +331,23 @@ export default function LearnTab() {
             : Promise.resolve(new Map<string, CourseProgressSummary>()),
         ]);
         if (!active) return;
-        setCourses(data.filter((c) => c.language === storeLocale));
+        const filteredCourses = data.filter((c) => c.language === storeLocale);
+        const catalogContent = await Promise.all(
+          filteredCourses.map(async (course) => {
+            const [content, progress] = await Promise.all([
+              lmsService.getCourseContent(course.id),
+              user?.uid
+                ? lmsProgressService.getCourseProgress(user.uid, course.id)
+                : Promise.resolve(new Map<string, LessonProgress>()),
+            ]);
+            return { courseId: course.id, content, progress };
+          })
+        );
+        if (!active) return;
+        setCourses(filteredCourses);
         setCourseSummaries(summaries);
+        setCatalogModulesByCourse(new Map(catalogContent.map((item) => [item.courseId, item.content])));
+        setCatalogProgressByCourse(new Map(catalogContent.map((item) => [item.courseId, item.progress])));
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "No se pudieron cargar los cursos");
@@ -497,7 +535,9 @@ export default function LearnTab() {
       ? "Learn"
       : view === "chat"
         ? "Chat"
-        : view === "course"
+        : view === "module"
+          ? selectedModule?.title ?? "Module"
+          : view === "course"
           ? selectedCourse?.title ?? "Course"
           : "Lesson";
 
@@ -509,7 +549,14 @@ export default function LearnTab() {
     if (view === "chat") {
       navigate("/learn");
     } else if (view === "lesson" && courseId) {
-      navigate(`/learn/${courseId}`);
+      const parentModule = modules.find((mod) => mod.lessons.some((lesson) => lesson.id === lessonId));
+      if (parentModule) {
+        navigate(`/learn/${courseId}/module/${parentModule.id}`);
+      } else {
+        navigate(`/learn/${courseId}`);
+      }
+    } else if (view === "module") {
+      navigate("/learn");
     } else if (view === "course") {
       navigate("/learn");
     }
@@ -517,6 +564,10 @@ export default function LearnTab() {
 
   const openCourse = (course: LmsCourse) => {
     navigate(`/learn/${course.id}`);
+  };
+
+  const openModule = (course: LmsCourse, module: LmsModuleWithLessons) => {
+    navigate(`/learn/${course.id}/module/${module.id}`);
   };
 
   const openLesson = (lesson: LmsLesson) => {
@@ -542,7 +593,7 @@ export default function LearnTab() {
         await lmsProgressService.markCompleted(user.uid, lesson.id, courseId, progressSeconds);
         setProgressMap((prev) => {
           const next = new Map(prev);
-          next.set(lesson.id, {
+          const completedProgress = {
             id: prev.get(lesson.id)?.id ?? "",
             user_id: user.uid,
             lesson_id: lesson.id,
@@ -550,7 +601,23 @@ export default function LearnTab() {
             completed: true,
             progress_seconds: progressSeconds ?? prev.get(lesson.id)?.progress_seconds ?? 0,
             completed_at: new Date().toISOString(),
+          };
+          next.set(lesson.id, completedProgress);
+          return next;
+        });
+        setCatalogProgressByCourse((prev) => {
+          const next = new Map(prev);
+          const courseProgress = new Map(next.get(courseId) ?? new Map<string, LessonProgress>());
+          courseProgress.set(lesson.id, {
+            id: courseProgress.get(lesson.id)?.id ?? "",
+            user_id: user.uid,
+            lesson_id: lesson.id,
+            course_id: courseId,
+            completed: true,
+            progress_seconds: progressSeconds ?? courseProgress.get(lesson.id)?.progress_seconds ?? 0,
+            completed_at: new Date().toISOString(),
           });
+          next.set(courseId, courseProgress);
           return next;
         });
         setCourseSummaries((prev) => {
@@ -595,111 +662,210 @@ export default function LearnTab() {
     });
   };
 
-  const getModuleProgress = (mod: LmsModuleWithLessons) => {
+  const getModuleProgress = (mod: LmsModuleWithLessons, source: Map<string, LessonProgress> = progressMap) => {
     let done = 0;
     for (const lesson of mod.lessons) {
-      if (progressMap.get(lesson.id)?.completed) done++;
+      if (source.get(lesson.id)?.completed) done++;
     }
     return done;
   };
+
+  const getModuleThumbnail = (course: LmsCourse, mod: LmsModuleWithLessons) => {
+    const lessonThumb = mod.lessons.map(getLessonThumbnail).find(Boolean);
+    return lessonThumb ?? course.thumbnail_url;
+  };
+
+  const getModuleDuration = (mod: LmsModuleWithLessons) => (
+    mod.lessons.reduce((sum, lesson) => sum + (lesson.duration_minutes ?? 0), 0)
+  );
+
+  const catalogModuleCards = useMemo(
+    () => courses.flatMap((course) => (
+      (catalogModulesByCourse.get(course.id) ?? []).map((module) => ({ course, module }))
+    )),
+    [courses, catalogModulesByCourse]
+  );
 
   // ---------------------------------------------------------------------------
   // Render: Catalog
   // ---------------------------------------------------------------------------
 
   const renderCatalogSkeleton = () => (
-    <div className="pb-24">
-      {[0].map((i) => (
-        <Card
-          key={i}
-          outline
-          colors={cardColors}
-          contentWrapPadding="p-0"
-          className="overflow-hidden"
-          header={
-            <div className="relative">
-              <div className="w-full aspect-video bg-white/[0.03] animate-pulse" />
-            </div>
-          }
-          footer={
-            <div className="h-3 w-28 bg-white/[0.04] rounded-full animate-pulse" />
-          }
-        >
-          <div className="p-4">
-            <div className="h-[18px] w-3/5 bg-white/[0.06] rounded-full animate-pulse" />
-            <div className="mt-2 space-y-1.5">
-              <div className="h-3 w-full bg-white/[0.03] rounded-full animate-pulse" />
-              <div className="h-3 w-4/5 bg-white/[0.03] rounded-full animate-pulse" />
+    <div className="pb-24 px-4">
+      <div className="rounded-lg overflow-hidden bg-zinc-900/90 border border-white/8 shadow-lg shadow-black/20">
+        <div className="h-40 bg-white/[0.04] animate-pulse" />
+        <div className="p-4">
+          <div className="h-5 w-3/5 bg-white/[0.06] rounded-full animate-pulse" />
+          <div className="mt-3 space-y-2">
+            <div className="h-3 w-full bg-white/[0.03] rounded-full animate-pulse" />
+            <div className="h-3 w-4/5 bg-white/[0.03] rounded-full animate-pulse" />
+          </div>
+        </div>
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 landscape:grid-cols-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-lg overflow-hidden bg-zinc-900/80 border border-white/8">
+            <div className="h-32 bg-white/[0.03] animate-pulse" />
+            <div className="p-4">
+              <div className="h-4 w-2/3 bg-white/[0.06] rounded-full animate-pulse" />
+              <div className="mt-3 h-2 w-full bg-white/[0.04] rounded-full animate-pulse" />
             </div>
           </div>
-        </Card>
-      ))}
+        ))}
+      </div>
     </div>
   );
+
+  const renderCatalogHero = () => {
+    const firstCourse = courses[0] ?? null;
+    const firstSummary = firstCourse ? courseSummaries.get(firstCourse.id) : null;
+    const totalLessons = catalogModuleCards.reduce((sum, item) => sum + item.module.lessons.length, 0);
+    const completedLessons = catalogModuleCards.reduce((sum, item) => {
+      const progress = catalogProgressByCourse.get(item.course.id) ?? new Map<string, LessonProgress>();
+      return sum + getModuleProgress(item.module, progress);
+    }, 0);
+    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    const firstModuleCard = catalogModuleCards[0];
+    const heroImage = firstCourse?.thumbnail_url ?? (
+      firstModuleCard ? getModuleThumbnail(firstModuleCard.course, firstModuleCard.module) : null
+    );
+
+    return (
+      <div className="px-4 pt-2">
+        <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-lg shadow-black/25">
+          {heroImage ? (
+            <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-45" />
+          ) : (
+            <div className="absolute inset-0 bg-zinc-900" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/70 to-zinc-950/20" />
+          <div className="relative min-h-48 p-5 flex flex-col justify-end">
+            <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
+              Trading Academy
+            </p>
+            <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+              Aprende trading paso a paso
+            </h2>
+            <p className="text-zinc-300 text-sm mt-2 leading-snug max-w-md">
+              Empieza por la introduccion o continua desde el nivel que estes trabajando.
+            </p>
+
+            {totalLessons > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-300">
+                    {completedLessons}/{totalLessons} lecciones
+                  </span>
+                  <span className="text-emerald-300 font-semibold">{pct}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            )}
+
+            {firstSummary && firstSummary.total > 0 && (
+              <p className="mt-3 text-[11px] text-zinc-400">
+                Curso principal: {firstSummary.completed}/{firstSummary.total} completadas
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderCatalog = () => (
     <div className="pb-24">
       {loading && renderCatalogSkeleton()}
       {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
       {!loading && !error && courses.length === 0 && (
-        <Block><p className="text-zinc-400 text-sm">No published courses yet.</p></Block>
+        <Block><p className="text-zinc-400 text-sm">No hay cursos publicados todavia.</p></Block>
       )}
-      {courses.map((course) => {
-        const summary = courseSummaries.get(course.id);
-        return (
-          <Card
-            key={course.id}
-            outline
-            colors={cardColors}
-            contentWrapPadding="p-0"
-            className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity landscape:max-w-3xl landscape:mx-auto"
-            onClick={() => openCourse(course)}
-          >
-            <div className="landscape:flex landscape:items-stretch">
-              <div className="relative landscape:w-56 landscape:shrink-0">
-                {course.thumbnail_url ? (
-                  <img
-                    src={course.thumbnail_url}
-                    alt={course.title}
-                    className="w-full aspect-video object-cover landscape:h-full landscape:min-h-32"
-                  />
-                ) : (
-                  <div className="w-full aspect-video bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs landscape:h-full landscape:min-h-32">
-                    No thumbnail
-                  </div>
-                )}
-                {summary && summary.total > 0 && (
-                  <div className="absolute bottom-2 right-2 bg-black/70 rounded-full p-0.5 landscape:hidden">
-                    <ProgressPie completed={summary.completed} total={summary.total} size={32} />
-                  </div>
-                )}
-              </div>
+      {!loading && !error && courses.length > 0 && (
+        <>
+          {renderCatalogHero()}
 
-              <div className="p-4 landscape:flex landscape:flex-1 landscape:items-center landscape:justify-between landscape:gap-4">
-                <div className="min-w-0">
-                  <h3 className="text-white font-semibold">{course.title}</h3>
-                  {course.description && (
-                    <p className="text-zinc-400 text-xs mt-1 line-clamp-2 landscape:line-clamp-3">
-                      {course.description}
-                    </p>
-                  )}
-                  {summary && summary.total > 0 && (
-                    <p className={`mt-3 text-xs ${summary.completed === summary.total ? "text-emerald-400" : "text-zinc-500"}`}>
-                      {summary.completed}/{summary.total} lessons completed
-                    </p>
-                  )}
-                </div>
-
-                {summary && summary.total > 0 && (
-                  <div className="hidden landscape:block shrink-0">
-                    <ProgressPie completed={summary.completed} total={summary.total} size={44} />
-                  </div>
-                )}
+          <div className="px-4 mt-6">
+            <div className="flex items-end justify-between gap-4 mb-3">
+              <div>
+                <p className="text-zinc-500 text-xs font-medium uppercase tracking-normal">
+                  Cursos de trading
+                </p>
+                <h3 className="text-white text-lg font-semibold mt-1">
+                  Modulos disponibles
+                </h3>
               </div>
+              <span className="text-zinc-500 text-xs shrink-0">
+                {catalogModuleCards.length} modulos
+              </span>
             </div>
-          </Card>
-        );
-      })}
+
+            {catalogModuleCards.length === 0 ? (
+              <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 landscape:grid-cols-2 landscape:max-w-5xl landscape:mx-auto">
+                {catalogModuleCards.map(({ course, module }) => {
+                  const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
+                  const completed = getModuleProgress(module, progress);
+                  const total = module.lessons.length;
+                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  const thumb = getModuleThumbnail(course, module);
+                  const duration = getModuleDuration(module);
+
+                  return (
+                    <button
+                      key={module.id}
+                      onClick={() => openModule(course, module)}
+                      className="text-left overflow-hidden rounded-lg bg-zinc-900/90 border border-white/8 shadow-lg shadow-black/20 active:scale-[0.98] active:bg-zinc-800/90 transition-all"
+                    >
+                      <div className="relative h-36 bg-zinc-800">
+                        {thumb ? (
+                          <img src={thumb} alt={module.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">
+                            Sin imagen
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        <div className="absolute left-3 bottom-3 rounded-full bg-black/70 px-3 py-1 text-[11px] text-zinc-200">
+                          {total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
+                        </div>
+                        <div className="absolute right-3 bottom-3 bg-black/70 rounded-full p-0.5">
+                          <ProgressPie completed={completed} total={total} size={34} />
+                        </div>
+                      </div>
+
+                      <div className="p-4">
+                        <h4 className="text-white font-semibold text-base leading-tight">
+                          {module.title}
+                        </h4>
+                        <p className="text-zinc-400 text-xs mt-2 line-clamp-2 leading-snug">
+                          {module.description || course.description || "Lecciones guiadas para avanzar en tu formacion de trading."}
+                        </p>
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className={completed === total && total > 0 ? "text-emerald-400" : "text-zinc-500"}>
+                              {completed}/{total} completadas
+                            </span>
+                            <span className="text-zinc-500">{pct}%</span>
+                          </div>
+                          <div className="mt-2 h-1.5 rounded-full bg-white/8 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-400 transition-all duration-300"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -871,6 +1037,127 @@ export default function LearnTab() {
       })}
     </div>
   );
+
+  // ---------------------------------------------------------------------------
+  // Render: Module
+  // ---------------------------------------------------------------------------
+
+  const renderModule = () => {
+    if (!selectedModule) {
+      if (loading) return renderCourseSkeleton();
+      return (
+        <Block className="pt-8 text-center">
+          <p className="text-zinc-400 text-sm">Modulo no encontrado.</p>
+        </Block>
+      );
+    }
+
+    const completed = getModuleProgress(selectedModule);
+    const total = selectedModule.lessons.length;
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const duration = getModuleDuration(selectedModule);
+    const thumbnail = selectedCourse ? getModuleThumbnail(selectedCourse, selectedModule) : null;
+
+    return (
+      <div className="pb-24">
+        <div className="px-4 pt-2">
+          <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-lg shadow-black/25">
+            {thumbnail ? (
+              <img src={thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover opacity-45" />
+            ) : (
+              <div className="absolute inset-0 bg-zinc-900" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/75 to-zinc-950/20" />
+            <div className="relative min-h-44 p-5 flex flex-col justify-end">
+              <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
+                {selectedCourse?.title ?? "Trading"}
+              </p>
+              <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+                {selectedModule.title}
+              </h2>
+              {(selectedModule.description || selectedCourse?.description) && (
+                <p className="text-zinc-300 text-sm mt-2 leading-snug line-clamp-3">
+                  {selectedModule.description || selectedCourse?.description}
+                </p>
+              )}
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-300">
+                    {completed}/{total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
+                  </span>
+                  <span className="text-emerald-300 font-semibold">{pct}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white text-lg font-semibold">Lecciones</h3>
+            <span className="text-zinc-500 text-xs">{total} total</span>
+          </div>
+
+          {selectedModule.lessons.length === 0 ? (
+            <p className="text-zinc-400 text-sm">Este modulo aun no tiene lecciones publicadas.</p>
+          ) : (
+            <div className="space-y-3 landscape:grid landscape:grid-cols-2 landscape:gap-3 landscape:space-y-0 landscape:max-w-5xl landscape:mx-auto">
+              {selectedModule.lessons.map((lesson, index) => {
+                const thumb = getLessonThumbnail(lesson);
+                const isCompleted = progressMap.get(lesson.id)?.completed === true;
+                return (
+                  <button
+                    key={lesson.id}
+                    onClick={() => openLesson(lesson)}
+                    className="w-full text-left rounded-lg bg-zinc-900/90 border border-white/8 p-3 flex items-center gap-3 shadow-lg shadow-black/15 active:scale-[0.98] active:bg-zinc-800/90 transition-all"
+                  >
+                    <div className="w-20 h-14 shrink-0 rounded-lg overflow-hidden bg-zinc-800 relative">
+                      {thumb ? (
+                        <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[11px]">
+                          {lesson.content_type === "video" ? "Video" : "Texto"}
+                        </div>
+                      )}
+                      {isCompleted && (
+                        <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-zinc-500 text-[11px]">
+                        Leccion {index + 1}
+                      </p>
+                      <h4 className={isCompleted ? "text-zinc-400 font-semibold text-sm line-clamp-2" : "text-white font-semibold text-sm line-clamp-2"}>
+                        {lesson.title}
+                      </h4>
+                      <p className="text-zinc-500 text-[11px] mt-1">
+                        {lesson.content_type.toUpperCase()}
+                        {lesson.duration_minutes ? ` · ${lesson.duration_minutes} min` : ""}
+                        {lesson.is_free ? " · Free" : ""}
+                      </p>
+                    </div>
+
+                    <svg className="w-4 h-4 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Render: Lesson
@@ -1095,7 +1382,7 @@ export default function LearnTab() {
       />
       <AnimatePresence mode="wait">
         <motion.div
-          key={view + (courseId ?? "") + (lessonId ?? "")}
+          key={view + (courseId ?? "") + (moduleId ?? "") + (lessonId ?? "")}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
@@ -1104,6 +1391,7 @@ export default function LearnTab() {
           {view === "catalog" && renderCatalog()}
           {view === "chat" && renderChat()}
           {view === "course" && renderCourse()}
+          {view === "module" && renderModule()}
           {view === "lesson" && renderLesson()}
         </motion.div>
       </AnimatePresence>
