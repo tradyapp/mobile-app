@@ -785,7 +785,7 @@ export default function LearnTab() {
                     >
                       <div className="relative h-24 bg-zinc-900">
                         {thumb ? (
-                          <img src={thumb} alt={module.title} className="w-full h-full object-cover scale-110" />
+                          <img src={thumb} alt={module.title} className="w-full h-full object-cover scale-125 -translate-y-2" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
