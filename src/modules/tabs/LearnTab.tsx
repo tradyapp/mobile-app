@@ -764,56 +764,31 @@ export default function LearnTab() {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
                   const total = module.lessons.length;
-                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
                   const thumb = getModuleThumbnail(course, module);
-                  const duration = getModuleDuration(module);
 
                   return (
                     <button
                       key={module.id}
                       onClick={() => openModule(course, module)}
-                      className="text-left overflow-hidden rounded-lg bg-zinc-900/90 border border-white/8 shadow-lg shadow-black/20 active:scale-[0.98] active:bg-zinc-800/90 transition-all"
+                      className="text-left rounded-lg bg-transparent active:scale-[0.98] transition-transform"
                     >
-                      <div className="relative h-24 bg-zinc-800">
+                      <div className="relative h-24 overflow-hidden rounded-lg bg-zinc-900 shadow-lg shadow-black/20">
                         {thumb ? (
                           <img src={thumb} alt={module.title} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">
+                          <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
                           </div>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                        <div className="absolute left-2 bottom-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-zinc-200">
-                          {total} lecciones
-                        </div>
-                        <div className="absolute right-2 bottom-2 bg-black/70 rounded-full p-0.5">
-                          <ProgressPie completed={completed} total={total} size={30} />
-                        </div>
                       </div>
 
-                      <div className="p-3">
+                      <div className="pt-2">
                         <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
-                        <p className="text-zinc-400 text-[11px] mt-1.5 line-clamp-2 leading-snug">
-                          {module.description || course.description || "Lecciones guiadas para avanzar en tu formacion de trading."}
+                        <p className={completed === total && total > 0 ? "text-emerald-400 text-[11px] mt-1" : "text-zinc-500 text-[11px] mt-1"}>
+                          {completed} de {total}
                         </p>
-                        <div className="mt-3">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className={completed === total && total > 0 ? "text-emerald-400" : "text-zinc-500"}>
-                              {completed}/{total}
-                            </span>
-                            <span className="text-zinc-500">
-                              {duration > 0 ? `${duration}m` : `${pct}%`}
-                            </span>
-                          </div>
-                          <div className="mt-2 h-1.5 rounded-full bg-white/8 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-emerald-400 transition-all duration-300"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
                       </div>
                     </button>
                   );
