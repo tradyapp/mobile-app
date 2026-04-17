@@ -687,8 +687,8 @@ export default function LearnTab() {
     if (title.includes("introdu")) return "Bienvenido: empieza con las bases.";
     if (title.includes("nivel 1")) return "Da tu primer paso con claridad.";
     if (title.includes("nivel 2")) return "Avanza con nuevas herramientas.";
-    if (title.includes("nivel 3")) return "Profundiza y sube el nivel.";
-    if (title.includes("nivel 4")) return "Refina tu criterio de mercado.";
+    if (title.includes("nivel 3")) return "Profundiza y fortalece tu lectura del mercado.";
+    if (title.includes("nivel 4")) return "Refina tu criterio y toma mejores decisiones.";
     if (title.includes("nivel 5")) return "Lleva tu practica mas lejos.";
     return "Entra y continua tu aprendizaje.";
   };
