@@ -679,6 +679,17 @@ export default function LearnTab() {
     mod.lessons.reduce((sum, lesson) => sum + (lesson.duration_minutes ?? 0), 0)
   );
 
+  const getModuleTeaser = (mod: LmsModuleWithLessons) => {
+    const title = mod.title.toLowerCase();
+    if (title.includes("introdu")) return "Bienvenido: empieza con las bases.";
+    if (title.includes("nivel 1")) return "Da tu primer paso con claridad.";
+    if (title.includes("nivel 2")) return "Avanza con nuevas herramientas.";
+    if (title.includes("nivel 3")) return "Profundiza y sube el nivel.";
+    if (title.includes("nivel 4")) return "Refina tu criterio de mercado.";
+    if (title.includes("nivel 5")) return "Lleva tu practica mas lejos.";
+    return "Entra y continua tu aprendizaje.";
+  };
+
   const catalogModuleCards = useMemo(
     () => courses.flatMap((course) => (
       (catalogModulesByCourse.get(course.id) ?? []).map((module) => ({ course, module }))
@@ -789,6 +800,9 @@ export default function LearnTab() {
                         <h4 className="text-white font-semibold text-sm leading-tight line-clamp-2">
                           {module.title}
                         </h4>
+                        <p className="text-zinc-400 text-[11px] mt-1 line-clamp-2 leading-snug">
+                          {getModuleTeaser(module)}
+                        </p>
                         <p className={completed === total && total > 0 ? "text-emerald-400 text-[11px] mt-1" : "text-zinc-500 text-[11px] mt-1"}>
                           {completed} de {total}
                         </p>
