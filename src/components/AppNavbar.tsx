@@ -4,7 +4,8 @@ import { Navbar } from 'konsta/react';
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import ProfileDrawer from '../modules/ProfileDrawer';
 import { useAuthStore } from '@/stores/authStore';
-import { supabase } from '@/lib/supabase';
+import { useAvatarStore } from '@/stores/avatarStore';
+import { userService } from '@/services/UserService';
 
 interface AppNavbarProps {
   title?: string;
@@ -60,31 +61,64 @@ function FloatingTitle({ text }: { text: string }) {
 
 export default function AppNavbar({ title, left, right }: AppNavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const wasProfileOpenRef = useRef(false);
   const user = useAuthStore((s) => s.user);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-
-  const fetchAvatar = (uid: string) => {
-    supabase
-      .from("user_profiles")
-      .select("avatar_thumb_url, avatar_url")
-      .eq("id", uid)
-      .single()
-      .then(({ data }) => {
-        const url = data?.avatar_thumb_url || data?.avatar_url;
-        if (url) setAvatarUrl(url);
-      });
-  };
+  const avatarUrl = useAvatarStore((s) => s.avatarUrl);
+  const avatarUpdatedAt = useAvatarStore((s) => s.avatarUpdatedAt);
+  const storeUid = useAvatarStore((s) => s.uid);
+  const hasHydrated = useAvatarStore((s) => s.hasHydrated);
+  const hasValidated = useAvatarStore((s) => s.hasValidated);
+  const hydrateFromCache = useAvatarStore((s) => s.hydrateFromCache);
+  const setAvatar = useAvatarStore((s) => s.setAvatar);
+  const markValidated = useAvatarStore((s) => s.markValidated);
+  const resetAvatar = useAvatarStore((s) => s.reset);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    fetchAvatar(user.uid);
-  }, [user?.uid]);
+    if (!user?.uid) {
+      resetAvatar();
+      return;
+    }
+    if (storeUid === user.uid && hasHydrated) return;
+    hydrateFromCache(user.uid);
+  }, [hasHydrated, hydrateFromCache, resetAvatar, storeUid, user?.uid]);
 
-  // Refresh avatar when profile drawer closes (user may have uploaded a new one)
   useEffect(() => {
-    if (isProfileOpen || !user?.uid) return;
-    fetchAvatar(user.uid);
-  }, [isProfileOpen, user?.uid]);
+    const didJustClose = wasProfileOpenRef.current && !isProfileOpen;
+    wasProfileOpenRef.current = isProfileOpen;
+
+    if (!user?.uid || !hasHydrated) return;
+    if (!didJustClose && hasValidated) return;
+
+    let cancelled = false;
+    userService.getAvatarMeta(user.uid).then((meta) => {
+      if (cancelled) return;
+      const nextUrl = meta.avatarThumbUrl || meta.avatarUrl;
+      if (meta.avatarUpdatedAt !== avatarUpdatedAt || nextUrl !== avatarUrl) {
+        setAvatar({
+          uid: user.uid,
+          avatarUrl: nextUrl,
+          avatarUpdatedAt: meta.avatarUpdatedAt,
+        });
+        return;
+      }
+      markValidated();
+    }).catch(() => {
+      if (!cancelled) markValidated();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    avatarUpdatedAt,
+    avatarUrl,
+    hasHydrated,
+    hasValidated,
+    isProfileOpen,
+    markValidated,
+    setAvatar,
+    user?.uid,
+  ]);
 
   const resolvedRight = right === undefined
     ? (

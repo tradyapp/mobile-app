@@ -15,6 +15,7 @@ import "react-easy-crop/react-easy-crop.css";
 import { brokerService, type BrokerAccount } from "@/services/BrokerService";
 import { formatCurrency, relativeTime } from "@/modules/broker/utils";
 import { useBrokerStore } from "@/stores/brokerStore";
+import { useAvatarStore } from "@/stores/avatarStore";
 
 // ── Shared context for profile state ──
 
@@ -605,6 +606,7 @@ export default function ProfileDrawer({
   const setBrokerAccounts = useBrokerStore((state) => state.setAccounts);
   const selectBrokerAccount = useBrokerStore((state) => state.selectAccount);
   const brokerRefreshKey = useBrokerStore((state) => state.refreshKey);
+  const setCachedAvatar = useAvatarStore((state) => state.setAvatar);
   const [profile, setProfile] = useState<ProfileData>({
     displayName: "",
     displayname: "",
@@ -688,8 +690,13 @@ export default function ProfileDrawer({
 
   const updateAvatar = async (file: File) => {
     if (!user?.uid) return;
-    const newUrl = await userService.uploadAvatar(user.uid, file);
-    setProfile((p) => ({ ...p, avatarUrl: newUrl }));
+    const result = await userService.uploadAvatar(user.uid, file);
+    setProfile((p) => ({ ...p, avatarUrl: result.avatarUrl }));
+    setCachedAvatar({
+      uid: user.uid,
+      avatarUrl: result.avatarThumbUrl || result.avatarUrl,
+      avatarUpdatedAt: result.avatarUpdatedAt,
+    });
   };
 
   const updateProfileNames = async (values: { displayName: string; displayname: string }) => {

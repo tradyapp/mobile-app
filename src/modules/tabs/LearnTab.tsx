@@ -18,6 +18,7 @@ import {
   type LessonProgress,
   type CourseProgressSummary,
 } from "@/services/LmsProgressService";
+import { learnCacheService } from "@/services/LearnCacheService";
 import { useAuthStore } from "@/stores/authStore";
 import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
@@ -324,12 +325,42 @@ export default function LearnTab() {
           }
         }
 
-        const [data, summaries] = await Promise.all([
-          lmsService.getPublishedCourses(),
+        const cachedSnapshot = await learnCacheService.getCatalogSnapshot(storeLocale);
+        if (active && cachedSnapshot) {
+          const hydrated = await learnCacheService.hydrateCatalogAssets(cachedSnapshot);
+          if (!active) return;
+          setCourses(hydrated.courses);
+          setCatalogModulesByCourse(new Map(hydrated.modulesByCourse));
+          setLoading(false);
+        }
+
+        const [catalogVersion, summaries] = await Promise.all([
+          lmsService.getCatalogVersion(),
           user?.uid
             ? lmsProgressService.getCourseSummaries(user.uid)
             : Promise.resolve(new Map<string, CourseProgressSummary>()),
         ]);
+        if (!active) return;
+
+        const cachedVersion = learnCacheService.getCatalogVersion(storeLocale);
+        const cachedCourses = cachedSnapshot?.courses ?? [];
+        if (cachedSnapshot && cachedVersion === catalogVersion) {
+          const progressByCourse = await Promise.all(
+            cachedCourses.map(async (course) => ({
+              courseId: course.id,
+              progress: user?.uid
+                ? await lmsProgressService.getCourseProgress(user.uid, course.id)
+                : new Map<string, LessonProgress>(),
+            })),
+          );
+          if (!active) return;
+          setCourseSummaries(summaries);
+          setCatalogProgressByCourse(new Map(progressByCourse.map((item) => [item.courseId, item.progress])));
+          setLoading(false);
+          return;
+        }
+
+        const data = await lmsService.getPublishedCourses();
         if (!active) return;
         const filteredCourses = data.filter((c) => c.language === storeLocale);
         const catalogContent = await Promise.all(
@@ -344,9 +375,17 @@ export default function LearnTab() {
           })
         );
         if (!active) return;
-        setCourses(filteredCourses);
+        const snapshot = {
+          courses: filteredCourses,
+          modulesByCourse: catalogContent.map((item) => [item.courseId, item.content] as [string, LmsModuleWithLessons[]]),
+        };
+        await learnCacheService.setCatalogSnapshot(storeLocale, snapshot, catalogVersion);
+        void learnCacheService.primeCatalogAssets(snapshot);
+        const hydratedSnapshot = await learnCacheService.hydrateCatalogAssets(snapshot);
+        if (!active) return;
+        setCourses(hydratedSnapshot.courses);
         setCourseSummaries(summaries);
-        setCatalogModulesByCourse(new Map(catalogContent.map((item) => [item.courseId, item.content])));
+        setCatalogModulesByCourse(new Map(hydratedSnapshot.modulesByCourse));
         setCatalogProgressByCourse(new Map(catalogContent.map((item) => [item.courseId, item.progress])));
       } catch (err) {
         if (!active) return;
@@ -380,22 +419,50 @@ export default function LearnTab() {
       setSelectedCourse(course);
       setLoading(true);
       setError(null);
+      let hasCachedSnapshot = false;
 
       try {
-        const [content, progress] = await Promise.all([
-          lmsService.getCourseContent(courseId),
+        const cachedSnapshot = await learnCacheService.getCourseSnapshot(courseId);
+        if (active && cachedSnapshot) {
+          hasCachedSnapshot = true;
+          const hydrated = await learnCacheService.hydrateCourseAssets(cachedSnapshot);
+          if (!active) return;
+          setModules(hydrated.modules);
+          setExpandedModules(new Set(hydrated.modules.map((m) => m.id)));
+          setLoading(false);
+        }
+
+        const [contentVersion, progress] = await Promise.all([
+          lmsService.getCourseContentVersion(courseId),
           user?.uid
             ? lmsProgressService.getCourseProgress(user.uid, courseId)
             : Promise.resolve(new Map<string, LessonProgress>()),
         ]);
         if (!active) return;
-        setModules(content);
         setProgressMap(progress);
-        setExpandedModules(new Set(content.map((m) => m.id)));
+
+        const cachedVersion = learnCacheService.getCourseVersion(courseId);
+        if (cachedSnapshot && cachedVersion === contentVersion) {
+          loadedCourseIdRef.current = courseId;
+          setLoading(false);
+          return;
+        }
+
+        const content = await lmsService.getCourseContent(courseId);
+        if (!active) return;
+        const snapshot = { modules: content };
+        await learnCacheService.setCourseSnapshot(courseId, snapshot, contentVersion);
+        void learnCacheService.primeCourseAssets(snapshot);
+        const hydratedSnapshot = await learnCacheService.hydrateCourseAssets(snapshot);
+        if (!active) return;
+        setModules(hydratedSnapshot.modules);
+        setExpandedModules(new Set(hydratedSnapshot.modules.map((m) => m.id)));
         loadedCourseIdRef.current = courseId;
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "No se pudo cargar el curso");
+        if (!hasCachedSnapshot) {
+          setError(err instanceof Error ? err.message : "No se pudo cargar el curso");
+        }
       } finally {
         if (active) setLoading(false);
       }

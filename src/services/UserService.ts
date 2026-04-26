@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { UserType, UserProfileResponse, UserFieldMetadata } from "@/types/UserType";
+import { profileCacheService } from "@/services/ProfileCacheService";
 
 const PROFILE_SCHEMA: UserFieldMetadata[] = [
   {
@@ -51,6 +52,80 @@ const PROFILE_SCHEMA: UserFieldMetadata[] = [
 ];
 
 class UserService {
+  private profilePromiseByUid = new Map<string, Promise<UserProfileResponse>>();
+  private profileMemoryCache = new Map<string, { version: string | null; profile: UserProfileResponse }>();
+
+  private buildUserProfileResponse(
+    uid: string,
+    data: {
+      display_name?: string | null;
+      displayname?: string | null;
+      avatar_url?: string | null;
+      locale?: string | null;
+      timezone?: string | null;
+    } | null | undefined,
+  ): UserProfileResponse {
+    const userData: Partial<UserType> = {
+      uid,
+      displayName: data?.display_name ?? "",
+      displayname: data?.displayname ?? "",
+      avatarUrl: data?.avatar_url ?? null,
+      locale: data?.locale ?? "es",
+      timezone: data?.timezone ?? "America/Bogota",
+    } as Partial<UserType>;
+
+    const missingFields = PROFILE_SCHEMA
+      .filter((field) => field.required)
+      .map((field) => field.name)
+      .filter((name) => {
+        const value = userData[name];
+        return value === undefined || value === null || value === "";
+      });
+
+    return {
+      userData,
+      missingFields,
+      isComplete: missingFields.length === 0,
+      schema: PROFILE_SCHEMA,
+    };
+  }
+
+  async getUserProfileVersion(uid: string): Promise<string> {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("updated_at")
+      .eq("id", uid)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    return (data as { updated_at?: string } | null)?.updated_at ?? "0";
+  }
+
+  async getAvatarMeta(uid: string): Promise<{
+    avatarUrl: string | null;
+    avatarThumbUrl: string | null;
+    avatarUpdatedAt: string | null;
+  }> {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("avatar_thumb_url, avatar_url, updated_at")
+      .eq("id", uid)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    return {
+      avatarUrl: typeof data?.avatar_url === "string" ? data.avatar_url : null,
+      avatarThumbUrl: typeof data?.avatar_thumb_url === "string" ? data.avatar_thumb_url : null,
+      avatarUpdatedAt: typeof data?.updated_at === "string" ? data.updated_at : null,
+    };
+  }
+
   async listPublicProfiles(ids: string[]): Promise<Array<{ id: string; displayName: string; avatarUrl: string | null }>> {
     const uniqueIds = Array.from(new Set(ids.filter((item) => typeof item === "string" && item.length > 0)));
     if (uniqueIds.length === 0) return [];
@@ -83,48 +158,57 @@ class UserService {
   }
 
   async getUserProfile(uid: string): Promise<UserProfileResponse> {
-    const { data, error } = await supabase
-      .from("user_profiles")
-      .select("id, display_name, displayname, avatar_url, locale, timezone")
-      .eq("id", uid)
-      .single();
+    const inFlight = this.profilePromiseByUid.get(uid);
+    if (inFlight) return inFlight;
 
-    if (error && error.code !== "PGRST116") {
-      throw error;
+    const promise = (async () => {
+      const [cachedProfile, cachedVersion, remoteVersion] = await Promise.all([
+        profileCacheService.getProfile(uid),
+        Promise.resolve(profileCacheService.getProfileVersion(uid)),
+        this.getUserProfileVersion(uid),
+      ]);
+
+      const memory = this.profileMemoryCache.get(uid);
+      if (memory && memory.version === remoteVersion) {
+        return memory.profile;
+      }
+      if (cachedProfile && cachedVersion === remoteVersion) {
+        this.profileMemoryCache.set(uid, { version: remoteVersion, profile: cachedProfile });
+        return cachedProfile;
+      }
+
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("id, display_name, displayname, avatar_url, locale, timezone")
+        .eq("id", uid)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+
+      const profile = this.buildUserProfileResponse(uid, data);
+      await profileCacheService.setProfile(uid, profile, remoteVersion);
+      this.profileMemoryCache.set(uid, { version: remoteVersion, profile });
+      return profile;
+    })();
+
+    this.profilePromiseByUid.set(uid, promise);
+    try {
+      return await promise;
+    } finally {
+      this.profilePromiseByUid.delete(uid);
     }
-
-    const userData: Partial<UserType> = {
-      uid,
-      displayName: data?.display_name ?? "",
-      displayname: data?.displayname ?? "",
-      avatarUrl: data?.avatar_url ?? null,
-      locale: data?.locale ?? "es",
-      timezone: data?.timezone ?? "America/Bogota",
-    } as Partial<UserType>;
-
-    const missingFields = PROFILE_SCHEMA
-      .filter((field) => field.required)
-      .map((field) => field.name)
-      .filter((name) => {
-        const value = userData[name];
-        return value === undefined || value === null || value === "";
-      });
-
-    return {
-      userData,
-      missingFields,
-      isComplete: missingFields.length === 0,
-      schema: PROFILE_SCHEMA,
-    };
   }
 
   async updateUserProfile(uid: string, data: Partial<UserType>): Promise<void> {
+    const updatedAt = new Date().toISOString();
     const payload: Record<string, unknown> = {
       display_name: typeof data.displayName === "string" ? data.displayName : "",
       displayname: typeof data.displayname === "string" ? data.displayname : "",
       locale: typeof data.locale === "string" && data.locale ? data.locale : "es",
       timezone: typeof data.timezone === "string" && data.timezone ? data.timezone : "America/Bogota",
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     };
 
     // Try update first
@@ -148,6 +232,16 @@ class UserService {
         throw insertError;
       }
     }
+
+    const profile = this.buildUserProfileResponse(uid, {
+      display_name: payload.display_name as string,
+      displayname: payload.displayname as string,
+      avatar_url: typeof data.avatarUrl === "string" ? data.avatarUrl : null,
+      locale: payload.locale as string,
+      timezone: payload.timezone as string,
+    });
+    await profileCacheService.setProfile(uid, profile, updatedAt);
+    this.profileMemoryCache.set(uid, { version: updatedAt, profile });
   }
 
   private resizeSquare(file: File, size: number, quality: number): Promise<Blob> {
@@ -175,7 +269,11 @@ class UserService {
     });
   }
 
-  async uploadAvatar(uid: string, file: File): Promise<string> {
+  async uploadAvatar(uid: string, file: File): Promise<{
+    avatarUrl: string;
+    avatarThumbUrl: string;
+    avatarUpdatedAt: string;
+  }> {
     // Generate 400x400 full + 200x200 thumb in parallel
     const [fullBlob, thumbBlob] = await Promise.all([
       this.resizeSquare(file, 400, 0.85),
@@ -200,12 +298,26 @@ class UserService {
     const avatarThumbUrl = `${thumbData.publicUrl}${cacheBuster}`;
 
     // Update profile with both URLs
+    const avatarUpdatedAt = new Date().toISOString();
     await supabase
       .from("user_profiles")
-      .update({ avatar_url: avatarUrl, avatar_thumb_url: avatarThumbUrl, updated_at: new Date().toISOString() })
+      .update({ avatar_url: avatarUrl, avatar_thumb_url: avatarThumbUrl, updated_at: avatarUpdatedAt })
       .eq("id", uid);
 
-    return avatarUrl;
+    const existing = this.profileMemoryCache.get(uid)?.profile ?? await profileCacheService.getProfile(uid);
+    if (existing) {
+      const profile: UserProfileResponse = {
+        ...existing,
+        userData: {
+          ...existing.userData,
+          avatarUrl,
+        },
+      };
+      await profileCacheService.setProfile(uid, profile, avatarUpdatedAt);
+      this.profileMemoryCache.set(uid, { version: avatarUpdatedAt, profile });
+    }
+
+    return { avatarUrl, avatarThumbUrl, avatarUpdatedAt };
   }
 
   async createInitialProfile(uid: string, email: string, displayName?: string): Promise<void> {

@@ -41,6 +41,27 @@ export interface LmsModuleWithLessons extends LmsModule {
 }
 
 class LmsService {
+  private async getLatestUpdatedAt(
+    table: "courses" | "course_modules" | "course_lessons",
+    filters?: Array<{ column: string; value: string }>
+  ): Promise<string> {
+    let query = supabase
+      .from(table)
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    for (const filter of filters ?? []) {
+      query = query.eq(filter.column, filter.value);
+    }
+
+    const { data, error } = await query.single();
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+    return (data as { updated_at?: string } | null)?.updated_at ?? "0";
+  }
+
   async getPublishedCourses(): Promise<LmsCourse[]> {
     const { data, error } = await supabase
       .from("courses")
@@ -93,6 +114,47 @@ class LmsService {
       ...module,
       lessons: lessonRows.filter((lesson) => lesson.module_id === module.id),
     }));
+  }
+
+  async getCatalogVersion(): Promise<string> {
+    const [coursesUpdatedAt, modulesUpdatedAt, lessonsUpdatedAt] = await Promise.all([
+      this.getLatestUpdatedAt("courses"),
+      this.getLatestUpdatedAt("course_modules"),
+      this.getLatestUpdatedAt("course_lessons"),
+    ]);
+
+    return [coursesUpdatedAt, modulesUpdatedAt, lessonsUpdatedAt].sort().at(-1) ?? "0";
+  }
+
+  async getCourseContentVersion(courseId: string): Promise<string> {
+    const modulesUpdatedAt = await this.getLatestUpdatedAt("course_modules", [{ column: "course_id", value: courseId }]);
+    const { data: modules, error } = await supabase
+      .from("course_modules")
+      .select("id")
+      .eq("course_id", courseId);
+
+    if (error) {
+      throw error;
+    }
+
+    const moduleIds = (modules ?? []).map((module) => String(module.id)).filter(Boolean);
+    let lessonsUpdatedAt = "0";
+    if (moduleIds.length > 0) {
+      const { data: lessons, error: lessonsError } = await supabase
+        .from("course_lessons")
+        .select("updated_at")
+        .in("module_id", moduleIds)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lessonsError && lessonsError.code !== "PGRST116") {
+        throw lessonsError;
+      }
+      lessonsUpdatedAt = (lessons as { updated_at?: string } | null)?.updated_at ?? "0";
+    }
+
+    return [modulesUpdatedAt, lessonsUpdatedAt].sort().at(-1) ?? "0";
   }
 }
 

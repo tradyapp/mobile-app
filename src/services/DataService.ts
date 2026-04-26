@@ -1,10 +1,5 @@
 import { supabase } from "@/lib/supabase";
-
-const SYMBOLS_CACHE_KEY = "trady_symbols_cache";
-const LAST_UPDATE_KEY = "trady_symbols_last_update";
-const DB_NAME = "TradyCache";
-const DB_VERSION = 1;
-const IMAGES_STORE = "symbolImages";
+import { clientCacheService } from "@/services/cache/ClientCacheService";
 
 type SymbolType = "STOCK" | "FOREX" | "CRYPTO";
 
@@ -24,15 +19,16 @@ interface DbSymbol {
   updated_at?: string;
 }
 
+const SYMBOLS_PAYLOAD_KEY = "symbols:catalog";
+
 function mapMarket(market: DbSymbol["market"]): SymbolType {
   if (market === "STOCKS") return "STOCK";
   return market;
 }
 
 class DataService {
-  private dbPromise: Promise<IDBDatabase> | null = null;
   private symbolsCache: Symbol[] | null = null;
-  private isLoading = false;
+  private inFlightPromise: Promise<Symbol[]> | null = null;
 
   private isBlobUrl(value: string | null | undefined): boolean {
     return typeof value === "string" && value.startsWith("blob:");
@@ -54,95 +50,39 @@ class DataService {
     };
   }
 
-  private async getDB(): Promise<IDBDatabase> {
-    if (this.dbPromise) return this.dbPromise;
-
-    this.dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(IMAGES_STORE)) {
-          db.createObjectStore(IMAGES_STORE);
-        }
-      };
-    });
-
-    return this.dbPromise;
+  private assetKey(symbol: string): string {
+    return `symbols:asset:${symbol}`;
   }
 
-  private async saveImage(symbol: string, blob: Blob): Promise<void> {
-    const db = await this.getDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([IMAGES_STORE], "readwrite");
-      const store = transaction.objectStore(IMAGES_STORE);
-      const request = store.put(blob, symbol);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  private async getImage(symbol: string): Promise<string | null> {
-    try {
-      const db = await this.getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([IMAGES_STORE], "readonly");
-        const store = transaction.objectStore(IMAGES_STORE);
-        const request = store.get(symbol);
-
-        request.onsuccess = () => {
-          if (request.result) {
-            resolve(URL.createObjectURL(request.result));
-          } else {
-            resolve(null);
+  private async primeSymbolAssets(symbols: Symbol[]): Promise<void> {
+    await Promise.all(
+      symbols
+        .filter((symbol) => symbol.icon_url)
+        .map(async (symbol) => {
+          try {
+            const key = this.assetKey(symbol.symbol);
+            const exists = await clientCacheService.hasAsset(key);
+            if (exists) return;
+            await clientCacheService.cacheAssetFromUrl(key, symbol.icon_url as string);
+          } catch {
+            // Ignore individual image failures.
           }
-        };
-        request.onerror = () => reject(request.error);
-      });
-    } catch {
-      return null;
-    }
-  }
-
-  private async downloadAndCacheImage(url: string, symbol: string): Promise<void> {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch image");
-      const blob = await response.blob();
-      await this.saveImage(symbol, blob);
-    } catch (error) {
-      console.error(`Error downloading image for ${symbol}:`, error);
-    }
-  }
-
-  private async loadCachedImages(symbols: Symbol[]): Promise<Symbol[]> {
-    return await Promise.all(
-      symbols.map(async (symbol) => {
-        const normalized = this.normalizeSymbolRecord(symbol);
-
-        if (normalized.icon_url) {
-          const cachedImage = await this.getImage(symbol.symbol);
-          return {
-            ...normalized,
-            photo: cachedImage || normalized.icon_url,
-          };
-        }
-
-        return normalized;
-      })
+        }),
     );
   }
 
-  private async downloadAllImages(symbols: Symbol[]): Promise<void> {
-    const downloadPromises = symbols
-      .filter((symbol) => symbol.icon_url)
-      .map((symbol) => this.downloadAndCacheImage(symbol.icon_url as string, symbol.symbol));
-
-    await Promise.all(downloadPromises);
+  private async hydrateSymbolAssets(symbols: Symbol[]): Promise<Symbol[]> {
+    return Promise.all(
+      symbols.map(async (symbol) => {
+        const normalized = this.normalizeSymbolRecord(symbol);
+        if (!normalized.icon_url) return normalized;
+        const cachedAssetUrl = await clientCacheService.getAssetObjectUrl(this.assetKey(normalized.symbol));
+        return {
+          ...normalized,
+          photo: cachedAssetUrl || normalized.icon_url,
+        };
+      }),
+    );
   }
 
   async getLastUpdate(): Promise<string> {
@@ -157,68 +97,59 @@ class DataService {
       throw error;
     }
 
-    return data?.updated_at ?? "0";
+    return (data as { updated_at?: string } | null)?.updated_at ?? "0";
   }
 
   async loadSymbols(): Promise<Symbol[]> {
-    if (this.isLoading) {
-      while (this.isLoading) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+    if (this.inFlightPromise) return this.inFlightPromise;
+    if (this.symbolsCache) return this.symbolsCache;
+
+    this.inFlightPromise = (async () => {
+      const cachedPayload = await clientCacheService.getPayload<Symbol[]>(SYMBOLS_PAYLOAD_KEY);
+      const cachedVersion = clientCacheService.readMeta(SYMBOLS_PAYLOAD_KEY)?.version ?? null;
+
+      if (cachedPayload) {
+        this.symbolsCache = await this.hydrateSymbolAssets(cachedPayload.map((item) => this.normalizeSymbolRecord(item)));
       }
-      return this.symbolsCache || [];
-    }
 
-    if (this.symbolsCache) {
-      return this.symbolsCache;
-    }
+      try {
+        const currentVersion = await this.getLastUpdate();
+        if (cachedPayload && cachedVersion === currentVersion) {
+          return this.symbolsCache ?? [];
+        }
 
-    this.isLoading = true;
+        const { data, error } = await supabase
+          .from("symbols")
+          .select("ticker, market, name, icon_url")
+          .order("ticker", { ascending: true });
 
-    try {
-      const cachedData = localStorage.getItem(SYMBOLS_CACHE_KEY);
-      const cachedLastUpdate = localStorage.getItem(LAST_UPDATE_KEY);
-      const currentLastUpdate = await this.getLastUpdate();
+        if (error) throw error;
 
-      if (cachedData && cachedLastUpdate === currentLastUpdate) {
-        const symbols = (JSON.parse(cachedData) as Partial<Symbol>[]).map((item) => this.normalizeSymbolRecord(item));
-        this.symbolsCache = await this.loadCachedImages(symbols);
+        const symbols = (data as DbSymbol[]).map((item) => this.normalizeSymbolRecord({
+          symbol: item.ticker,
+          type: mapMarket(item.market),
+          name: item.name,
+          photo: item.icon_url,
+          icon_url: item.icon_url,
+        }));
+
+        await clientCacheService.setPayload(SYMBOLS_PAYLOAD_KEY, symbols);
+        clientCacheService.writeMeta(SYMBOLS_PAYLOAD_KEY, currentVersion);
+        void this.primeSymbolAssets(symbols);
+
+        this.symbolsCache = await this.hydrateSymbolAssets(symbols);
         return this.symbolsCache;
+      } catch (error) {
+        if (this.symbolsCache) {
+          return this.symbolsCache;
+        }
+        throw error;
+      } finally {
+        this.inFlightPromise = null;
       }
+    })();
 
-      const { data, error } = await supabase
-        .from("symbols")
-        .select("ticker, market, name, icon_url")
-        .order("ticker", { ascending: true });
-
-      if (error) throw error;
-
-      const symbols = (data as DbSymbol[]).map((item) => this.normalizeSymbolRecord({
-        symbol: item.ticker,
-        type: mapMarket(item.market),
-        name: item.name,
-        photo: item.icon_url,
-        icon_url: item.icon_url,
-      }));
-
-      await this.downloadAllImages(symbols);
-
-      localStorage.setItem(SYMBOLS_CACHE_KEY, JSON.stringify(symbols));
-      localStorage.setItem(LAST_UPDATE_KEY, currentLastUpdate);
-
-      this.symbolsCache = await this.loadCachedImages(symbols);
-      return this.symbolsCache;
-    } catch (error) {
-      const cachedData = localStorage.getItem(SYMBOLS_CACHE_KEY);
-      if (cachedData) {
-        const symbols = (JSON.parse(cachedData) as Partial<Symbol>[]).map((item) => this.normalizeSymbolRecord(item));
-        this.symbolsCache = await this.loadCachedImages(symbols);
-        return this.symbolsCache;
-      }
-
-      throw error;
-    } finally {
-      this.isLoading = false;
-    }
+    return this.inFlightPromise;
   }
 
   getSymbols(): Symbol[] {
