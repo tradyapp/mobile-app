@@ -12,6 +12,9 @@ import { useUserPrefsStore } from "@/stores/userPrefsStore";
 import { toast } from "sonner";
 import Cropper, { type Area, type Point } from "react-easy-crop";
 import "react-easy-crop/react-easy-crop.css";
+import { brokerService, type BrokerAccount } from "@/services/BrokerService";
+import { formatCurrency, relativeTime } from "@/modules/broker/utils";
+import { useBrokerStore } from "@/stores/brokerStore";
 
 // ── Shared context for profile state ──
 
@@ -28,7 +31,7 @@ interface ProfileData {
 interface TradingAccountData {
   id: string;
   name: string;
-  amount: number;
+  balance: number;
   accountType: "simulation";
   createdAt: string;
 }
@@ -40,6 +43,8 @@ interface ProfileCtxValue {
   setIsLogoutDialogOpen: (open: boolean) => void;
   profile: ProfileData;
   tradingAccounts: TradingAccountData[];
+  activeTradingAccountId: string | null;
+  selectTradingAccount: (accountId: string) => void;
   updateAvatar: (file: File) => Promise<void>;
   updateProfileNames: (values: { displayName: string; displayname: string }) => Promise<void>;
   addTradingAccount: (values: { name: string; amount: number; accountType: "simulation" }) => Promise<void>;
@@ -102,7 +107,15 @@ const getCroppedAvatarFile = async (imageSrc: string, cropPixels: Area): Promise
 
 function AccountScreen() {
   const { navigateTo } = useDrawerNav();
-  const { locale, isUpdatingLocale, setIsLogoutDialogOpen, profile, tradingAccounts } = useContext(ProfileCtx);
+  const {
+    locale,
+    isUpdatingLocale,
+    setIsLogoutDialogOpen,
+    profile,
+    tradingAccounts,
+    activeTradingAccountId,
+  } = useContext(ProfileCtx);
+  const activeAccount = tradingAccounts.find((account) => account.id === activeTradingAccountId) ?? null;
 
   return (
     <div>
@@ -140,7 +153,7 @@ function AccountScreen() {
         <ListItem
           link
           title="Trading Accounts"
-          after={`${tradingAccounts.length}`}
+          after={activeAccount ? activeAccount.name : `${tradingAccounts.length}`}
           onClick={() => navigateTo("trading-accounts")}
         />
         <ListItem link title="Subscriptions" />
@@ -170,7 +183,7 @@ function AccountScreen() {
 }
 
 function TradingAccountsScreen() {
-  const { tradingAccounts, addTradingAccount } = useContext(ProfileCtx);
+  const { tradingAccounts, activeTradingAccountId, selectTradingAccount, addTradingAccount } = useContext(ProfileCtx);
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -212,9 +225,6 @@ function TradingAccountsScreen() {
     if (type === "simulation") return "Simulación";
     return type;
   };
-
-  const formatAmount = (value: number) =>
-    new Intl.NumberFormat("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
   return (
     <div>
@@ -306,9 +316,11 @@ function TradingAccountsScreen() {
           tradingAccounts.map((item) => (
             <ListItem
               key={item.id}
+              link
               title={item.name}
-              subtitle={getTypeLabel(item.accountType)}
-              after={formatAmount(item.amount)}
+              subtitle={`${formatCurrency(item.balance)} • ${getTypeLabel(item.accountType)} • ${relativeTime(item.createdAt)}`}
+              after={activeTradingAccountId === item.id ? "Activa" : undefined}
+              onClick={() => selectTradingAccount(item.id)}
             />
           ))
         )}
@@ -587,6 +599,10 @@ export default function ProfileDrawer({
   const user = useAuthStore((state) => state.user);
   const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
   const [tradingAccounts, setTradingAccounts] = useState<TradingAccountData[]>([]);
+  const activeTradingAccountId = useBrokerStore((state) => state.selectedAccountId);
+  const setBrokerAccounts = useBrokerStore((state) => state.setAccounts);
+  const selectBrokerAccount = useBrokerStore((state) => state.selectAccount);
+  const brokerRefreshKey = useBrokerStore((state) => state.refreshKey);
   const [profile, setProfile] = useState<ProfileData>({
     displayName: "",
     displayname: "",
@@ -631,29 +647,26 @@ export default function ProfileDrawer({
   }, [isOpen, user?.uid, user?.email, setStoreLocale]);
 
   useEffect(() => {
-    if (!isOpen || !user?.uid) return;
-    const key = `trady_trading_accounts_${user.uid}`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
+    let active = true;
+    if (!isOpen) return;
+
+    brokerService
+      .listAccounts()
+      .then((accounts) => {
+        if (!active) return;
+        const mapped = accounts.map(mapBrokerAccountToTradingAccount);
+        setTradingAccounts(mapped);
+        setBrokerAccounts(accounts);
+      })
+      .catch(() => {
+        if (!active) return;
         setTradingAccounts([]);
-        return;
-      }
-      const parsed = JSON.parse(raw) as TradingAccountData[];
-      if (!Array.isArray(parsed)) {
-        setTradingAccounts([]);
-        return;
-      }
-      setTradingAccounts(
-        parsed.map((item) => ({
-          ...item,
-          accountType: item?.accountType === "simulation" ? "simulation" : "simulation",
-        }))
-      );
-    } catch {
-      setTradingAccounts([]);
-    }
-  }, [isOpen, user?.uid]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, brokerRefreshKey, setBrokerAccounts]);
 
   const handleLanguageChange = async (nextLocale: "en" | "es") => {
     if (!user?.uid || nextLocale === locale || isUpdatingLocale) return;
@@ -684,19 +697,14 @@ export default function ProfileDrawer({
   };
 
   const addTradingAccount = async (values: { name: string; amount: number; accountType: "simulation" }) => {
-    if (!user?.uid) return;
-    const next: TradingAccountData = {
-      id: crypto.randomUUID(),
-      name: values.name,
-      amount: values.amount,
-      accountType: values.accountType,
-      createdAt: new Date().toISOString(),
-    };
-    setTradingAccounts((prev) => {
-      const updated = [next, ...prev];
-      localStorage.setItem(`trady_trading_accounts_${user.uid}`, JSON.stringify(updated));
-      return updated;
-    });
+    const created = await brokerService.createAccount({ name: values.name, balance: values.amount });
+    setTradingAccounts((prev) => [mapBrokerAccountToTradingAccount(created), ...prev]);
+    setBrokerAccounts([created, ...useBrokerStore.getState().accounts]);
+    selectBrokerAccount(created.id);
+  };
+
+  const selectTradingAccount = (accountId: string) => {
+    selectBrokerAccount(accountId);
   };
 
   const ctxValue: ProfileCtxValue = {
@@ -706,6 +714,8 @@ export default function ProfileDrawer({
     setIsLogoutDialogOpen,
     profile,
     tradingAccounts,
+    activeTradingAccountId,
+    selectTradingAccount,
     updateAvatar,
     updateProfileNames,
     addTradingAccount,
@@ -766,4 +776,14 @@ export default function ProfileDrawer({
         )}
     </ProfileCtx.Provider>
   );
+}
+
+function mapBrokerAccountToTradingAccount(account: BrokerAccount): TradingAccountData {
+  return {
+    id: account.id,
+    name: account.name,
+    balance: Number(account.balance),
+    accountType: "simulation",
+    createdAt: account.created_at,
+  };
 }

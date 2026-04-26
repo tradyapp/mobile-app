@@ -288,6 +288,7 @@ function DeleteForm({
   const navigate = useBrokerStore((s) => s.navigate);
   const bumpRefresh = useBrokerStore((s) => s.bumpRefresh);
   const setAccounts = useBrokerStore((s) => s.setAccounts);
+  const selectAccount = useBrokerStore((s) => s.selectAccount);
   const accounts = useBrokerStore((s) => s.accounts);
 
   const [confirmName, setConfirmName] = useState("");
@@ -303,7 +304,9 @@ function DeleteForm({
     setError(null);
     try {
       await brokerService.deleteAccount(accountId);
-      setAccounts(accounts.filter((a) => a.id !== accountId));
+      const remainingAccounts = accounts.filter((a) => a.id !== accountId);
+      setAccounts(remainingAccounts);
+      selectAccount(remainingAccounts[0]?.id ?? null);
       bumpRefresh();
       navigate({ kind: "accounts" });
     } catch (err) {
