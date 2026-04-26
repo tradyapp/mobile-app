@@ -251,6 +251,7 @@ function TradingAccountsScreen() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Cuenta Principal"
+              inputClassName="text-base text-white"
             />
             <ListInput
               label="Monto"
@@ -258,6 +259,7 @@ function TradingAccountsScreen() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Ej: 1000"
+              inputClassName="text-base text-white"
             />
             <div className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2">
               <label className="block text-xs text-zinc-400">Tipo de cuenta</label>
@@ -265,7 +267,7 @@ function TradingAccountsScreen() {
                 <select
                   value={accountType}
                   onChange={(e) => setAccountType(e.target.value as "simulation")}
-                  className="w-full appearance-none bg-transparent pr-8 text-sm text-zinc-100 focus:outline-none"
+                  className="w-full appearance-none bg-transparent pr-8 text-base text-zinc-100 focus:outline-none"
                 >
                   <option value="simulation">Simulación</option>
                 </select>

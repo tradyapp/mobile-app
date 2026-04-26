@@ -50,31 +50,71 @@ export default function TradeTab() {
   switch (view.kind) {
     case "accounts":
       if (loadingActiveAccount) {
-        return <TradeEmptyState message="Loading your trading account..." />;
+        return (
+          <TradeViewport>
+            <TradeEmptyState message="Loading your trading account..." />
+          </TradeViewport>
+        );
       }
       if (!selectedAccountId) {
         return (
-          <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
+          <TradeViewport>
+            <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
+          </TradeViewport>
         );
       }
-      return <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />;
+      return (
+        <TradeViewport>
+          <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />
+        </TradeViewport>
+      );
     case "account-summary":
-      return <BrokerAccountSummaryScreen accountId={view.accountId} tab={view.tab} />;
+      return (
+        <TradeViewport>
+          <BrokerAccountSummaryScreen accountId={view.accountId} tab={view.tab} />
+        </TradeViewport>
+      );
     case "trade":
-      return <BrokerTradeScreen accountId={view.accountId} />;
+      return (
+        <TradeViewport>
+          <BrokerTradeScreen accountId={view.accountId} />
+        </TradeViewport>
+      );
     case "settings":
-      return <BrokerSettingsScreen accountId={view.accountId} option={view.option} />;
+      return (
+        <TradeViewport>
+          <BrokerSettingsScreen accountId={view.accountId} option={view.option} />
+        </TradeViewport>
+      );
     case "order-detail":
       // Order detail not implemented in Phase 1 MVP — fall through to summary.
-      return <BrokerAccountSummaryScreen accountId={view.accountId} tab="orders" />;
+      return (
+        <TradeViewport>
+          <BrokerAccountSummaryScreen accountId={view.accountId} tab="orders" />
+        </TradeViewport>
+      );
     default:
       if (!selectedAccountId) {
         return (
-          <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
+          <TradeViewport>
+            <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
+          </TradeViewport>
         );
       }
-      return <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />;
+      return (
+        <TradeViewport>
+          <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />
+        </TradeViewport>
+      );
   }
+}
+
+function TradeViewport({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 top-0 bottom-0 overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+88px)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
 }
 
 function TradeEmptyState({ message }: { message: string }) {

@@ -190,7 +190,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
                 placeholder={symbolPlaceholder}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm uppercase text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base uppercase text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
               />
             </Field>
 
@@ -220,7 +220,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
                 step="any"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
               />
             </Field>
 
@@ -228,7 +228,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
               <select
                 value={orderType}
                 onChange={(e) => setOrderType(e.target.value as BrokerOrderType)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
               >
                 <option value="market">Market</option>
                 <option value="limit">Limit</option>
@@ -245,7 +245,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
                   step="any"
                   value={stopPrice}
                   onChange={(e) => setStopPrice(e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
                 />
               </Field>
             )}
@@ -258,7 +258,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
                   step="any"
                   value={limitPrice}
                   onChange={(e) => setLimitPrice(e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
                 />
               </Field>
             )}
