@@ -79,6 +79,21 @@ class ApiClient {
     return await response.json();
   }
 
+  async patch<T>(endpoint: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
+    const { requireAuth = true, ...fetchOptions } = options;
+
+    const headers = await this.prepareHeaders(requireAuth);
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: "PATCH",
+      headers: { ...headers, ...fetchOptions.headers },
+      body: data ? JSON.stringify(data) : undefined,
+      ...fetchOptions,
+    });
+
+    if (!response.ok) await this.handleErrorResponse(response);
+    return await response.json();
+  }
+
   async delete<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { requireAuth = true, ...fetchOptions } = options;
 
