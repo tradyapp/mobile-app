@@ -205,138 +205,140 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
       <AppNavbar title={`New ${ASSET_LABEL[assetType]} Order`} left={navbarLeft} />
 
       <Block>
-        <div className="grid gap-4">
-          <Field label="Symbol">
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              disabled={symbolsLoading || symbols.length === 0}
-              className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-left text-base text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-            >
-              {selectedSymbol ? (
-                <>
-                  <BrokerSymbolImage
-                    symbol={selectedSymbol.ticker}
-                    iconUrl={selectedSymbol.iconUrl}
-                    size={32}
-                  />
-                  <div className="flex flex-1 flex-col overflow-hidden">
-                    <span className="font-medium">{selectedSymbol.ticker}</span>
-                    {selectedSymbol.name && (
-                      <span className="truncate text-xs text-zinc-500">
-                        {selectedSymbol.name}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-zinc-500">›</span>
-                </>
-              ) : (
-                <span className="text-zinc-500">
-                  {symbolsLoading
-                    ? "Loading symbols…"
-                    : `No symbols available for ${ASSET_LABEL[assetType]}`}
-                </span>
-              )}
-            </button>
-            {symbolsError && (
-              <span className="mt-1 text-xs text-rose-400">{symbolsError}</span>
-            )}
-          </Field>
-
-            <Field label="Side">
-              <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
-                <SegmentedButton active={side === "buy"} onClick={() => setSide("buy")}>
-                  Buy
-                </SegmentedButton>
-                <SegmentedButton active={side === "sell"} onClick={() => setSide("sell")}>
-                  Sell
-                </SegmentedButton>
-              </Segmented>
-            </Field>
-
-            <Field label="Quantity">
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="any"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
-              />
-            </Field>
-
-            <Field label="Order Type">
-              <select
-                value={orderType}
-                onChange={(e) => setOrderType(e.target.value as BrokerOrderType)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
+        {symbolsLoading ? (
+          <TradeOrderSkeleton />
+        ) : (
+          <div className="grid gap-4">
+            <Field label="Symbol">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                disabled={symbolsLoading || symbols.length === 0}
+                className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-left text-base text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
               >
-                <option value="market">Market</option>
-                <option value="limit">Limit</option>
-                <option value="stop">Stop</option>
-                <option value="stoplimit">Stop-Limit</option>
-              </select>
+                {selectedSymbol ? (
+                  <>
+                    <BrokerSymbolImage
+                      symbol={selectedSymbol.ticker}
+                      iconUrl={selectedSymbol.iconUrl}
+                      size={32}
+                    />
+                    <div className="flex flex-1 flex-col overflow-hidden">
+                      <span className="font-medium">{selectedSymbol.ticker}</span>
+                      {selectedSymbol.name && (
+                        <span className="truncate text-xs text-zinc-500">
+                          {selectedSymbol.name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-zinc-500">›</span>
+                  </>
+                ) : (
+                  <span className="text-zinc-500">
+                    {`No symbols available for ${ASSET_LABEL[assetType]}`}
+                  </span>
+                )}
+              </button>
+              {symbolsError && (
+                <span className="mt-1 text-xs text-rose-400">{symbolsError}</span>
+              )}
             </Field>
 
-            {(orderType === "stop" || orderType === "stoplimit") && (
-              <Field label="Stop Price">
+              <Field label="Side">
+                <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
+                  <SegmentedButton active={side === "buy"} onClick={() => setSide("buy")}>
+                    Buy
+                  </SegmentedButton>
+                  <SegmentedButton active={side === "sell"} onClick={() => setSide("sell")}>
+                    Sell
+                  </SegmentedButton>
+                </Segmented>
+              </Field>
+
+              <Field label="Quantity">
                 <input
                   type="number"
                   inputMode="decimal"
+                  min={0}
                   step="any"
-                  value={stopPrice}
-                  onChange={(e) => setStopPrice(e.target.value)}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
                   className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
                 />
               </Field>
-            )}
 
-            {(orderType === "limit" || orderType === "stoplimit") && (
-              <Field label="Limit Price">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(e.target.value)}
+              <Field label="Order Type">
+                <select
+                  value={orderType}
+                  onChange={(e) => setOrderType(e.target.value as BrokerOrderType)}
                   className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
-                />
+                >
+                  <option value="market">Market</option>
+                  <option value="limit">Limit</option>
+                  <option value="stop">Stop</option>
+                  <option value="stoplimit">Stop-Limit</option>
+                </select>
               </Field>
-            )}
 
-            <Field label="Time in Force">
-              <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
-                <SegmentedButton active={tif === "day"} onClick={() => setTif("day")}>
-                  Day
-                </SegmentedButton>
-                <SegmentedButton active={tif === "gtc"} onClick={() => setTif("gtc")}>
-                  GTC
-                </SegmentedButton>
-              </Segmented>
-            </Field>
+              {(orderType === "stop" || orderType === "stoplimit") && (
+                <Field label="Stop Price">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={stopPrice}
+                    onChange={(e) => setStopPrice(e.target.value)}
+                    className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </Field>
+              )}
 
-            {error && (
-              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                {success}
-              </div>
-            )}
+              {(orderType === "limit" || orderType === "stoplimit") && (
+                <Field label="Limit Price">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={limitPrice}
+                    onChange={(e) => setLimitPrice(e.target.value)}
+                    className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </Field>
+              )}
 
-            <Button onClick={handleSubmit} disabled={submitting || symbolsLoading || symbols.length === 0}>
-              {submitting ? "Submitting..." : `Place ${side} order`}
+              <Field label="Time in Force">
+                <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
+                  <SegmentedButton active={tif === "day"} onClick={() => setTif("day")}>
+                    Day
+                  </SegmentedButton>
+                  <SegmentedButton active={tif === "gtc"} onClick={() => setTif("gtc")}>
+                    GTC
+                  </SegmentedButton>
+                </Segmented>
+              </Field>
+
+              {error && (
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                  {error}
+                </div>
+              )}
+              {success && (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  {success}
+                </div>
+              )}
+
+              <Button onClick={handleSubmit} disabled={submitting || symbols.length === 0}>
+                {submitting ? "Submitting..." : `Place ${side} order`}
+              </Button>
+            <Button
+              outline
+              onClick={() => navigate({ kind: "account-summary", accountId, tab: "summary" })}
+            >
+              Cancel
             </Button>
-          <Button
-            outline
-            onClick={() => navigate({ kind: "account-summary", accountId, tab: "summary" })}
-          >
-            Cancel
-          </Button>
-        </div>
+          </div>
+        )}
       </Block>
 
       <AppDrawer
@@ -389,6 +391,51 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
         </div>
       </AppDrawer>
     </>
+  );
+}
+
+function TradeOrderSkeleton() {
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-col gap-1.5">
+        <div className="h-3 w-16 rounded-full bg-white/8 animate-pulse" />
+        <div className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-xl bg-white/6 animate-pulse" />
+            <div className="flex-1">
+              <div className="h-4 w-20 rounded-full bg-white/8 animate-pulse" />
+              <div className="mt-2 h-3 w-28 rounded-full bg-white/6 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <div className="h-3 w-12 rounded-full bg-white/8 animate-pulse" />
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
+          <div className="h-10 rounded-xl bg-white/6 animate-pulse" />
+          <div className="h-10 rounded-xl bg-white/6 animate-pulse" />
+        </div>
+      </div>
+
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex flex-col gap-1.5">
+          <div className="h-3 w-20 rounded-full bg-white/8 animate-pulse" />
+          <div className="h-14 rounded-2xl border border-zinc-800 bg-zinc-900/70 animate-pulse" />
+        </div>
+      ))}
+
+      <div className="flex flex-col gap-1.5">
+        <div className="h-3 w-24 rounded-full bg-white/8 animate-pulse" />
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
+          <div className="h-10 rounded-xl bg-white/6 animate-pulse" />
+          <div className="h-10 rounded-xl bg-white/6 animate-pulse" />
+        </div>
+      </div>
+
+      <div className="h-12 rounded-2xl bg-white/8 animate-pulse" />
+      <div className="h-12 rounded-2xl border border-white/8 bg-transparent animate-pulse" />
+    </div>
   );
 }
 
