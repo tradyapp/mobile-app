@@ -70,20 +70,9 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
     [orders],
   );
 
-  const totalUnrealized = useMemo(
-    () =>
-      positions.reduce((acc, p) => acc + (p.unrealized_pnl ?? 0), 0),
-    [positions],
-  );
-
   const equity = account ? Number(account.balance) +
     positions.reduce((acc, p) => acc + (p.market_value ?? p.cost_basis ?? 0), 0)
     : 0;
-  const totalMarketValue = useMemo(
-    () => positions.reduce((acc, p) => acc + (p.market_value ?? 0), 0),
-    [positions],
-  );
-  const completedOrders = historicalOrders.filter((order) => order.status === "completed").length;
 
   const handleTabChange = (next: BrokerSummaryTab) => {
     navigate({ kind: "account-summary", accountId, tab: next });
@@ -94,43 +83,24 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
       <AppNavbar title={account?.name ?? "Account"} />
 
       <Block className="mb-2">
-        <div className="overflow-hidden rounded-[28px] border border-emerald-500/15 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.22),_transparent_38%),linear-gradient(180deg,rgba(24,24,27,0.96),rgba(9,9,11,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
-          <div className="flex items-start justify-between gap-4">
+        <div className="rounded-[28px] border border-zinc-800 bg-zinc-950/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <span className="text-[11px] uppercase tracking-[0.24em] text-emerald-200/70">
-                Active simulation account
-              </span>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Buying Power</div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-white">
                 {account ? formatCurrency(account.balance) : "—"}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Cash balance ready for new orders
-              </p>
+              </div>
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-zinc-300">
-              Paper trading
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Account Value</div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-white">
+                {formatCurrency(equity)}
+              </div>
             </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <MetricTile label="Equity" value={formatCurrency(equity)} tone="neutral" />
-            <MetricTile label="Market Value" value={formatCurrency(totalMarketValue)} tone="neutral" />
-            <MetricTile label="Unrealized PnL" value={formatCurrency(totalUnrealized)} tone={totalUnrealized >= 0 ? "positive" : "negative"} />
-            <MetricTile label="Open Positions" value={String(positions.length)} tone="neutral" />
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-400">
-            <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1">
-              {activeOrders.length} open orders
-            </span>
-            <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1">
-              {completedOrders} completed orders
-            </span>
           </div>
 
           <div className="mt-5 flex gap-2">
             <Button
-              large
               onClick={() => navigate({ kind: "trade", accountId })}
               className="flex-1"
             >
@@ -379,30 +349,6 @@ function OrderRow({ order }: { order: BrokerOrder }) {
         </div>
       </div>
     </Card>
-  );
-}
-
-function MetricTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "neutral" | "positive" | "negative";
-}) {
-  const toneClass =
-    tone === "positive"
-      ? "text-emerald-300"
-      : tone === "negative"
-        ? "text-rose-300"
-        : "text-white";
-
-  return (
-    <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{label}</div>
-      <div className={`mt-2 text-base font-semibold ${toneClass}`}>{value}</div>
-    </div>
   );
 }
 

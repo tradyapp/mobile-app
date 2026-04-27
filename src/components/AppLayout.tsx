@@ -17,7 +17,7 @@ import TradeTab from "@/modules/tabs/TradeTab";
 import ChatRoomPage from "@/modules/chat/ChatRoomPage";
 
 const AppLayout = () => {
-  const { currentTab, setCurrentTab } = useNavigationStore();
+  const { currentTab, lastRoute, setCurrentTab, setLastRoute } = useNavigationStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -69,15 +69,20 @@ const AppLayout = () => {
 
   useEffect(() => {
     if (!isKnownTabPath) {
-      navigate("/orion", { replace: true });
+      navigate(lastRoute || "/orion", { replace: true });
     }
-  }, [isKnownTabPath, navigate]);
+  }, [isKnownTabPath, lastRoute, navigate]);
 
   useEffect(() => {
     if (currentTab !== activeTab.id) {
       setCurrentTab(activeTab.id);
     }
   }, [activeTab.id, currentTab, setCurrentTab]);
+
+  useEffect(() => {
+    if (!isKnownTabPath) return;
+    setLastRoute(location.pathname);
+  }, [isKnownTabPath, location.pathname, setLastRoute]);
 
   // Chat room renders standalone — no Page, no tabbar, no AnimatePresence
   if (isChatRoom) {
@@ -115,7 +120,10 @@ const AppLayout = () => {
                   <TabbarLink
                     key={tab.id}
                     active={activeTab.id === tab.id}
-                    onClick={() => navigate(tab.path)}
+                    onClick={() => {
+                      setLastRoute(tab.path);
+                      navigate(tab.path);
+                    }}
                     icon={<span className="text-2xl">{tab.icon}</span>}
                     label={tab.label}
                   />
