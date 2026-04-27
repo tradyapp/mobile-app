@@ -83,23 +83,26 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
       <AppNavbar title={account?.name ?? "Account"} />
 
       <Block className="mb-2">
-        <div className="rounded-[28px] border border-zinc-800 bg-zinc-950/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Buying Power</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight text-white">
-                {account ? formatCurrency(account.balance) : "—"}
-              </div>
+        <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(160deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+          <div className="pointer-events-none absolute inset-0 rounded-[30px] border border-emerald-400/10" />
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-80" />
+          <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-400/10 blur-3xl" />
+          <div className="pointer-events-none absolute left-5 top-5 h-14 w-24 rounded-full bg-white/6 blur-2xl" />
+
+          <div className="relative">
+            <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Account Value</div>
+            <div className="mt-3 text-[2.15rem] font-semibold tracking-tight text-white">
+              {formatCurrency(equity)}
             </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Account Value</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight text-white">
-                {formatCurrency(equity)}
-              </div>
+            <div className="mt-3 text-xs text-zinc-500">
+              Buying Power
+              <span className="ml-2 text-sm font-medium text-zinc-300">
+                {account ? formatCurrency(account.balance) : "—"}
+              </span>
             </div>
           </div>
 
-          <div className="mt-5 flex gap-2">
+          <div className="relative mt-5 flex gap-2">
             <Button
               onClick={() => navigate({ kind: "trade", accountId })}
               className="flex-1"
