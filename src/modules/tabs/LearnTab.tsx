@@ -218,6 +218,17 @@ function getLessonTextContent(lesson: LmsLesson): string {
   return (value as string | undefined) ?? "";
 }
 
+function cleanModuleSummary(value: string | null | undefined): string {
+  if (!value) return "";
+
+  const cleaned = value
+    .replace(/[#>*`_[\]()-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.slice(0, 160);
+}
+
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -1098,6 +1109,7 @@ export default function LearnTab() {
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     const duration = getModuleDuration(selectedModule);
     const thumbnail = selectedCourse ? getModuleThumbnail(selectedCourse, selectedModule) : null;
+    const summary = cleanModuleSummary(selectedModule.description || selectedCourse?.description);
 
     return (
       <div className="pb-24">
@@ -1109,29 +1121,26 @@ export default function LearnTab() {
               <div className="absolute inset-0 bg-zinc-900" />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/75 to-zinc-950/20" />
-            <div className="relative min-h-44 p-5 flex flex-col justify-end">
-              <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
-                {selectedCourse?.title ?? "Trading"}
-              </p>
-              <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
-                {selectedModule.title}
-              </h2>
-              {(selectedModule.description || selectedCourse?.description) && (
-                <p className="text-zinc-300 text-sm mt-2 leading-snug line-clamp-3">
-                  {selectedModule.description || selectedCourse?.description}
+            <div className="relative min-h-44 p-5 flex items-end gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
+                  {selectedCourse?.title ?? "Trading"}
                 </p>
-              )}
+                <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+                  {selectedModule.title}
+                </h2>
+                {summary && (
+                  <p className="text-zinc-300 text-sm mt-2 leading-snug line-clamp-3">
+                    {summary}
+                  </p>
+                )}
+                <p className="text-zinc-400 text-xs mt-3">
+                  {completed}/{total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
+                </p>
+              </div>
 
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-300">
-                    {completed}/{total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
-                  </span>
-                  <span className="text-emerald-300 font-semibold">{pct}%</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${pct}%` }} />
-                </div>
+              <div className="shrink-0">
+                <ProgressRing completed={completed} total={total} size={82} />
               </div>
             </div>
           </div>
