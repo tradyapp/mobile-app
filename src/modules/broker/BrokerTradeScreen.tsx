@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Block, Button, Segmented, SegmentedButton } from "konsta/react";
 import AppNavbar from "@/components/AppNavbar";
+import AppDrawer from "@/components/uiux/AppDrawer";
+import BrokerSymbolImage from "./BrokerSymbolImage";
 import {
   brokerService,
   type BrokerAssetType,
@@ -28,6 +30,7 @@ const ASSET_LABEL: Record<BrokerAssetType, string> = {
 interface SymbolOption {
   ticker: string;
   name: string | null;
+  iconUrl: string | null;
 }
 
 export default function BrokerTradeScreen({ accountId, assetType }: Props) {
@@ -50,6 +53,8 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
   const [symbolsLoading, setSymbolsLoading] = useState(true);
   const [symbolsError, setSymbolsError] = useState<string | null>(null);
   const [symbols, setSymbols] = useState<SymbolOption[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
 
   // Fetch the symbol catalog and filter to the chosen asset type.
   useEffect(() => {
@@ -66,7 +71,11 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
         if (cancelled) return;
         const filtered = list
           .filter((s) => s.type === targetType)
-          .map((s) => ({ ticker: s.symbol, name: s.name }))
+          .map((s) => ({
+            ticker: s.symbol,
+            name: s.name,
+            iconUrl: s.photo ?? s.icon_url ?? null,
+          }))
           .sort((a, b) => a.ticker.localeCompare(b.ticker));
         setSymbols(filtered);
         if (filtered.length > 0) setSymbol(filtered[0].ticker);
@@ -170,44 +179,69 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
     }
   };
 
-  const symbolHint = useMemo(() => {
-    const found = symbols.find((s) => s.ticker === symbol);
-    return found?.name ?? null;
-  }, [symbol, symbols]);
+  const selectedSymbol = useMemo(
+    () => symbols.find((s) => s.ticker === symbol) ?? null,
+    [symbol, symbols],
+  );
+
+  const filteredPickerSymbols = useMemo(() => {
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return symbols;
+    return symbols.filter(
+      (s) =>
+        s.ticker.toLowerCase().includes(q) ||
+        (s.name ?? "").toLowerCase().includes(q),
+    );
+  }, [symbols, pickerQuery]);
+
+  const handlePickSymbol = (ticker: string) => {
+    setSymbol(ticker);
+    setPickerOpen(false);
+    setPickerQuery("");
+  };
 
   return (
     <>
       <AppNavbar title={`New ${ASSET_LABEL[assetType]} Order`} left={navbarLeft} />
 
-      <Block className="mb-2">
-        <div className="rounded-[28px] border border-zinc-800 bg-zinc-950/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
-          <div className="grid gap-4">
-            <Field label="Symbol">
-              <select
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                disabled={symbolsLoading || symbols.length === 0}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-              >
-                {symbolsLoading && <option value="">Loading symbols…</option>}
-                {!symbolsLoading && symbols.length === 0 && (
-                  <option value="">No symbols available for {ASSET_LABEL[assetType]}</option>
-                )}
-                {!symbolsLoading &&
-                  symbols.map((s) => (
-                    <option key={s.ticker} value={s.ticker}>
-                      {s.ticker}
-                      {s.name ? ` — ${s.name}` : ""}
-                    </option>
-                  ))}
-              </select>
-              {symbolHint && (
-                <span className="mt-1 text-xs text-zinc-500">{symbolHint}</span>
+      <Block>
+        <div className="grid gap-4">
+          <Field label="Symbol">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              disabled={symbolsLoading || symbols.length === 0}
+              className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-left text-base text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+            >
+              {selectedSymbol ? (
+                <>
+                  <BrokerSymbolImage
+                    symbol={selectedSymbol.ticker}
+                    iconUrl={selectedSymbol.iconUrl}
+                    size={32}
+                  />
+                  <div className="flex flex-1 flex-col overflow-hidden">
+                    <span className="font-medium">{selectedSymbol.ticker}</span>
+                    {selectedSymbol.name && (
+                      <span className="truncate text-xs text-zinc-500">
+                        {selectedSymbol.name}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-zinc-500">›</span>
+                </>
+              ) : (
+                <span className="text-zinc-500">
+                  {symbolsLoading
+                    ? "Loading symbols…"
+                    : `No symbols available for ${ASSET_LABEL[assetType]}`}
+                </span>
               )}
-              {symbolsError && (
-                <span className="mt-1 text-xs text-rose-400">{symbolsError}</span>
-              )}
-            </Field>
+            </button>
+            {symbolsError && (
+              <span className="mt-1 text-xs text-rose-400">{symbolsError}</span>
+            )}
+          </Field>
 
             <Field label="Side">
               <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
@@ -296,15 +330,64 @@ export default function BrokerTradeScreen({ accountId, assetType }: Props) {
             <Button onClick={handleSubmit} disabled={submitting || symbolsLoading || symbols.length === 0}>
               {submitting ? "Submitting..." : `Place ${side} order`}
             </Button>
-            <Button
-              outline
-              onClick={() => navigate({ kind: "account-summary", accountId, tab: "summary" })}
-            >
-              Cancel
-            </Button>
-          </div>
+          <Button
+            outline
+            onClick={() => navigate({ kind: "account-summary", accountId, tab: "summary" })}
+          >
+            Cancel
+          </Button>
         </div>
       </Block>
+
+      <AppDrawer
+        isOpen={pickerOpen}
+        onOpenChange={(open) => {
+          setPickerOpen(open);
+          if (!open) setPickerQuery("");
+        }}
+        title={`${ASSET_LABEL[assetType]} symbols`}
+        height="full"
+      >
+        <div className="px-1 pb-2">
+          <input
+            type="text"
+            value={pickerQuery}
+            onChange={(e) => setPickerQuery(e.target.value)}
+            placeholder="Search by ticker or name…"
+            className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+            autoFocus
+          />
+        </div>
+        <div className="flex flex-col gap-1 pb-4">
+          {filteredPickerSymbols.length === 0 ? (
+            <div className="px-3 py-8 text-center text-sm text-zinc-500">
+              No symbols match "{pickerQuery}".
+            </div>
+          ) : (
+            filteredPickerSymbols.map((s) => {
+              const isSelected = s.ticker === symbol;
+              return (
+                <button
+                  key={s.ticker}
+                  onClick={() => handlePickSymbol(s.ticker)}
+                  className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left ${
+                    isSelected ? "bg-emerald-500/10" : "active:bg-zinc-900"
+                  }`}
+                >
+                  <BrokerSymbolImage symbol={s.ticker} iconUrl={s.iconUrl} size={36} />
+                  <div className="flex flex-1 flex-col overflow-hidden">
+                    <span className="font-medium text-white">{s.ticker}</span>
+                    {s.name && (
+                      <span className="truncate text-xs text-zinc-500">{s.name}</span>
+                    )}
+                  </div>
+                  {isSelected && <span className="text-emerald-400">✓</span>}
+                </button>
+              );
+            })
+          )}
+        </div>
+      </AppDrawer>
     </>
   );
 }
