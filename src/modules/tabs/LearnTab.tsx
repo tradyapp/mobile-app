@@ -229,6 +229,103 @@ function cleanModuleSummary(value: string | null | undefined): string {
   return cleaned.slice(0, 160);
 }
 
+function getModuleHeaderSummary(
+  moduleTitle: string,
+  locale: LmsCourse["language"],
+  fallback: string,
+): string {
+  const title = moduleTitle.toLowerCase();
+
+  if (locale === "es") {
+    if (title.includes("herramient")) return "Explora brokers, cuentas y recursos clave para empezar a operar con mejor criterio.";
+    if (title.includes("introdu")) return "Una bienvenida clara para ordenar tu mentalidad y empezar con bases solidas.";
+    if (title.includes("nivel 1")) return "Aprende los fundamentos del mercado y construye una base solida para avanzar.";
+    if (title.includes("nivel 2")) return "Profundiza en contexto, soportes, resistencias y lectura del movimiento.";
+    if (title.includes("nivel 3")) return "Fortalece tu psicologia, disciplina y proceso para operar con mas consistencia.";
+    if (title.includes("nivel 4")) return "Estudia patrones y estructuras para tomar decisiones con mas precision.";
+  }
+
+  if (locale === "en") {
+    if (title.includes("tool")) return "Explore brokers, accounts, and key resources to start trading with more confidence.";
+    if (title.includes("introdu")) return "A clear welcome to set your mindset and begin from solid foundations.";
+    if (title.includes("level 1")) return "Learn the core market fundamentals and build a strong base to keep advancing.";
+    if (title.includes("level 2")) return "Go deeper into context, support, resistance, and market movement reading.";
+    if (title.includes("level 3")) return "Strengthen your psychology, discipline, and process for more consistent execution.";
+    if (title.includes("level 4")) return "Study patterns and structures to make decisions with better precision.";
+  }
+
+  return fallback;
+}
+
+function detectLessonLanguage(lesson: LmsLesson): "es" | "en" | "unknown" {
+  const haystack = `${lesson.title} ${lesson.slug}`.toLowerCase();
+
+  const englishMarkers = [
+    "welcome",
+    "level ",
+    "what is",
+    "types of assets",
+    "support",
+    "resistance",
+    "trends",
+    "moving averages",
+    "emotional control",
+    "common trading mistakes",
+    "developing a professional mindset",
+    "trading journal",
+    "how it works",
+    "open an account",
+    "interactive brokers",
+    "e trade",
+    "alpaca",
+    "call options",
+    "put options",
+    "modify a limit",
+  ];
+
+  const spanishMarkers = [
+    "¿",
+    "¡",
+    "bienvenido",
+    "introduccion",
+    "nivel ",
+    "que es",
+    "tipos de activos",
+    "oferta",
+    "demanda",
+    "velas japonesas",
+    "control emocional",
+    "errores comunes",
+    "mentalidad profesional",
+    "diario del trading",
+    "como funciona",
+    "ordenes de compra",
+    "promedios moviles",
+    "soportes",
+    "resistencias",
+  ];
+
+  if (englishMarkers.some((marker) => haystack.includes(marker))) return "en";
+  if (spanishMarkers.some((marker) => haystack.includes(marker))) return "es";
+  if (/[áéíóúñ]/.test(haystack)) return "es";
+  return "unknown";
+}
+
+function filterModulesForLocale(
+  modules: LmsModuleWithLessons[],
+  locale: LmsCourse["language"],
+): LmsModuleWithLessons[] {
+  return modules
+    .map((module) => ({
+      ...module,
+      lessons: module.lessons.filter((lesson) => {
+        const lessonLanguage = detectLessonLanguage(lesson);
+        return lessonLanguage === "unknown" || lessonLanguage === locale;
+      }),
+    }))
+    .filter((module) => module.lessons.length > 0);
+}
+
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -382,7 +479,7 @@ export default function LearnTab() {
                 ? lmsProgressService.getCourseProgress(user.uid, course.id)
                 : Promise.resolve(new Map<string, LessonProgress>()),
             ]);
-            return { courseId: course.id, content, progress };
+            return { courseId: course.id, content: filterModulesForLocale(content, storeLocale), progress };
           })
         );
         if (!active) return;
@@ -438,8 +535,9 @@ export default function LearnTab() {
           hasCachedSnapshot = true;
           const hydrated = await learnCacheService.hydrateCourseAssets(cachedSnapshot);
           if (!active) return;
-          setModules(hydrated.modules);
-          setExpandedModules(new Set(hydrated.modules.map((m) => m.id)));
+          const filteredModules = filterModulesForLocale(hydrated.modules, storeLocale);
+          setModules(filteredModules);
+          setExpandedModules(new Set(filteredModules.map((m) => m.id)));
           setLoading(false);
         }
 
@@ -459,7 +557,7 @@ export default function LearnTab() {
           return;
         }
 
-        const content = await lmsService.getCourseContent(courseId);
+        const content = filterModulesForLocale(await lmsService.getCourseContent(courseId), storeLocale);
         if (!active) return;
         const snapshot = { modules: content };
         await learnCacheService.setCourseSnapshot(courseId, snapshot, contentVersion);
@@ -481,7 +579,7 @@ export default function LearnTab() {
 
     void run();
     return () => { active = false; };
-  }, [courseId, courses, user?.uid]);
+  }, [courseId, courses, user?.uid, storeLocale]);
 
   // Update selectedCourse when courses list loads (for direct link)
   useEffect(() => {
@@ -1106,10 +1204,13 @@ export default function LearnTab() {
 
     const completed = getModuleProgress(selectedModule);
     const total = selectedModule.lessons.length;
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     const duration = getModuleDuration(selectedModule);
     const thumbnail = selectedCourse ? getModuleThumbnail(selectedCourse, selectedModule) : null;
-    const summary = cleanModuleSummary(selectedModule.description || selectedCourse?.description);
+    const summary = getModuleHeaderSummary(
+      selectedModule.title,
+      storeLocale,
+      cleanModuleSummary(selectedModule.description || selectedCourse?.description),
+    );
 
     return (
       <div className="pb-24">
@@ -1126,7 +1227,7 @@ export default function LearnTab() {
                 <p className="text-emerald-300 text-xs font-semibold uppercase tracking-normal">
                   {selectedCourse?.title ?? "Trading"}
                 </p>
-                <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+                <h2 className="text-white text-xl font-bold mt-2 leading-tight">
                   {selectedModule.title}
                 </h2>
                 {summary && (
