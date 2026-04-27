@@ -158,7 +158,6 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
 
       {!loading && tab === "orders" && (
         <OrdersPane
-          accountId={accountId}
           orders={activeOrders}
           emptyText="No open orders. Submit a new order to get started."
         />
@@ -166,6 +165,16 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
 
       {!loading && tab === "history" && (
         <OrdersPane orders={historicalOrders} emptyText="No completed orders yet." />
+      )}
+
+      {!loading && (
+        <button
+          onClick={() => navigate({ kind: "trade", accountId })}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-400 text-black shadow-[0_18px_40px_rgba(16,185,129,0.35)] transition-transform active:scale-95"
+          aria-label="New order"
+        >
+          <span className="text-2xl font-semibold leading-none">$</span>
+        </button>
       )}
     </>
   );
@@ -263,23 +272,14 @@ function PositionsPane({ positions }: { positions: BrokerPosition[] }) {
 }
 
 function OrdersPane({
-  accountId,
   orders,
   emptyText,
 }: {
-  accountId: string;
   orders: BrokerOrder[];
   emptyText: string;
 }) {
-  const navigate = useBrokerStore((s) => s.navigate);
-
   return (
     <Block>
-      <div className="mb-3">
-        <Button onClick={() => navigate({ kind: "trade", accountId })} className="w-full">
-          New order
-        </Button>
-      </div>
       {orders.length === 0 ? (
         <EmptyPanel title="Nothing to show yet" description={emptyText} />
       ) : (
