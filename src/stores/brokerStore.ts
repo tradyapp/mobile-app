@@ -1,6 +1,30 @@
 import { create } from "zustand";
 import type { BrokerAccount, BrokerAssetType } from "@/services/BrokerService";
 
+const SELECTED_ACCOUNT_STORAGE_KEY = "trady.broker.selectedAccountId";
+
+function readPersistedAccountId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(SELECTED_ACCOUNT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function persistAccountId(accountId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (accountId) {
+      window.localStorage.setItem(SELECTED_ACCOUNT_STORAGE_KEY, accountId);
+    } else {
+      window.localStorage.removeItem(SELECTED_ACCOUNT_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.).
+  }
+}
+
 export type BrokerView =
   | { kind: "accounts" }
   | { kind: "account-summary"; accountId: string; tab: BrokerSummaryTab }
@@ -26,7 +50,7 @@ interface BrokerState {
 }
 
 export const useBrokerStore = create<BrokerState>((set, get) => ({
-  selectedAccountId: null,
+  selectedAccountId: readPersistedAccountId(),
   accounts: [],
   view: { kind: "accounts" },
   refreshKey: 0,
@@ -34,17 +58,22 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
   setAccounts: (accounts) => {
     const current = get().selectedAccountId;
     const stillExists = accounts.some((a) => a.id === current);
-    set({
-      accounts,
-      selectedAccountId: stillExists ? current : (accounts[0]?.id ?? null),
-    });
+    const next = stillExists ? current : (accounts[0]?.id ?? null);
+    if (next !== current) persistAccountId(next);
+    set({ accounts, selectedAccountId: next });
   },
 
-  selectAccount: (accountId) => set({ selectedAccountId: accountId }),
+  selectAccount: (accountId) => {
+    persistAccountId(accountId);
+    set({ selectedAccountId: accountId });
+  },
 
   navigate: (view) => {
     const updates: Partial<BrokerState> = { view };
-    if ("accountId" in view) updates.selectedAccountId = view.accountId;
+    if ("accountId" in view) {
+      updates.selectedAccountId = view.accountId;
+      persistAccountId(view.accountId);
+    }
     set(updates);
   },
 
