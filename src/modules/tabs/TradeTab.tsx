@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Block, Button } from "konsta/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useBrokerStore } from "@/stores/brokerStore";
 import BrokerAccountSummaryScreen from "@/modules/broker/BrokerAccountSummaryScreen";
 import BrokerAssetTypePickerScreen from "@/modules/broker/BrokerAssetTypePickerScreen";
@@ -48,72 +49,68 @@ export default function TradeTab() {
     }
   }, [navigate, selectedAccountId, view]);
 
+  let content: React.ReactNode;
+  let viewKey = view.kind;
+
   switch (view.kind) {
     case "accounts":
       if (loadingActiveAccount) {
-        return (
-          <TradeViewport>
-            <TradeEmptyState message="Loading your trading account..." />
-          </TradeViewport>
-        );
+        content = <TradeLoadingSkeleton />;
+        viewKey = "accounts-loading";
+        break;
       }
       if (!selectedAccountId) {
-        return (
-          <TradeViewport>
-            <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
-          </TradeViewport>
-        );
+        content = <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />;
+        break;
       }
-      return (
-        <TradeViewport>
-          <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />
-        </TradeViewport>
-      );
+      content = <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />;
+      viewKey = `accounts-${selectedAccountId}`;
+      break;
     case "account-summary":
-      return (
-        <TradeViewport>
-          <BrokerAccountSummaryScreen accountId={view.accountId} tab={view.tab} />
-        </TradeViewport>
-      );
+      content = <BrokerAccountSummaryScreen accountId={view.accountId} tab={view.tab} />;
+      viewKey = `account-summary-${view.accountId}-${view.tab}`;
+      break;
     case "asset-picker":
-      return (
-        <TradeViewport>
-          <BrokerAssetTypePickerScreen accountId={view.accountId} />
-        </TradeViewport>
-      );
+      content = <BrokerAssetTypePickerScreen accountId={view.accountId} />;
+      viewKey = `asset-picker-${view.accountId}`;
+      break;
     case "trade":
-      return (
-        <TradeViewport>
-          <BrokerTradeScreen accountId={view.accountId} assetType={view.assetType} />
-        </TradeViewport>
-      );
+      content = <BrokerTradeScreen accountId={view.accountId} assetType={view.assetType} />;
+      viewKey = `trade-${view.accountId}-${view.assetType}`;
+      break;
     case "settings":
-      return (
-        <TradeViewport>
-          <BrokerSettingsScreen accountId={view.accountId} option={view.option} />
-        </TradeViewport>
-      );
+      content = <BrokerSettingsScreen accountId={view.accountId} option={view.option} />;
+      viewKey = `settings-${view.accountId}-${view.option}`;
+      break;
     case "order-detail":
-      // Order detail not implemented in Phase 1 MVP — fall through to summary.
-      return (
-        <TradeViewport>
-          <BrokerAccountSummaryScreen accountId={view.accountId} tab="orders" />
-        </TradeViewport>
-      );
+      content = <BrokerAccountSummaryScreen accountId={view.accountId} tab="orders" />;
+      viewKey = `order-detail-${view.accountId}-${view.orderId}`;
+      break;
     default:
       if (!selectedAccountId) {
-        return (
-          <TradeViewport>
-            <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />
-          </TradeViewport>
-        );
+        content = <TradeEmptyState message="Create or select a trading account from your profile drawer to start trading." />;
+        viewKey = "empty";
+        break;
       }
-      return (
-        <TradeViewport>
-          <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />
-        </TradeViewport>
-      );
+      content = <BrokerAccountSummaryScreen accountId={selectedAccountId} tab="summary" />;
+      viewKey = `default-${selectedAccountId}`;
   }
+
+  return (
+    <TradeViewport>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={viewKey}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+        >
+          {content}
+        </motion.div>
+      </AnimatePresence>
+    </TradeViewport>
+  );
 }
 
 function TradeViewport({ children }: { children: React.ReactNode }) {
@@ -144,6 +141,75 @@ function TradeEmptyState({ message }: { message: string }) {
           <Button className="mt-5" disabled>
             Select account in profile
           </Button>
+        </div>
+      </Block>
+    </>
+  );
+}
+
+function TradeLoadingSkeleton() {
+  return (
+    <>
+      <AppNavbar title="Trade" />
+      <Block className="mb-2">
+        <div className="overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(160deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))] px-4 pt-4 pb-3 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+          <div className="flex min-h-[136px] items-start justify-between gap-4">
+            <div className="w-[50%] min-w-0">
+              <div className="h-3 w-24 rounded-full bg-white/8 animate-pulse" />
+              <div className="mt-3 h-9 w-40 rounded-full bg-white/10 animate-pulse" />
+              <div className="mt-3 h-3 w-32 rounded-full bg-white/8 animate-pulse" />
+            </div>
+            <div className="w-[46%] pt-1">
+              <div className="h-24 w-full rounded-2xl bg-white/6 animate-pulse" />
+            </div>
+          </div>
+          <div className="mt-3 border-t border-white/8 pt-3">
+            <div className="h-10 rounded-2xl bg-white/6 animate-pulse" />
+          </div>
+        </div>
+      </Block>
+
+      <Block className="mb-1">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1 grid grid-cols-4 gap-1">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-9 rounded-xl bg-white/6 animate-pulse" />
+          ))}
+        </div>
+      </Block>
+
+      <Block>
+        <div className="flex items-center justify-between mb-3">
+          <div className="h-4 w-28 rounded-full bg-white/8 animate-pulse" />
+          <div className="h-3 w-20 rounded-full bg-white/6 animate-pulse" />
+        </div>
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-2xl border border-white/8 bg-transparent px-4 py-3 shadow-lg shadow-black/10">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-white/6 animate-pulse shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="h-4 w-24 rounded-full bg-white/8 animate-pulse" />
+                  <div className="mt-2 h-3 w-32 rounded-full bg-white/6 animate-pulse" />
+                </div>
+                <div className="h-4 w-14 rounded-full bg-white/8 animate-pulse shrink-0" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Block>
+
+      <Block>
+        <div className="flex items-center justify-between mb-3">
+          <div className="h-4 w-24 rounded-full bg-white/8 animate-pulse" />
+          <div className="h-3 w-20 rounded-full bg-white/6 animate-pulse" />
+        </div>
+        <div className="flex flex-col gap-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="rounded-2xl border border-white/8 bg-transparent px-4 py-3 shadow-lg shadow-black/10">
+              <div className="h-4 w-32 rounded-full bg-white/8 animate-pulse" />
+              <div className="mt-2 h-3 w-24 rounded-full bg-white/6 animate-pulse" />
+            </div>
+          ))}
         </div>
       </Block>
     </>
