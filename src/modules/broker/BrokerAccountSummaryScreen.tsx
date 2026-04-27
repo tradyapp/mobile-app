@@ -26,6 +26,11 @@ interface Props {
   tab: BrokerSummaryTab;
 }
 
+const MOCK_EQUITY_POINTS = [
+  42, 44, 43, 46, 49, 52, 51, 55, 58, 61,
+  60, 64, 67, 69, 68, 72, 75, 79, 82, 86,
+];
+
 export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
   const navigate = useBrokerStore((s) => s.navigate);
   const refreshKey = useBrokerStore((s) => s.refreshKey);
@@ -90,7 +95,8 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
           <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-400/10 blur-3xl" />
           <div className="pointer-events-none absolute left-5 top-5 h-14 w-24 rounded-full bg-white/6 blur-2xl" />
 
-          <div className="relative max-w-[50%] pr-12">
+          <div className="relative flex min-h-[176px] items-end justify-between gap-4">
+            <div className="max-w-[50%] pr-12">
             <button
               onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
               className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition-colors hover:border-white/15 hover:bg-white/8 hover:text-white"
@@ -115,6 +121,11 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
                   className="font-medium text-zinc-300"
                 />
               </span>
+            </div>
+            </div>
+
+            <div className="flex w-[46%] justify-end">
+              <MockGrowthChart values={MOCK_EQUITY_POINTS} />
             </div>
           </div>
         </div>
@@ -427,4 +438,92 @@ function AutoFitText({
       </span>
     </div>
   );
+}
+
+function MockGrowthChart({ values }: { values: number[] }) {
+  const width = 180;
+  const height = 108;
+  const padding = 10;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+
+  const points = values.map((value, index) => {
+    const x = padding + (index / (values.length - 1)) * (width - padding * 2);
+    const normalized = (value - min) / range;
+    const y = height - padding - normalized * (height - padding * 2);
+    return { x, y };
+  });
+
+  const linePath = buildSmoothPath(points);
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
+
+  return (
+    <div className="relative w-full max-w-[180px]">
+      <div className="mb-2 text-right text-[10px] uppercase tracking-[0.18em] text-zinc-600">
+        Last 20 updates
+      </div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-[108px] w-full overflow-visible"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="trade-growth-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgba(52, 211, 153, 0.30)" />
+            <stop offset="100%" stopColor="rgba(52, 211, 153, 0)" />
+          </linearGradient>
+          <linearGradient id="trade-growth-line" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#86efac" />
+          </linearGradient>
+        </defs>
+
+        <path
+          d={areaPath}
+          fill="url(#trade-growth-fill)"
+        />
+        <path
+          d={linePath}
+          fill="none"
+          stroke="url(#trade-growth-line)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {points.map((point, index) => (
+          <circle
+            key={index}
+            cx={point.x}
+            cy={point.y}
+            r={index === points.length - 1 ? 3.5 : 0}
+            fill="#86efac"
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const previous = points[index - 1] ?? current;
+    const afterNext = points[index + 2] ?? next;
+
+    const cp1x = current.x + (next.x - previous.x) / 6;
+    const cp1y = current.y + (next.y - previous.y) / 6;
+    const cp2x = next.x - (afterNext.x - current.x) / 6;
+    const cp2y = next.y - (afterNext.y - current.y) / 6;
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
+  }
+
+  return path;
 }
