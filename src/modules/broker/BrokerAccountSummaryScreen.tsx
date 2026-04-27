@@ -185,7 +185,7 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
 
       {!loading && (
         <button
-          onClick={() => navigate({ kind: "trade", accountId })}
+          onClick={() => navigate({ kind: "asset-picker", accountId })}
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-400 text-black shadow-[0_18px_40px_rgba(16,185,129,0.35)] transition-transform active:scale-95"
           aria-label="New order"
         >

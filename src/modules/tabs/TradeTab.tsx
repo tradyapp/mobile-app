@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Block, Button } from "konsta/react";
 import { useBrokerStore } from "@/stores/brokerStore";
 import BrokerAccountSummaryScreen from "@/modules/broker/BrokerAccountSummaryScreen";
+import BrokerAssetTypePickerScreen from "@/modules/broker/BrokerAssetTypePickerScreen";
 import BrokerTradeScreen from "@/modules/broker/BrokerTradeScreen";
 import BrokerSettingsScreen from "@/modules/broker/BrokerSettingsScreen";
 import AppNavbar from "@/components/AppNavbar";
@@ -74,10 +75,16 @@ export default function TradeTab() {
           <BrokerAccountSummaryScreen accountId={view.accountId} tab={view.tab} />
         </TradeViewport>
       );
+    case "asset-picker":
+      return (
+        <TradeViewport>
+          <BrokerAssetTypePickerScreen accountId={view.accountId} />
+        </TradeViewport>
+      );
     case "trade":
       return (
         <TradeViewport>
-          <BrokerTradeScreen accountId={view.accountId} />
+          <BrokerTradeScreen accountId={view.accountId} assetType={view.assetType} />
         </TradeViewport>
       );
     case "settings":

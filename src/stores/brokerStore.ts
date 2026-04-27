@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import type { BrokerAccount } from "@/services/BrokerService";
+import type { BrokerAccount, BrokerAssetType } from "@/services/BrokerService";
 
 export type BrokerView =
   | { kind: "accounts" }
   | { kind: "account-summary"; accountId: string; tab: BrokerSummaryTab }
-  | { kind: "trade"; accountId: string; replaceOrderId?: string }
+  | { kind: "asset-picker"; accountId: string }
+  | { kind: "trade"; accountId: string; assetType: BrokerAssetType; replaceOrderId?: string }
   | { kind: "settings"; accountId: string; option: BrokerSettingsOption }
   | { kind: "order-detail"; accountId: string; orderId: string };
 
@@ -54,7 +55,12 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
       set({ view: { kind: "accounts" } });
       return;
     }
-    if (view.kind === "trade" || view.kind === "settings" || view.kind === "order-detail") {
+    if (view.kind === "trade") {
+      // Trade form goes back to the asset picker so the user can change asset.
+      set({ view: { kind: "asset-picker", accountId: view.accountId } });
+      return;
+    }
+    if (view.kind === "asset-picker" || view.kind === "settings" || view.kind === "order-detail") {
       set({
         view: { kind: "account-summary", accountId: view.accountId, tab: "summary" },
       });

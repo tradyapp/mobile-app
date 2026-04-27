@@ -11,13 +11,13 @@ import {
   type CreateOrderInput,
 } from "@/services/BrokerService";
 import { useBrokerStore } from "@/stores/brokerStore";
+import dataService from "@/services/DataService";
 import { formatCurrency } from "./utils";
 
 interface Props {
   accountId: string;
+  assetType: BrokerAssetType;
 }
-
-const ASSET_TYPES: BrokerAssetType[] = ["STOCKS", "CRYPTO", "FOREX"];
 
 const ASSET_LABEL: Record<BrokerAssetType, string> = {
   STOCKS: "Stocks",
@@ -25,12 +25,16 @@ const ASSET_LABEL: Record<BrokerAssetType, string> = {
   FOREX: "Forex",
 };
 
-export default function BrokerTradeScreen({ accountId }: Props) {
+interface SymbolOption {
+  ticker: string;
+  name: string | null;
+}
+
+export default function BrokerTradeScreen({ accountId, assetType }: Props) {
   const goBack = useBrokerStore((s) => s.goBack);
   const navigate = useBrokerStore((s) => s.navigate);
   const bumpRefresh = useBrokerStore((s) => s.bumpRefresh);
 
-  const [assetType, setAssetType] = useState<BrokerAssetType>("STOCKS");
   const [symbol, setSymbol] = useState("");
   const [side, setSide] = useState<BrokerOrderSide>("buy");
   const [orderType, setOrderType] = useState<BrokerOrderType>("market");
@@ -43,20 +47,53 @@ export default function BrokerTradeScreen({ accountId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [symbolsLoading, setSymbolsLoading] = useState(true);
+  const [symbolsError, setSymbolsError] = useState<string | null>(null);
+  const [symbols, setSymbols] = useState<SymbolOption[]>([]);
+
+  // Fetch the symbol catalog and filter to the chosen asset type.
+  useEffect(() => {
+    let cancelled = false;
+    setSymbolsLoading(true);
+    setSymbolsError(null);
+    setSymbol("");
+
+    const targetType = assetType === "STOCKS" ? "STOCK" : assetType;
+
+    dataService
+      .loadSymbols()
+      .then((list) => {
+        if (cancelled) return;
+        const filtered = list
+          .filter((s) => s.type === targetType)
+          .map((s) => ({ ticker: s.symbol, name: s.name }))
+          .sort((a, b) => a.ticker.localeCompare(b.ticker));
+        setSymbols(filtered);
+        if (filtered.length > 0) setSymbol(filtered[0].ticker);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSymbolsError(err instanceof Error ? err.message : "Failed to load symbols");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSymbolsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetType]);
+
   const navbarLeft = (
     <button onClick={goBack} className="ml-2 flex items-center gap-1 text-sm text-emerald-400">
       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
       </svg>
-      Back
+      Asset
     </button>
   );
 
-  const symbolPlaceholder = useMemo(() => {
-    if (assetType === "STOCKS") return "AAPL";
-    if (assetType === "CRYPTO") return "BTC/USD";
-    return "EUR/USD";
-  }, [assetType]);
   const buildActionPrice = (): number | number[] | null | "invalid" => {
     if (orderType === "market") return null;
     const limit = Number(limitPrice);
@@ -84,7 +121,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
 
     const sym = symbol.trim().toUpperCase();
     if (!sym) {
-      setError("Please enter a symbol");
+      setError("Please pick a symbol");
       return;
     }
     const qty = Number(quantity);
@@ -123,7 +160,6 @@ export default function BrokerTradeScreen({ accountId }: Props) {
       } else {
         setSuccess("Order placed and waiting for the trigger to be hit.");
       }
-      // Reset transient fields
       setQuantity("1");
       setLimitPrice("");
       setStopPrice("");
@@ -134,31 +170,43 @@ export default function BrokerTradeScreen({ accountId }: Props) {
     }
   };
 
+  const symbolHint = useMemo(() => {
+    const found = symbols.find((s) => s.ticker === symbol);
+    return found?.name ?? null;
+  }, [symbol, symbols]);
+
   return (
     <>
-      <AppNavbar title="New Order" left={navbarLeft} />
+      <AppNavbar title={`New ${ASSET_LABEL[assetType]} Order`} left={navbarLeft} />
 
       <Block className="mb-2">
         <div className="rounded-[28px] border border-zinc-800 bg-zinc-950/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
           <div className="grid gap-4">
-            <Field label="Asset">
-              <Segmented strong className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
-                {ASSET_TYPES.map((t) => (
-                  <SegmentedButton key={t} active={assetType === t} onClick={() => setAssetType(t)}>
-                    {ASSET_LABEL[t]}
-                  </SegmentedButton>
-                ))}
-              </Segmented>
-            </Field>
-
             <Field label="Symbol">
-              <input
-                type="text"
+              <select
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                placeholder={symbolPlaceholder}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base uppercase text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
-              />
+                disabled={symbolsLoading || symbols.length === 0}
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-base text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+              >
+                {symbolsLoading && <option value="">Loading symbols…</option>}
+                {!symbolsLoading && symbols.length === 0 && (
+                  <option value="">No symbols available for {ASSET_LABEL[assetType]}</option>
+                )}
+                {!symbolsLoading &&
+                  symbols.map((s) => (
+                    <option key={s.ticker} value={s.ticker}>
+                      {s.ticker}
+                      {s.name ? ` — ${s.name}` : ""}
+                    </option>
+                  ))}
+              </select>
+              {symbolHint && (
+                <span className="mt-1 text-xs text-zinc-500">{symbolHint}</span>
+              )}
+              {symbolsError && (
+                <span className="mt-1 text-xs text-rose-400">{symbolsError}</span>
+              )}
             </Field>
 
             <Field label="Side">
@@ -245,7 +293,7 @@ export default function BrokerTradeScreen({ accountId }: Props) {
               </div>
             )}
 
-            <Button onClick={handleSubmit} disabled={submitting}>
+            <Button onClick={handleSubmit} disabled={submitting || symbolsLoading || symbols.length === 0}>
               {submitting ? "Submitting..." : `Place ${side} order`}
             </Button>
             <Button
