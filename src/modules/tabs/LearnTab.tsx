@@ -20,7 +20,6 @@ import {
 } from "@/services/LmsProgressService";
 import { learnCacheService } from "@/services/LearnCacheService";
 import { useAuthStore } from "@/stores/authStore";
-import { userService } from "@/services/UserService";
 import { useUserPrefsStore } from "@/stores/userPrefsStore";
 import { chatService, type ChatRoom, type ChatMessage, type AttachmentResult } from "@/services/ChatService";
 import MediaPreviewScreen from "@/components/chat/MediaPreviewScreen";
@@ -84,12 +83,6 @@ function parseLearnRoute(pathname: string): LearnRouteState {
 // ---------------------------------------------------------------------------
 // Constants & helpers
 // ---------------------------------------------------------------------------
-
-const localeToLanguage: Record<string, LmsCourse["language"]> = {
-  es: "es",
-  en: "en",
-  pt: "pt",
-};
 
 const NEAR_END_THRESHOLD = 15;
 
@@ -236,23 +229,44 @@ function getModuleHeaderSummary(
 ): string {
   const title = moduleTitle.toLowerCase();
 
-  if (title.includes("herramient") || title.includes("tool")) {
-    return "Explore brokers, accounts, and key resources to start trading with more confidence.";
-  }
-  if (title.includes("introdu")) {
-    return "A clear welcome to set your mindset and begin from solid foundations.";
-  }
-  if (title.includes("nivel 1") || title.includes("level 1")) {
-    return "Learn the core market fundamentals and build a strong base to keep advancing.";
-  }
-  if (title.includes("nivel 2") || title.includes("level 2")) {
-    return "Go deeper into context, support, resistance, and market movement reading.";
-  }
-  if (title.includes("nivel 3") || title.includes("level 3")) {
-    return "Strengthen your psychology, discipline, and process for more consistent execution.";
-  }
-  if (title.includes("nivel 4") || title.includes("level 4")) {
-    return "Study patterns and structures to make decisions with better precision.";
+  if (locale === "es") {
+    if (title.includes("herramient") || title.includes("tool")) {
+      return "Explora brokers, cuentas y recursos clave para empezar a operar con mejor criterio.";
+    }
+    if (title.includes("introdu")) {
+      return "Una bienvenida clara para ordenar tu mentalidad y empezar con bases solidas.";
+    }
+    if (title.includes("nivel 1") || title.includes("level 1")) {
+      return "Aprende los fundamentos del mercado y construye una base solida para avanzar.";
+    }
+    if (title.includes("nivel 2") || title.includes("level 2")) {
+      return "Profundiza en contexto, soportes, resistencias y lectura del movimiento.";
+    }
+    if (title.includes("nivel 3") || title.includes("level 3")) {
+      return "Fortalece tu psicologia, disciplina y proceso para operar con mas consistencia.";
+    }
+    if (title.includes("nivel 4") || title.includes("level 4")) {
+      return "Estudia patrones y estructuras para tomar decisiones con mas precision.";
+    }
+  } else {
+    if (title.includes("herramient") || title.includes("tool")) {
+      return "Explore brokers, accounts, and key resources to start trading with more confidence.";
+    }
+    if (title.includes("introdu")) {
+      return "A clear welcome to set your mindset and begin from solid foundations.";
+    }
+    if (title.includes("nivel 1") || title.includes("level 1")) {
+      return "Learn the core market fundamentals and build a strong base to keep advancing.";
+    }
+    if (title.includes("nivel 2") || title.includes("level 2")) {
+      return "Go deeper into context, support, resistance, and market movement reading.";
+    }
+    if (title.includes("nivel 3") || title.includes("level 3")) {
+      return "Strengthen your psychology, discipline, and process for more consistent execution.";
+    }
+    if (title.includes("nivel 4") || title.includes("level 4")) {
+      return "Study patterns and structures to make decisions with better precision.";
+    }
   }
 
   return fallback;
@@ -347,7 +361,6 @@ export default function LearnTab() {
   const [error, setError] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
   const storeLocale = useUserPrefsStore((state) => state.locale);
-  const setStoreLocale = useUserPrefsStore((state) => state.setLocale);
 
   // Chat rooms state
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
@@ -423,17 +436,6 @@ export default function LearnTab() {
       setLoading(true);
       setError(null);
       try {
-        if (user?.uid) {
-          const profile = await userService.getUserProfile(user.uid);
-          if (!active) return;
-          const loc = (profile.userData.locale as string) ?? "es";
-          const resolved = localeToLanguage[loc] ?? "es";
-          if (resolved !== storeLocale) {
-            setStoreLocale(resolved);
-            return;
-          }
-        }
-
         const cachedSnapshot = await learnCacheService.getCatalogSnapshot(storeLocale);
         if (active && cachedSnapshot) {
           const hydrated = await learnCacheService.hydrateCatalogAssets(cachedSnapshot);
@@ -498,7 +500,7 @@ export default function LearnTab() {
         setCatalogProgressByCourse(new Map(catalogContent.map((item) => [item.courseId, item.progress])));
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Could not load courses");
+        setError(err instanceof Error ? err.message : storeLocale === "es" ? "No se pudieron cargar los cursos" : "Could not load courses");
       } finally {
         if (active) setLoading(false);
       }
@@ -506,7 +508,7 @@ export default function LearnTab() {
 
     void run();
     return () => { active = false; };
-  }, [user?.uid, storeLocale, setStoreLocale]);
+  }, [user?.uid, storeLocale]);
 
   // ---------------------------------------------------------------------------
   // Fetch course content when courseId changes in route
@@ -571,7 +573,7 @@ export default function LearnTab() {
       } catch (err) {
         if (!active) return;
         if (!hasCachedSnapshot) {
-          setError(err instanceof Error ? err.message : "Could not load course");
+          setError(err instanceof Error ? err.message : storeLocale === "es" ? "No se pudo cargar el curso" : "Could not load course");
         }
       } finally {
         if (active) setLoading(false);
@@ -706,6 +708,7 @@ export default function LearnTab() {
   }, [progressMap]);
 
   const moduleCount = modules.length;
+  const isSpanish = storeLocale === "es";
 
   const navbarTitle =
     view === "catalog"
@@ -860,8 +863,19 @@ export default function LearnTab() {
     mod.lessons.reduce((sum, lesson) => sum + (lesson.duration_minutes ?? 0), 0)
   );
 
-  const getModuleTeaser = (mod: LmsModuleWithLessons) => {
+  const getModuleTeaser = (mod: LmsModuleWithLessons, locale: LmsCourse["language"]) => {
     const title = mod.title.toLowerCase();
+    if (locale === "es") {
+      if (title.includes("herramient") || title.includes("tool")) return "Empieza aqui con las herramientas de tu operativa.";
+      if (title.includes("introdu")) return "Empieza aqui y construye tu base.";
+      if (title.includes("nivel 1") || title.includes("level 1")) return "Da tu primer paso con claridad.";
+      if (title.includes("nivel 2") || title.includes("level 2")) return "Avanza con herramientas mas solidas.";
+      if (title.includes("nivel 3") || title.includes("level 3")) return "Afina tu lectura del mercado y tu disciplina.";
+      if (title.includes("nivel 4") || title.includes("level 4")) return "Refina tus decisiones con mas estructura.";
+      if (title.includes("nivel 5") || title.includes("level 5")) return "Lleva tu practica al siguiente nivel.";
+      return "Entra y sigue aprendiendo.";
+    }
+
     if (title.includes("herramient") || title.includes("tool")) return "Start here with the tools behind your setup.";
     if (title.includes("introdu")) return "Start here and build your foundation.";
     if (title.includes("nivel 1") || title.includes("level 1")) return "Take your first step with clarity.";
@@ -949,7 +963,7 @@ export default function LearnTab() {
       {loading && renderCatalogSkeleton()}
       {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
       {!loading && !error && courses.length === 0 && (
-        <Block><p className="text-zinc-400 text-sm">No published courses yet.</p></Block>
+        <Block><p className="text-zinc-400 text-sm">{isSpanish ? "No hay cursos publicados todavia." : "No published courses yet."}</p></Block>
       )}
       {!loading && !error && courses.length > 0 && (
         <>
@@ -959,19 +973,19 @@ export default function LearnTab() {
             <div className="flex items-end justify-between gap-4 mb-3">
               <div>
                 <p className="text-zinc-500 text-xs font-medium uppercase tracking-normal">
-                  Trading courses
+                  {isSpanish ? "Cursos de trading" : "Trading courses"}
                 </p>
                 <h3 className="text-white text-lg font-semibold mt-1">
-                  Available modules
+                  {isSpanish ? "Modulos disponibles" : "Available modules"}
                 </h3>
               </div>
               <span className="text-zinc-500 text-xs shrink-0">
-                {catalogModuleCards.length} modules
+                {catalogModuleCards.length} {isSpanish ? "modulos" : "modules"}
               </span>
             </div>
 
             {catalogModuleCards.length === 0 ? (
-              <p className="text-zinc-400 text-sm">This course has no published modules yet.</p>
+              <p className="text-zinc-400 text-sm">{isSpanish ? "Este curso aun no tiene modulos publicados." : "This course has no published modules yet."}</p>
             ) : (
               <div className="grid grid-cols-2 gap-2.5 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
                 {catalogModuleCards.map(({ course, module }) => {
@@ -991,7 +1005,7 @@ export default function LearnTab() {
                           <img src={thumb} alt={module.title} className={getModuleImageClass(module)} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
-                            No image
+                            {isSpanish ? "Sin imagen" : "No image"}
                           </div>
                         )}
                         <div className="absolute right-2 bottom-2 bg-black/70 rounded-full p-0.5">
@@ -1004,10 +1018,10 @@ export default function LearnTab() {
                           {module.title}
                         </h4>
                         <p className="text-zinc-400 text-[11px] mt-1 line-clamp-2 leading-snug">
-                          {getModuleTeaser(module)}
+                          {getModuleTeaser(module, storeLocale)}
                         </p>
                         <p className={completed === total && total > 0 ? "text-emerald-400 text-[11px] mt-1" : "text-zinc-500 text-[11px] mt-1"}>
-                          {completed} of {total}
+                          {completed} {isSpanish ? "de" : "of"} {total}
                         </p>
                       </div>
                     </button>
@@ -1081,20 +1095,20 @@ export default function LearnTab() {
               <p className="text-white font-semibold text-base">
                 {lessonCount > 0
                   ? completedCount === 0
-                    ? "Start your path"
+                    ? isSpanish ? "Comienza tu camino" : "Start your path"
                     : completedCount === lessonCount
-                      ? "Completed"
+                      ? isSpanish ? "Completado" : "Completed"
                       : completedCount / lessonCount <= 0.25
-                        ? "Strong start"
+                        ? isSpanish ? "Buen inicio" : "Strong start"
                         : completedCount / lessonCount <= 0.5
-                          ? "Making good progress"
+                          ? isSpanish ? "Vas por buen camino" : "Making good progress"
                           : completedCount / lessonCount <= 0.75
-                            ? "Almost there"
-                            : "Very close now"
+                            ? isSpanish ? "Ya falta poco" : "Almost there"
+                            : isSpanish ? "Casi lo logras" : "Very close now"
                   : selectedCourse.title}
               </p>
               <p className="text-zinc-500 text-xs mt-1">
-                {moduleCount} modules &middot; {lessonCount} lessons
+                {moduleCount} {isSpanish ? "modulos" : "modules"} &middot; {lessonCount} {isSpanish ? "lecciones" : "lessons"}
               </p>
             </div>
           </div>
@@ -1105,7 +1119,7 @@ export default function LearnTab() {
       {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
 
       {!loading && !error && modules.length === 0 && (
-        <Block><p className="text-zinc-400 text-sm">This course has no published lessons.</p></Block>
+        <Block><p className="text-zinc-400 text-sm">{isSpanish ? "Este curso no tiene lecciones publicadas." : "This course has no published lessons."}</p></Block>
       )}
 
       {!loading && modules.map((module) => {
@@ -1132,7 +1146,7 @@ export default function LearnTab() {
             {isOpen && (
               <List strong inset outline colors={listColors}>
                 {module.lessons.length === 0 ? (
-                  <ListItem title={<span className="text-zinc-500 text-xs">No lessons in this module.</span>} />
+                  <ListItem title={<span className="text-zinc-500 text-xs">{isSpanish ? "No hay lecciones en este modulo." : "No lessons in this module."}</span>} />
                 ) : (
                   module.lessons.map((lesson) => {
                     const thumb = getLessonThumbnail(lesson);
@@ -1152,7 +1166,7 @@ export default function LearnTab() {
                           <span className="text-zinc-500">
                             {lesson.content_type.toUpperCase()}
                             {lesson.duration_minutes ? ` · ${lesson.duration_minutes} min` : ""}
-                            {lesson.is_free ? " · Free" : ""}
+                            {lesson.is_free ? ` · ${isSpanish ? "Gratis" : "Free"}` : ""}
                           </span>
                         }
                         media={
@@ -1175,7 +1189,7 @@ export default function LearnTab() {
                         }
                         after={
                           isCompleted ? (
-                            <span className="text-emerald-400 text-xs font-medium">Done</span>
+                            <span className="text-emerald-400 text-xs font-medium">{isSpanish ? "Hecho" : "Done"}</span>
                           ) : undefined
                         }
                       />
@@ -1199,7 +1213,7 @@ export default function LearnTab() {
       if (loading) return renderCourseSkeleton();
       return (
         <Block className="pt-8 text-center">
-          <p className="text-zinc-400 text-sm">Module not found.</p>
+          <p className="text-zinc-400 text-sm">{isSpanish ? "Modulo no encontrado." : "Module not found."}</p>
         </Block>
       );
     }
@@ -1238,7 +1252,7 @@ export default function LearnTab() {
                   </p>
                 )}
                 <p className="text-zinc-400 text-xs mt-3">
-                  {completed}/{total} lessons{duration > 0 ? ` · ${duration} min` : ""}
+                  {completed}/{total} {isSpanish ? "lecciones" : "lessons"}{duration > 0 ? ` · ${duration} min` : ""}
                 </p>
               </div>
 
@@ -1251,12 +1265,12 @@ export default function LearnTab() {
 
         <div className="px-4 mt-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white text-lg font-semibold">Lessons</h3>
-            <span className="text-zinc-500 text-xs">{total} total</span>
+            <h3 className="text-white text-lg font-semibold">{isSpanish ? "Lecciones" : "Lessons"}</h3>
+            <span className="text-zinc-500 text-xs">{total} {isSpanish ? "total" : "total"}</span>
           </div>
 
           {selectedModule.lessons.length === 0 ? (
-            <p className="text-zinc-400 text-sm">This module has no published lessons yet.</p>
+            <p className="text-zinc-400 text-sm">{isSpanish ? "Este modulo aun no tiene lecciones publicadas." : "This module has no published lessons yet."}</p>
           ) : (
             <div className="space-y-3 landscape:grid landscape:grid-cols-2 landscape:gap-3 landscape:space-y-0 landscape:max-w-5xl landscape:mx-auto">
               {selectedModule.lessons.map((lesson, index) => {
@@ -1273,7 +1287,7 @@ export default function LearnTab() {
                         <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[11px]">
-                          {lesson.content_type === "video" ? "Video" : "Text"}
+                          {lesson.content_type === "video" ? "Video" : isSpanish ? "Texto" : "Text"}
                         </div>
                       )}
                       {isCompleted && (
@@ -1287,7 +1301,7 @@ export default function LearnTab() {
 
                     <div className="min-w-0 flex-1">
                       <p className="text-zinc-500 text-[11px]">
-                        Lesson {index + 1}
+                        {isSpanish ? "Leccion" : "Lesson"} {index + 1}
                       </p>
                       <h4 className={isCompleted ? "text-zinc-400 font-semibold text-sm line-clamp-2" : "text-white font-semibold text-sm line-clamp-2"}>
                         {lesson.title}
@@ -1295,7 +1309,7 @@ export default function LearnTab() {
                       <p className="text-zinc-500 text-[11px] mt-1">
                         {lesson.content_type.toUpperCase()}
                         {lesson.duration_minutes ? ` · ${lesson.duration_minutes} min` : ""}
-                        {lesson.is_free ? " · Free" : ""}
+                        {lesson.is_free ? ` · ${isSpanish ? "Gratis" : "Free"}` : ""}
                       </p>
                     </div>
 
@@ -1322,7 +1336,7 @@ export default function LearnTab() {
       if (loading) return null;
       return (
         <Block className="pt-8 text-center">
-          <p className="text-zinc-400 text-sm">Lesson not found.</p>
+          <p className="text-zinc-400 text-sm">{isSpanish ? "Leccion no encontrada." : "Lesson not found."}</p>
         </Block>
       );
     }
@@ -1368,7 +1382,7 @@ export default function LearnTab() {
               <ReactMarkdown>{textContent}</ReactMarkdown>
             </div>
           ) : (
-            !videoUrl && <p className="text-zinc-500 text-sm">No text content for this lesson.</p>
+            !videoUrl && <p className="text-zinc-500 text-sm">{isSpanish ? "No hay contenido de texto para esta leccion." : "No text content for this lesson."}</p>
           )}
         </Card>
 
@@ -1392,7 +1406,7 @@ export default function LearnTab() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
-                  Previous
+                  {isSpanish ? "Anterior" : "Previous"}
                 </span>
               </Button>
             ) : (
@@ -1412,7 +1426,7 @@ export default function LearnTab() {
                 }}
               >
                 <span className="flex items-center gap-1.5">
-                  Next
+                  {isSpanish ? "Siguiente" : "Next"}
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
@@ -1455,7 +1469,7 @@ export default function LearnTab() {
         <p className="text-red-400 text-sm px-4 mb-3">{chatRoomsError}</p>
       )}
       {!chatRoomsLoading && !chatRoomsError && chatRooms.length === 0 && (
-        <p className="text-zinc-400 text-sm px-4">No chat rooms available.</p>
+        <p className="text-zinc-400 text-sm px-4">{isSpanish ? "No hay salas de chat disponibles." : "No chat rooms available."}</p>
       )}
       {!chatRoomsLoading && chatRooms.length > 0 && (
         <div className="space-y-3 px-4">
