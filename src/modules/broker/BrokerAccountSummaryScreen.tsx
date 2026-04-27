@@ -10,7 +10,6 @@ import {
 } from "@/services/BrokerService";
 import { useBrokerStore, type BrokerSummaryTab } from "@/stores/brokerStore";
 import BrokerSymbolImage from "./BrokerSymbolImage";
-import CogIcon from "@/components/icons/CogIcon";
 import {
   formatCurrency,
   formatNumber,
@@ -96,37 +95,41 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
           <div className="pointer-events-none absolute left-5 top-5 h-14 w-24 rounded-full bg-white/6 blur-2xl" />
 
           <div className="relative flex min-h-[176px] items-end justify-between gap-4">
-            <div className="w-[50%] pr-12">
-            <button
-              onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
-              className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition-colors hover:border-white/15 hover:bg-white/8 hover:text-white"
-              aria-label="Open settings"
-            >
-              <CogIcon />
-            </button>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Account Value</div>
-                <AutoFitText
-                  text={formatCurrency(equity)}
-                  baseFontSize={34.4}
-                  minFontSize={14}
-                  className="mt-3 font-semibold tracking-tight text-white"
-                />
-            <div className="mt-3 text-xs text-zinc-500">
-              Buying Power
-              <span className="ml-2 inline-block max-w-full align-bottom">
-                <AutoFitText
-                  text={account ? formatCurrency(account.balance) : "—"}
-                  baseFontSize={14}
-                  minFontSize={9}
-                  className="font-medium text-zinc-300"
-                />
-              </span>
-            </div>
+            <div className="w-[50%] min-w-0">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Account Value</div>
+              <AutoFitText
+                text={formatCurrency(equity)}
+                baseFontSize={34.4}
+                minFontSize={10}
+                className="mt-3 font-semibold tracking-tight text-white"
+              />
+              <div className="mt-3 text-xs text-zinc-500">
+                Buying Power
+                <span className="ml-2 inline-block max-w-full align-bottom">
+                  <AutoFitText
+                    text={account ? formatCurrency(account.balance) : "—"}
+                    baseFontSize={14}
+                    minFontSize={8}
+                    className="font-medium text-zinc-300"
+                  />
+                </span>
+              </div>
             </div>
 
             <div className="flex w-[46%] justify-end">
               <MockGrowthChart values={MOCK_EQUITY_POINTS} />
             </div>
+          </div>
+
+          <div className="mt-5 border-t border-white/8 pt-3">
+            <button
+              onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
+              className="flex w-full items-center justify-between rounded-2xl px-1 py-1 text-left"
+              aria-label="Open account settings"
+            >
+              <span className="text-sm font-medium text-zinc-200">Account Settings</span>
+              <span className="text-lg leading-none text-zinc-500">›</span>
+            </button>
           </div>
         </div>
       </Block>
@@ -405,16 +408,20 @@ function AutoFitText({
       const textElement = textRef.current;
       if (!container || !textElement) return;
 
-      textElement.style.fontSize = `${baseFontSize}px`;
       const availableWidth = container.clientWidth;
-      const textWidth = textElement.scrollWidth;
-      if (!availableWidth || !textWidth) {
+      if (!availableWidth) {
         setFontSize(baseFontSize);
         return;
       }
 
-      const scale = Math.min(1, availableWidth / textWidth);
-      const nextFontSize = Math.max(minFontSize, Math.floor(baseFontSize * scale * 10) / 10);
+      let nextFontSize = baseFontSize;
+      textElement.style.fontSize = `${nextFontSize}px`;
+
+      while (textElement.scrollWidth > availableWidth && nextFontSize > minFontSize) {
+        nextFontSize = Math.max(minFontSize, nextFontSize - 0.5);
+        textElement.style.fontSize = `${nextFontSize}px`;
+      }
+
       setFontSize(nextFontSize);
     };
 
