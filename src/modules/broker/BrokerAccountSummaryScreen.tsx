@@ -10,6 +10,7 @@ import {
 } from "@/services/BrokerService";
 import { useBrokerStore, type BrokerSummaryTab } from "@/stores/brokerStore";
 import BrokerSymbolImage from "./BrokerSymbolImage";
+import CogIcon from "@/components/icons/CogIcon";
 import {
   formatCurrency,
   formatNumber,
@@ -90,6 +91,13 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
           <div className="pointer-events-none absolute left-5 top-5 h-14 w-24 rounded-full bg-white/6 blur-2xl" />
 
           <div className="relative">
+            <button
+              onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
+              className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition-colors hover:border-white/15 hover:bg-white/8 hover:text-white"
+              aria-label="Open settings"
+            >
+              <CogIcon />
+            </button>
             <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Account Value</div>
             <div className="mt-3 text-[2.15rem] font-semibold tracking-tight text-white">
               {formatCurrency(equity)}
@@ -100,23 +108,6 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
                 {account ? formatCurrency(account.balance) : "—"}
               </span>
             </div>
-          </div>
-
-          <div className="relative mt-5 flex gap-2">
-            <Button
-              onClick={() => navigate({ kind: "trade", accountId })}
-              className="flex-1"
-            >
-              New order
-            </Button>
-            <Button
-              large
-              outline
-              onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
-              className="flex-1"
-            >
-              Settings
-            </Button>
           </div>
         </div>
       </Block>
@@ -166,7 +157,11 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
       {!loading && tab === "positions" && <PositionsPane positions={positions} />}
 
       {!loading && tab === "orders" && (
-        <OrdersPane orders={activeOrders} emptyText="No open orders. Submit a new order to get started." />
+        <OrdersPane
+          accountId={accountId}
+          orders={activeOrders}
+          emptyText="No open orders. Submit a new order to get started."
+        />
       )}
 
       {!loading && tab === "history" && (
@@ -268,26 +263,32 @@ function PositionsPane({ positions }: { positions: BrokerPosition[] }) {
 }
 
 function OrdersPane({
+  accountId,
   orders,
   emptyText,
 }: {
+  accountId: string;
   orders: BrokerOrder[];
   emptyText: string;
 }) {
-  if (orders.length === 0) {
-    return (
-      <Block>
-        <EmptyPanel title="Nothing to show yet" description={emptyText} />
-      </Block>
-    );
-  }
+  const navigate = useBrokerStore((s) => s.navigate);
+
   return (
     <Block>
-      <div className="flex flex-col gap-2">
-        {orders.map((o) => (
-          <OrderRow key={o.id} order={o} />
-        ))}
+      <div className="mb-3">
+        <Button onClick={() => navigate({ kind: "trade", accountId })} className="w-full">
+          New order
+        </Button>
       </div>
+      {orders.length === 0 ? (
+        <EmptyPanel title="Nothing to show yet" description={emptyText} />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {orders.map((o) => (
+            <OrderRow key={o.id} order={o} />
+          ))}
+        </div>
+      )}
     </Block>
   );
 }
