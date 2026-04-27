@@ -606,7 +606,7 @@ export default function LearnTab() {
       courseScrollRef.current = container?.scrollTop ?? window.scrollY;
     }
 
-    if (view === "lesson") {
+    if (view === "lesson" || view === "module") {
       // Always scroll to top when entering a lesson
       const scrollToTop = () => {
         const el = getScrollContainer();
