@@ -96,7 +96,7 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
           <div className="pointer-events-none absolute left-5 top-5 h-14 w-24 rounded-full bg-white/6 blur-2xl" />
 
           <div className="relative flex min-h-[176px] items-end justify-between gap-4">
-            <div className="max-w-[50%] pr-12">
+            <div className="w-[50%] pr-12">
             <button
               onClick={() => navigate({ kind: "settings", accountId, option: "menu" })}
               className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition-colors hover:border-white/15 hover:bg-white/8 hover:text-white"
@@ -105,19 +105,19 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
               <CogIcon />
             </button>
             <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Account Value</div>
-            <AutoFitText
-              text={formatCurrency(equity)}
-              baseFontSize={34.4}
-              minFontSize={21}
-              className="mt-3 font-semibold tracking-tight text-white"
-            />
+                <AutoFitText
+                  text={formatCurrency(equity)}
+                  baseFontSize={34.4}
+                  minFontSize={14}
+                  className="mt-3 font-semibold tracking-tight text-white"
+                />
             <div className="mt-3 text-xs text-zinc-500">
               Buying Power
               <span className="ml-2 inline-block max-w-full align-bottom">
                 <AutoFitText
                   text={account ? formatCurrency(account.balance) : "—"}
                   baseFontSize={14}
-                  minFontSize={11}
+                  minFontSize={9}
                   className="font-medium text-zinc-300"
                 />
               </span>
