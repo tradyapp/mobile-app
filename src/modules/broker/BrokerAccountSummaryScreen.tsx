@@ -6,7 +6,9 @@ import {
   brokerService,
   type BrokerAccount,
   type BrokerOrder,
+  type BrokerOrderStatus,
   type BrokerPosition,
+  type BrokerTransaction,
 } from "@/services/BrokerService";
 import { useBrokerStore, type BrokerSummaryTab } from "@/stores/brokerStore";
 import BrokerSymbolImage from "./BrokerSymbolImage";
@@ -40,6 +42,7 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
   );
   const [positions, setPositions] = useState<BrokerPosition[]>([]);
   const [orders, setOrders] = useState<BrokerOrder[]>([]);
+  const [transactions, setTransactions] = useState<BrokerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,12 +54,14 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
       brokerService.getAccount(accountId),
       brokerService.listPositions({ accountId }),
       brokerService.listOrders({ accountId, limit: 100 }),
+      brokerService.listTransactions({ accountId, limit: 200 }),
     ])
-      .then(([acc, pos, ords]) => {
+      .then(([acc, pos, ords, txs]) => {
         if (cancelled) return;
         setAccount(acc);
         setPositions(pos);
         setOrders(ords);
+        setTransactions(txs);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load account");
@@ -70,10 +75,6 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
   }, [accountId, refreshKey]);
 
   const activeOrders = useMemo(() => orders.filter((o) => o.status === "open"), [orders]);
-  const historicalOrders = useMemo(
-    () => orders.filter((o) => o.status !== "open"),
-    [orders],
-  );
 
   const equity = account ? Number(account.balance) +
     positions.reduce((acc, p) => acc + (p.market_value ?? p.cost_basis ?? 0), 0)
@@ -145,8 +146,8 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
           <SegmentedButton active={tab === "orders"} onClick={() => handleTabChange("orders")}>
             Orders
           </SegmentedButton>
-          <SegmentedButton active={tab === "history"} onClick={() => handleTabChange("history")}>
-            History
+          <SegmentedButton active={tab === "transactions"} onClick={() => handleTabChange("transactions")}>
+            Transactions
           </SegmentedButton>
         </Segmented>
       </Block>
@@ -178,16 +179,9 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
 
       {!loading && tab === "positions" && <PositionsPane positions={positions} />}
 
-      {!loading && tab === "orders" && (
-        <OrdersPane
-          orders={activeOrders}
-          emptyText="No open orders. Submit a new order to get started."
-        />
-      )}
+      {!loading && tab === "orders" && <OrdersPane orders={orders} />}
 
-      {!loading && tab === "history" && (
-        <OrdersPane orders={historicalOrders} emptyText="No completed orders yet." />
-      )}
+      {!loading && tab === "transactions" && <TransactionsPane transactions={transactions} />}
 
       {!loading && (
         <button
@@ -293,24 +287,101 @@ function PositionsPane({ positions }: { positions: BrokerPosition[] }) {
   );
 }
 
-function OrdersPane({
-  orders,
-  emptyText,
-}: {
-  orders: BrokerOrder[];
-  emptyText: string;
-}) {
+type OrderStatusFilter = "all" | BrokerOrderStatus;
+
+const ORDER_STATUS_FILTERS: { id: OrderStatusFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "open", label: "Open" },
+  { id: "completed", label: "Completed" },
+  { id: "declined", label: "Declined" },
+];
+
+function OrdersPane({ orders }: { orders: BrokerOrder[] }) {
+  const [filter, setFilter] = useState<OrderStatusFilter>("all");
+
+  const counts = useMemo(() => {
+    const c: Record<OrderStatusFilter, number> = {
+      all: orders.length,
+      open: 0,
+      completed: 0,
+      canceled: 0,
+      declined: 0,
+    };
+    for (const o of orders) c[o.status] = (c[o.status] ?? 0) + 1;
+    return c;
+  }, [orders]);
+
+  const filtered = useMemo(
+    () => (filter === "all" ? orders : orders.filter((o) => o.status === filter)),
+    [orders, filter],
+  );
+
+  return (
+    <>
+      <Block className="mb-1">
+        <div className="flex gap-2 overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/80 p-1">
+          {ORDER_STATUS_FILTERS.map((f) => {
+            const isActive = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={`flex-1 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                  isActive
+                    ? "bg-emerald-400 text-black shadow-[0_8px_18px_rgba(16,185,129,0.25)]"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {f.label}
+                <span className={`ml-1.5 text-[10px] ${isActive ? "text-black/70" : "text-zinc-500"}`}>
+                  {counts[f.id]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Block>
+
+      <Block>
+        {filtered.length === 0 ? (
+          <EmptyPanel
+            title="Nothing to show"
+            description={
+              filter === "all"
+                ? "Submit a new order from the floating button below."
+                : `No ${filter} orders for this account.`
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filtered.map((o) => (
+              <OrderRow key={o.id} order={o} />
+            ))}
+          </div>
+        )}
+      </Block>
+    </>
+  );
+}
+
+function TransactionsPane({ transactions }: { transactions: BrokerTransaction[] }) {
+  if (transactions.length === 0) {
+    return (
+      <Block>
+        <EmptyPanel
+          title="No transactions yet"
+          description="Deposits, withdrawals and trade fills will be logged here as they happen."
+        />
+      </Block>
+    );
+  }
   return (
     <Block>
-      {orders.length === 0 ? (
-        <EmptyPanel title="Nothing to show yet" description={emptyText} />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {orders.map((o) => (
-            <OrderRow key={o.id} order={o} />
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col gap-2">
+        {transactions.map((t) => (
+          <TransactionRow key={t.id} transaction={t} />
+        ))}
+      </div>
     </Block>
   );
 }
@@ -371,6 +442,62 @@ function OrderRow({ order }: { order: BrokerOrder }) {
               {order.fill_price !== null ? ` @ ${formatCurrency(order.fill_price)}` : ""}
             </span>
             <span>{relativeTime(order.created_at)}</span>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const TRANSACTION_KIND_LABEL: Record<BrokerTransaction["kind"], string> = {
+  deposit: "Deposit",
+  withdraw: "Withdrawal",
+  buy: "Buy",
+  sell: "Sell",
+  account_open: "Account opened",
+  account_close: "Account closed",
+};
+
+const TRANSACTION_KIND_BADGE: Record<BrokerTransaction["kind"], string> = {
+  deposit: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  withdraw: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  buy: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  sell: "bg-violet-500/15 text-violet-300 border-violet-500/30",
+  account_open: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+  account_close: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+};
+
+function TransactionRow({ transaction }: { transaction: BrokerTransaction }) {
+  const amount = Number(transaction.amount);
+  const isInflow = amount > 0;
+  const isOutflow = amount < 0;
+  const tradeSymbol = (transaction.metadata?.symbol as string | undefined) ?? null;
+  const subtitle = transaction.description ?? TRANSACTION_KIND_LABEL[transaction.kind];
+
+  return (
+    <Card className="!m-0 overflow-hidden !rounded-2xl border border-zinc-800/90 bg-zinc-950/90 shadow-[0_14px_40px_rgba(0,0,0,0.18)]">
+      <div className="flex items-center gap-3">
+        {tradeSymbol ? (
+          <BrokerSymbolImage symbol={tradeSymbol} />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
+            <span className="text-base">{isInflow ? "↓" : isOutflow ? "↑" : "•"}</span>
+          </div>
+        )}
+        <div className="flex flex-1 flex-col">
+          <div className="flex items-center justify-between">
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${TRANSACTION_KIND_BADGE[transaction.kind]}`}
+            >
+              {TRANSACTION_KIND_LABEL[transaction.kind]}
+            </span>
+            <span className={`text-sm font-semibold ${pnlColor(amount)}`}>
+              {isInflow ? "+" : ""}{formatCurrency(amount)}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-xs text-zinc-400">
+            <span className="truncate pr-2">{subtitle}</span>
+            <span className="shrink-0">{relativeTime(transaction.created_at)}</span>
           </div>
         </div>
       </div>

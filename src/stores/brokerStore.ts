@@ -8,7 +8,7 @@ export type BrokerView =
   | { kind: "settings"; accountId: string; option: BrokerSettingsOption }
   | { kind: "order-detail"; accountId: string; orderId: string };
 
-export type BrokerSummaryTab = "summary" | "positions" | "orders" | "history";
+export type BrokerSummaryTab = "summary" | "positions" | "orders" | "transactions";
 export type BrokerSettingsOption = "menu" | "rename" | "deposit" | "withdraw" | "delete";
 
 interface BrokerState {

@@ -32,6 +32,25 @@ export interface BrokerOrder {
   updated_at: string;
 }
 
+export type BrokerTransactionKind =
+  | "deposit"
+  | "withdraw"
+  | "buy"
+  | "sell"
+  | "account_open"
+  | "account_close";
+
+export interface BrokerTransaction {
+  id: string;
+  account_id: string;
+  order_id: string | null;
+  kind: BrokerTransactionKind;
+  amount: number;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface BrokerPosition {
   id: string;
   account_id: string;
@@ -156,6 +175,22 @@ class BrokerService {
   async cancelOrder(orderId: string): Promise<BrokerOrder> {
     const res = await apiClient.delete<{ order: BrokerOrder }>(`/broker-orders/${orderId}`);
     return res.order;
+  }
+
+  // ── Transactions ──
+
+  async listTransactions(params: {
+    accountId: string;
+    kind?: BrokerTransactionKind | "all";
+    limit?: number;
+  }): Promise<BrokerTransaction[]> {
+    const search = new URLSearchParams({ account_id: params.accountId });
+    if (params.kind) search.set("kind", params.kind);
+    if (params.limit) search.set("limit", String(params.limit));
+    const res = await apiClient.get<{ transactions: BrokerTransaction[] }>(
+      `/broker-transactions?${search.toString()}`,
+    );
+    return res.transactions;
   }
 
   // ── Positions ──
