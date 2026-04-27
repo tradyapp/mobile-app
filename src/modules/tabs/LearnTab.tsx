@@ -737,9 +737,10 @@ export default function LearnTab() {
     return done;
   };
 
-  const getModuleThumbnail = (course: LmsCourse, mod: LmsModuleWithLessons, index?: number) => {
+  const getModuleThumbnail = (course: LmsCourse, mod: LmsModuleWithLessons) => {
+    const title = mod.title.toLowerCase();
     const lessonThumbnails = mod.lessons.map(getLessonThumbnail).filter(Boolean) as string[];
-    const lessonThumb = index === 3 || index === 4
+    const lessonThumb = title.includes("nivel 3") || title.includes("nivel 4")
       ? lessonThumbnails[1] ?? lessonThumbnails[lessonThumbnails.length - 1] ?? null
       : lessonThumbnails[0] ?? null;
     return lessonThumb ?? course.thumbnail_url;
@@ -760,17 +761,30 @@ export default function LearnTab() {
     return "Entra y continua tu aprendizaje.";
   };
 
-  const getModuleImageClass = (mod: LmsModuleWithLessons, index: number) => {
+  const getModuleImageClass = (mod: LmsModuleWithLessons) => {
     const title = mod.title.toLowerCase();
     const base = "absolute inset-0 w-full h-full object-cover";
-    if (title.includes("nivel 3") || index === 3) return `${base} object-center`;
-    if (title.includes("nivel 4") || index === 4) return `${base} object-center`;
+    if (title.includes("nivel 3")) return `${base} object-center`;
+    if (title.includes("nivel 4")) return `${base} object-center`;
     return `${base} object-cover object-top`;
+  };
+
+  const getModuleCatalogOrder = (mod: LmsModuleWithLessons) => {
+    const title = mod.title.toLowerCase();
+    if (title.includes("herramient")) return 0;
+    if (title.includes("introdu")) return 1;
+    if (title.includes("nivel 1")) return 2;
+    if (title.includes("nivel 2")) return 3;
+    if (title.includes("nivel 3")) return 4;
+    if (title.includes("nivel 4")) return 5;
+    return 100 + mod.sort_order;
   };
 
   const catalogModuleCards = useMemo(
     () => courses.flatMap((course) => (
-      (catalogModulesByCourse.get(course.id) ?? []).map((module) => ({ course, module }))
+      [...(catalogModulesByCourse.get(course.id) ?? [])]
+        .sort((a, b) => getModuleCatalogOrder(a) - getModuleCatalogOrder(b) || a.sort_order - b.sort_order || a.title.localeCompare(b.title))
+        .map((module) => ({ course, module }))
     )),
     [courses, catalogModulesByCourse]
   );
@@ -849,11 +863,11 @@ export default function LearnTab() {
               <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
             ) : (
               <div className="grid grid-cols-2 gap-2.5 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
-                {catalogModuleCards.map(({ course, module }, index) => {
+                {catalogModuleCards.map(({ course, module }) => {
                   const progress = catalogProgressByCourse.get(course.id) ?? new Map<string, LessonProgress>();
                   const completed = getModuleProgress(module, progress);
                   const total = module.lessons.length;
-                  const thumb = getModuleThumbnail(course, module, index);
+                  const thumb = getModuleThumbnail(course, module);
 
                   return (
                     <button
@@ -863,7 +877,7 @@ export default function LearnTab() {
                     >
                       <div className="relative h-[88px] overflow-hidden bg-zinc-900">
                         {thumb ? (
-                          <img src={thumb} alt={module.title} className={getModuleImageClass(module, index)} />
+                          <img src={thumb} alt={module.title} className={getModuleImageClass(module)} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
                             Sin imagen
