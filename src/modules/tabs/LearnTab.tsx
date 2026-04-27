@@ -1154,7 +1154,7 @@ export default function LearnTab() {
                   <button
                     key={lesson.id}
                     onClick={() => openLesson(lesson)}
-                    className="w-full text-left rounded-lg bg-zinc-900/90 border border-white/8 p-3 flex items-center gap-3 shadow-lg shadow-black/15 active:scale-[0.98] active:bg-zinc-800/90 transition-all"
+                    className="w-full text-left rounded-lg bg-transparent border border-white/10 p-3 flex items-center gap-3 shadow-lg shadow-black/10 active:scale-[0.98] active:border-white/15 transition-all"
                   >
                     <div className="w-20 h-14 shrink-0 rounded-lg overflow-hidden bg-zinc-800 relative">
                       {thumb ? (
