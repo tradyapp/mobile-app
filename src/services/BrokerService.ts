@@ -48,6 +48,8 @@ export interface BrokerTransaction {
   amount: number;
   description: string | null;
   metadata: Record<string, unknown> | null;
+  sym_name: string | null;
+  sym_icon_url: string | null;
   created_at: string;
 }
 

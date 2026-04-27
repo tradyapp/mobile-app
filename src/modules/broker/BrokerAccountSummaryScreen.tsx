@@ -147,7 +147,7 @@ export default function BrokerAccountSummaryScreen({ accountId, tab }: Props) {
             Orders
           </SegmentedButton>
           <SegmentedButton active={tab === "transactions"} onClick={() => handleTabChange("transactions")}>
-            Transactions
+            History
           </SegmentedButton>
         </Segmented>
       </Block>
@@ -478,7 +478,7 @@ function TransactionRow({ transaction }: { transaction: BrokerTransaction }) {
     <Card className="!m-0 overflow-hidden !rounded-2xl border border-zinc-800/90 bg-zinc-950/90 shadow-[0_14px_40px_rgba(0,0,0,0.18)]">
       <div className="flex items-center gap-3">
         {tradeSymbol ? (
-          <BrokerSymbolImage symbol={tradeSymbol} />
+          <BrokerSymbolImage symbol={tradeSymbol} iconUrl={transaction.sym_icon_url} />
         ) : (
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
             <span className="text-base">{isInflow ? "↓" : isOutflow ? "↑" : "•"}</span>
