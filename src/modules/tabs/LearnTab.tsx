@@ -147,7 +147,7 @@ function ProgressRing({ completed, total, size = 96 }: { completed: number; tota
               0/{total}
             </span>
             <span className="text-[9px] text-zinc-500">
-              lecciones
+              lessons
             </span>
           </>
         ) : (
@@ -236,22 +236,23 @@ function getModuleHeaderSummary(
 ): string {
   const title = moduleTitle.toLowerCase();
 
-  if (locale === "es") {
-    if (title.includes("herramient")) return "Explora brokers, cuentas y recursos clave para empezar a operar con mejor criterio.";
-    if (title.includes("introdu")) return "Una bienvenida clara para ordenar tu mentalidad y empezar con bases solidas.";
-    if (title.includes("nivel 1")) return "Aprende los fundamentos del mercado y construye una base solida para avanzar.";
-    if (title.includes("nivel 2")) return "Profundiza en contexto, soportes, resistencias y lectura del movimiento.";
-    if (title.includes("nivel 3")) return "Fortalece tu psicologia, disciplina y proceso para operar con mas consistencia.";
-    if (title.includes("nivel 4")) return "Estudia patrones y estructuras para tomar decisiones con mas precision.";
+  if (title.includes("herramient") || title.includes("tool")) {
+    return "Explore brokers, accounts, and key resources to start trading with more confidence.";
   }
-
-  if (locale === "en") {
-    if (title.includes("tool")) return "Explore brokers, accounts, and key resources to start trading with more confidence.";
-    if (title.includes("introdu")) return "A clear welcome to set your mindset and begin from solid foundations.";
-    if (title.includes("level 1")) return "Learn the core market fundamentals and build a strong base to keep advancing.";
-    if (title.includes("level 2")) return "Go deeper into context, support, resistance, and market movement reading.";
-    if (title.includes("level 3")) return "Strengthen your psychology, discipline, and process for more consistent execution.";
-    if (title.includes("level 4")) return "Study patterns and structures to make decisions with better precision.";
+  if (title.includes("introdu")) {
+    return "A clear welcome to set your mindset and begin from solid foundations.";
+  }
+  if (title.includes("nivel 1") || title.includes("level 1")) {
+    return "Learn the core market fundamentals and build a strong base to keep advancing.";
+  }
+  if (title.includes("nivel 2") || title.includes("level 2")) {
+    return "Go deeper into context, support, resistance, and market movement reading.";
+  }
+  if (title.includes("nivel 3") || title.includes("level 3")) {
+    return "Strengthen your psychology, discipline, and process for more consistent execution.";
+  }
+  if (title.includes("nivel 4") || title.includes("level 4")) {
+    return "Study patterns and structures to make decisions with better precision.";
   }
 
   return fallback;
@@ -497,7 +498,7 @@ export default function LearnTab() {
         setCatalogProgressByCourse(new Map(catalogContent.map((item) => [item.courseId, item.progress])));
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "No se pudieron cargar los cursos");
+        setError(err instanceof Error ? err.message : "Could not load courses");
       } finally {
         if (active) setLoading(false);
       }
@@ -570,7 +571,7 @@ export default function LearnTab() {
       } catch (err) {
         if (!active) return;
         if (!hasCachedSnapshot) {
-          setError(err instanceof Error ? err.message : "No se pudo cargar el curso");
+          setError(err instanceof Error ? err.message : "Could not load course");
         }
       } finally {
         if (active) setLoading(false);
@@ -861,13 +862,14 @@ export default function LearnTab() {
 
   const getModuleTeaser = (mod: LmsModuleWithLessons) => {
     const title = mod.title.toLowerCase();
-    if (title.includes("introdu")) return "Bienvenido: empieza con las bases.";
-    if (title.includes("nivel 1")) return "Da tu primer paso con claridad.";
-    if (title.includes("nivel 2")) return "Avanza con nuevas herramientas.";
-    if (title.includes("nivel 3")) return "Profundiza y fortalece tu lectura del mercado.";
-    if (title.includes("nivel 4")) return "Refina tu criterio y toma mejores decisiones.";
-    if (title.includes("nivel 5")) return "Lleva tu practica mas lejos.";
-    return "Entra y continua tu aprendizaje.";
+    if (title.includes("herramient") || title.includes("tool")) return "Start here with the tools behind your setup.";
+    if (title.includes("introdu")) return "Start here and build your foundation.";
+    if (title.includes("nivel 1") || title.includes("level 1")) return "Take your first step with clarity.";
+    if (title.includes("nivel 2") || title.includes("level 2")) return "Build momentum with stronger tools.";
+    if (title.includes("nivel 3") || title.includes("level 3")) return "Sharpen your market reading and discipline.";
+    if (title.includes("nivel 4") || title.includes("level 4")) return "Refine your decision-making with structure.";
+    if (title.includes("nivel 5") || title.includes("level 5")) return "Push your practice to the next stage.";
+    return "Step in and keep learning.";
   };
 
   const getModuleImageClass = (mod: LmsModuleWithLessons) => {
@@ -947,7 +949,7 @@ export default function LearnTab() {
       {loading && renderCatalogSkeleton()}
       {error && <Block><p className="text-red-400 text-sm">{error}</p></Block>}
       {!loading && !error && courses.length === 0 && (
-        <Block><p className="text-zinc-400 text-sm">No hay cursos publicados todavia.</p></Block>
+        <Block><p className="text-zinc-400 text-sm">No published courses yet.</p></Block>
       )}
       {!loading && !error && courses.length > 0 && (
         <>
@@ -957,19 +959,19 @@ export default function LearnTab() {
             <div className="flex items-end justify-between gap-4 mb-3">
               <div>
                 <p className="text-zinc-500 text-xs font-medium uppercase tracking-normal">
-                  Cursos de trading
+                  Trading courses
                 </p>
                 <h3 className="text-white text-lg font-semibold mt-1">
-                  Modulos disponibles
+                  Available modules
                 </h3>
               </div>
               <span className="text-zinc-500 text-xs shrink-0">
-                {catalogModuleCards.length} modulos
+                {catalogModuleCards.length} modules
               </span>
             </div>
 
             {catalogModuleCards.length === 0 ? (
-              <p className="text-zinc-400 text-sm">Este curso aun no tiene modulos publicados.</p>
+              <p className="text-zinc-400 text-sm">This course has no published modules yet.</p>
             ) : (
               <div className="grid grid-cols-2 gap-2.5 landscape:grid-cols-3 landscape:max-w-5xl landscape:mx-auto">
                 {catalogModuleCards.map(({ course, module }) => {
@@ -989,7 +991,7 @@ export default function LearnTab() {
                           <img src={thumb} alt={module.title} className={getModuleImageClass(module)} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs bg-zinc-900">
-                            Sin imagen
+                            No image
                           </div>
                         )}
                         <div className="absolute right-2 bottom-2 bg-black/70 rounded-full p-0.5">
@@ -1005,7 +1007,7 @@ export default function LearnTab() {
                           {getModuleTeaser(module)}
                         </p>
                         <p className={completed === total && total > 0 ? "text-emerald-400 text-[11px] mt-1" : "text-zinc-500 text-[11px] mt-1"}>
-                          {completed} de {total}
+                          {completed} of {total}
                         </p>
                       </div>
                     </button>
@@ -1079,16 +1081,16 @@ export default function LearnTab() {
               <p className="text-white font-semibold text-base">
                 {lessonCount > 0
                   ? completedCount === 0
-                    ? "Comienza tu camino"
+                    ? "Start your path"
                     : completedCount === lessonCount
-                      ? "¡Completado!"
+                      ? "Completed"
                       : completedCount / lessonCount <= 0.25
-                        ? "Buen inicio"
+                        ? "Strong start"
                         : completedCount / lessonCount <= 0.5
-                          ? "Vas por buen camino"
+                          ? "Making good progress"
                           : completedCount / lessonCount <= 0.75
-                            ? "Ya falta poco"
-                            : "Casi lo logras"
+                            ? "Almost there"
+                            : "Very close now"
                   : selectedCourse.title}
               </p>
               <p className="text-zinc-500 text-xs mt-1">
@@ -1197,7 +1199,7 @@ export default function LearnTab() {
       if (loading) return renderCourseSkeleton();
       return (
         <Block className="pt-8 text-center">
-          <p className="text-zinc-400 text-sm">Modulo no encontrado.</p>
+          <p className="text-zinc-400 text-sm">Module not found.</p>
         </Block>
       );
     }
@@ -1236,7 +1238,7 @@ export default function LearnTab() {
                   </p>
                 )}
                 <p className="text-zinc-400 text-xs mt-3">
-                  {completed}/{total} lecciones{duration > 0 ? ` · ${duration} min` : ""}
+                  {completed}/{total} lessons{duration > 0 ? ` · ${duration} min` : ""}
                 </p>
               </div>
 
@@ -1249,12 +1251,12 @@ export default function LearnTab() {
 
         <div className="px-4 mt-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white text-lg font-semibold">Lecciones</h3>
+            <h3 className="text-white text-lg font-semibold">Lessons</h3>
             <span className="text-zinc-500 text-xs">{total} total</span>
           </div>
 
           {selectedModule.lessons.length === 0 ? (
-            <p className="text-zinc-400 text-sm">Este modulo aun no tiene lecciones publicadas.</p>
+            <p className="text-zinc-400 text-sm">This module has no published lessons yet.</p>
           ) : (
             <div className="space-y-3 landscape:grid landscape:grid-cols-2 landscape:gap-3 landscape:space-y-0 landscape:max-w-5xl landscape:mx-auto">
               {selectedModule.lessons.map((lesson, index) => {
@@ -1271,7 +1273,7 @@ export default function LearnTab() {
                         <img src={thumb} alt={lesson.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[11px]">
-                          {lesson.content_type === "video" ? "Video" : "Texto"}
+                          {lesson.content_type === "video" ? "Video" : "Text"}
                         </div>
                       )}
                       {isCompleted && (
@@ -1285,7 +1287,7 @@ export default function LearnTab() {
 
                     <div className="min-w-0 flex-1">
                       <p className="text-zinc-500 text-[11px]">
-                        Leccion {index + 1}
+                        Lesson {index + 1}
                       </p>
                       <h4 className={isCompleted ? "text-zinc-400 font-semibold text-sm line-clamp-2" : "text-white font-semibold text-sm line-clamp-2"}>
                         {lesson.title}
@@ -1390,7 +1392,7 @@ export default function LearnTab() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
-                  Anterior
+                  Previous
                 </span>
               </Button>
             ) : (
@@ -1410,7 +1412,7 @@ export default function LearnTab() {
                 }}
               >
                 <span className="flex items-center gap-1.5">
-                  Siguiente
+                  Next
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
@@ -1453,7 +1455,7 @@ export default function LearnTab() {
         <p className="text-red-400 text-sm px-4 mb-3">{chatRoomsError}</p>
       )}
       {!chatRoomsLoading && !chatRoomsError && chatRooms.length === 0 && (
-        <p className="text-zinc-400 text-sm px-4">No hay salas de chat disponibles.</p>
+        <p className="text-zinc-400 text-sm px-4">No chat rooms available.</p>
       )}
       {!chatRoomsLoading && chatRooms.length > 0 && (
         <div className="space-y-3 px-4">
